@@ -116,9 +116,24 @@ export default function GameOverlay() {
   const banner = useGameStore((s) => s.banner);
   const muted = useGameStore((s) => s.muted);
   const fps = useGameStore((s) => s.fps);
+  const nearShop = useGameStore((s) => s.nearShop);
+  const shopOpen = useGameStore((s) => s.shopOpen);
+  const boomerang = useGameStore((s) => s.boomerang);
   const startGame = useGameStore((s) => s.startGame);
   const restartGame = useGameStore((s) => s.restartGame);
   const toggleMute = useGameStore((s) => s.toggleMute);
+  const setShopOpen = useGameStore((s) => s.setShopOpen);
+  const buyShopItem = useGameStore((s) => s.buyShopItem);
+
+  React.useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Escape" && shopOpen) {
+        setShopOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [shopOpen, setShopOpen]);
 
   const totalHeartContainers = Math.ceil(hero.maxHp / 2);
   const hearts: Array<"full" | "half" | "empty"> = [];
@@ -134,7 +149,8 @@ export default function GameOverlay() {
     (e) => e.kind === "minion" && e.state !== "dead"
   ).length;
 
-  let currentObjective = "Explore the Western Ruins to find the Sanctum Key";
+  let currentObjective =
+    "Visit Bramble's Shop in the East Clearing or find the Sanctum Key in the West";
   if (flags.chestUnlocked) {
     currentObjective = "The Zeldo Crest has been restored!";
   } else if (flags.bossDefeated) {
@@ -162,7 +178,7 @@ export default function GameOverlay() {
     <div className="hud-layer">
       {/* TOP HUD BAR */}
       <header className="hud-top-bar">
-        {/* Left: Life Hearts & Zone Location */}
+        {/* Left: Life Hearts, Zone Location & Gear Slots */}
         <div className="hud-panel hud-left">
           <div className="hud-section-label">LIFE</div>
           <div className="hearts-row">
@@ -171,6 +187,58 @@ export default function GameOverlay() {
             ))}
           </div>
           <div className="zone-badge">{zoneLabel}</div>
+
+          {/* Equipment / Action Bar */}
+          <div className="gear-slots-row">
+            {/* Shield Block Indicator */}
+            <div
+              className={`gear-slot ${hero.isBlocking ? "gear-slot-blocking" : "gear-slot-owned"}`}
+              title="Hold Right-Click or Shift to Block (-50% Damage)"
+            >
+              <span className="gear-key">RMB</span>
+              <span className="gear-name">
+                {hero.isBlocking ? "GUARDING" : "Shield"}
+              </span>
+            </div>
+
+            {/* Boomerang Slot */}
+            <div
+              className={`gear-slot ${
+                hero.hasBoomerang
+                  ? boomerang !== null
+                    ? "gear-slot-active"
+                    : "gear-slot-owned"
+                  : "gear-slot-locked"
+              }`}
+              title="Press Q or 1 to throw the Gale Boomerang"
+            >
+              <span className="gear-key">Q</span>
+              <span className="gear-name">
+                {hero.hasBoomerang
+                  ? boomerang !== null
+                    ? "Flying..."
+                    : "Boomerang"
+                  : "No Boomerang"}
+              </span>
+            </div>
+
+            {/* Bow & Arrows Slot */}
+            <div
+              className={`gear-slot ${
+                hero.hasBow && hero.arrows > 0
+                  ? "gear-slot-owned"
+                  : hero.hasBow
+                  ? "gear-slot-warn"
+                  : "gear-slot-locked"
+              }`}
+              title="Press E, F, or 2 to fire an Arrow (requires Bow + Arrows)"
+            >
+              <span className="gear-key">E</span>
+              <span className="gear-name">
+                {hero.hasBow ? `Bow (${hero.arrows})` : `Arrows: ${hero.arrows}`}
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Center: Boss Health Bar (when Boss is awakened in Dungeon) */}
@@ -205,7 +273,7 @@ export default function GameOverlay() {
             </div>
           )}
 
-        {/* Right: Rupees, Sanctum Key, FPS, Objective, Mute */}
+        {/* Right: Rupees, Sanctum Key, Shop Toggle, FPS, Objective, Mute */}
         <div className="hud-panel hud-right">
           <div className="hud-counters">
             {/* Rupee Counter */}
@@ -260,6 +328,17 @@ export default function GameOverlay() {
               </span>
             </div>
 
+            {/* Shop quick-toggle when near the stall */}
+            {phase === "playing" && nearShop && (
+              <button
+                type="button"
+                onClick={() => setShopOpen(!shopOpen)}
+                className="shop-toggle-btn"
+              >
+                {shopOpen ? "Close Shop" : "Open Shop"}
+              </button>
+            )}
+
             {/* Live FPS Badge */}
             <div className="fps-chip" title="Frames Per Second">
               <span className="fps-value">{fps}</span>
@@ -280,6 +359,139 @@ export default function GameOverlay() {
         </div>
       </header>
 
+      {/* =========================================================
+          MERCHANT BRAMBLE'S CURIO SHOP MODAL (IN-GAME)
+         ========================================================= */}
+      {phase === "playing" && shopOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card">
+            <div className="shop-header">
+              <div>
+                <div className="shop-pill">SOUTH CLEARING BAZAAR</div>
+                <h2 className="shop-title">BRAMBLE&apos;S CURIO SHOP</h2>
+              </div>
+              <div className="shop-wallet">
+                <span className="shop-wallet-label">YOUR RUPEES:</span>
+                <span className="shop-wallet-val">{hero.rupees}</span>
+              </div>
+            </div>
+            <p className="shop-greeting">
+              &ldquo;Welcome, traveler! Spend your hard-earned Rupees on fine weapons and
+              supplies. Remember — the Ranger&apos;s Bow and Arrows are sold separately!&rdquo;
+            </p>
+
+            <div className="shop-items-grid">
+              {/* 1. Gale Boomerang */}
+              <div className={`shop-item-card ${hero.hasBoomerang ? "shop-item-owned" : ""}`}>
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Gale Boomerang</span>
+                  <span className="shop-item-hotkey">Key: Q / 1</span>
+                </div>
+                <p className="shop-item-desc">
+                  Throws a returning wind-blade that damages &amp; stuns foes in its path
+                  and snatches distant Rupees.
+                </p>
+                <button
+                  type="button"
+                  disabled={hero.hasBoomerang || hero.rupees < 15}
+                  onClick={() => buyShopItem("boomerang")}
+                  className="shop-buy-btn"
+                >
+                  {hero.hasBoomerang
+                    ? "Owned ✓"
+                    : hero.rupees >= 15
+                    ? "Buy — 15 Rupees"
+                    : "Need 15 Rupees"}
+                </button>
+              </div>
+
+              {/* 2. Ranger's Bow */}
+              <div className={`shop-item-card ${hero.hasBow ? "shop-item-owned" : ""}`}>
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Ranger&apos;s Ash Bow</span>
+                  <span className="shop-item-hotkey">Key: E / 2</span>
+                </div>
+                <p className="shop-item-desc">
+                  Crafted hunting bow for long-range attacks. Requires Arrows (purchased
+                  separately) to fire!
+                </p>
+                <button
+                  type="button"
+                  disabled={hero.hasBow || hero.rupees < 20}
+                  onClick={() => buyShopItem("bow")}
+                  className="shop-buy-btn"
+                >
+                  {hero.hasBow
+                    ? "Owned ✓"
+                    : hero.rupees >= 20
+                    ? "Buy — 20 Rupees"
+                    : "Need 20 Rupees"}
+                </button>
+              </div>
+
+              {/* 3. Bundle of 10 Arrows */}
+              <div className="shop-item-card">
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Bundle of 10 Arrows</span>
+                  <span className="shop-item-hotkey">Quiver: {hero.arrows}</span>
+                </div>
+                <p className="shop-item-desc">
+                  Restocks 10 iron-tipped arrows for your quiver. Pair with the
+                  Ranger&apos;s Ash Bow to snipe enemies from afar.
+                </p>
+                <button
+                  type="button"
+                  disabled={hero.rupees < 10}
+                  onClick={() => buyShopItem("arrows")}
+                  className="shop-buy-btn"
+                >
+                  {hero.rupees >= 10 ? "Buy +10 — 10 Rupees" : "Need 10 Rupees"}
+                </button>
+              </div>
+
+              {/* 4. Heart Elixir */}
+              <div className="shop-item-card">
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Crimson Heart Elixir</span>
+                  <span className="shop-item-hotkey">
+                    HP: {(hero.hp / 2).toFixed(1)}/{(hero.maxHp / 2).toFixed(1)}
+                  </span>
+                </div>
+                <p className="shop-item-desc">
+                  A warm alchemical draught brewed from sun-berries. Immediately restores
+                  2 full Hearts.
+                </p>
+                <button
+                  type="button"
+                  disabled={hero.hp >= hero.maxHp || hero.rupees < 10}
+                  onClick={() => buyShopItem("heart")}
+                  className="shop-buy-btn"
+                >
+                  {hero.hp >= hero.maxHp
+                    ? "Full Health"
+                    : hero.rupees >= 10
+                    ? "Drink — 10 Rupees"
+                    : "Need 10 Rupees"}
+                </button>
+              </div>
+            </div>
+
+            <div className="shop-footer">
+              <span className="shop-footer-hint">
+                Walk off the golden carpet or press Esc to close
+              </span>
+              <button
+                type="button"
+                onClick={() => setShopOpen(false)}
+                className="shop-close-btn"
+              >
+                Done Shopping
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* FLOATING DISCOVERY BANNER */}
       {phase === "playing" && banner && (
         <div key={banner.id} className="discovery-banner">
@@ -296,11 +508,19 @@ export default function GameOverlay() {
           </span>
           <span className="dot-sep">•</span>
           <span>
-            <strong>Space / J / Click</strong> Sword Slash
+            <strong>Left-Click / Space</strong> Sword
           </span>
           <span className="dot-sep">•</span>
           <span>
-            <strong>Walk into Key / Gate / Chest</strong> Interact
+            <strong>Right-Click / Shift</strong> Shield Block
+          </span>
+          <span className="dot-sep">•</span>
+          <span>
+            <strong>Q</strong> Boomerang
+          </span>
+          <span className="dot-sep">•</span>
+          <span>
+            <strong>E</strong> Shoot Bow
           </span>
         </footer>
       )}
@@ -319,8 +539,9 @@ export default function GameOverlay() {
             <p className="story-blurb">
               Darkness stirs beneath the northern cliffs. Dread Warden Malakor has stolen
               the radiant <strong>Zeldo Crest</strong> and sealed it within the Sunken
-              Sanctum. Recover the <strong>Sanctum Key</strong> from the Western
-              Watchtower Ruins, breach the locked dungeon gate, and vanquish the Warden!
+              Sanctum. Visit <strong>Bramble&apos;s Shop</strong> in the South Clearing,
+              recover the <strong>Sanctum Key</strong> from the Western Ruins, and vanquish
+              the Warden!
             </p>
 
             <div className="controls-grid">
@@ -329,8 +550,16 @@ export default function GameOverlay() {
                 <span className="control-desc">Move Hero</span>
               </div>
               <div className="control-box">
-                <span className="control-key">Space / J / Click</span>
-                <span className="control-desc">Sword Swing</span>
+                <span className="control-key">Left-Click / Space</span>
+                <span className="control-desc">Sword Slash</span>
+              </div>
+              <div className="control-box">
+                <span className="control-key">Right-Click / Shift</span>
+                <span className="control-desc">Hold Shield Block</span>
+              </div>
+              <div className="control-box">
+                <span className="control-key">Q (Boomerang) • E (Bow)</span>
+                <span className="control-desc">Use Shop Weapons</span>
               </div>
             </div>
 
@@ -396,7 +625,7 @@ export default function GameOverlay() {
               </div>
               <div className="stat-item">
                 <span className="stat-val">{ hero.rupees }</span>
-                <span className="stat-lbl">Rupees Collected</span>
+                <span className="stat-lbl">Rupees Left</span>
               </div>
               <div className="stat-item">
                 <span className="stat-val">{ stats.enemiesDefeated }</span>
