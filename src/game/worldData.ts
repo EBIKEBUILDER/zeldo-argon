@@ -109,7 +109,7 @@ export function getDefaultEnemyWeight(kind: EnemyKind): number {
     case "minion":
       return 2.2; // Medium-heavy weight
     case "knight":
-      return 6.5; // Heavy armor: barely knocked back at all
+      return 12.0; // Heavy juggernaut armor: shrugs off sword spam
     case "boss":
       return 100.0; // Immovable: zero knockback
   }
@@ -314,10 +314,10 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     zone: "overworld",
     x: 26,
     z: 13,
-    hp: 5,
-    weight: 6.5,
-    aggroRadius: 8.2,
-    speed: 4.7,
+    hp: 8,
+    weight: 12.0,
+    aggroRadius: 8.8,
+    speed: 5.0,
     damage: 2,
     rupeeDrop: "red",
   },
@@ -355,10 +355,10 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     zone: "overworld",
     x: -27,
     z: 7,
-    hp: 5,
-    weight: 6.5,
-    aggroRadius: 8.2,
-    speed: 4.7,
+    hp: 8,
+    weight: 12.0,
+    aggroRadius: 8.8,
+    speed: 5.0,
     damage: 2,
     rupeeDrop: "red",
   },
@@ -396,10 +396,10 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     zone: "overworld",
     x: 0,
     z: 24,
-    hp: 5,
-    weight: 6.5,
-    aggroRadius: 8.2,
-    speed: 4.7,
+    hp: 8,
+    weight: 12.0,
+    aggroRadius: 8.8,
+    speed: 5.0,
     damage: 2,
     rupeeDrop: "red",
   },
@@ -530,10 +530,10 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     zone: "dungeon",
     x: 0,
     z: 5,
-    hp: 5,
-    weight: 6.5,
-    aggroRadius: 8.0,
-    speed: 4.7,
+    hp: 8,
+    weight: 12.0,
+    aggroRadius: 8.5,
+    speed: 5.0,
     damage: 2,
     rupeeDrop: "red",
   },
@@ -1261,3 +1261,326 @@ export function computeBossChargePathLength(
   }
   return maxDist;
 }
+
+/**
+ * Checks arrow collisions against solid walls, cliffs, pillars, trees, ruins, and gates
+ * (flying cleanly over low water tiles) so arrows can stick into solid surfaces!
+ */
+export function resolveArrowCollisions(
+  x: number,
+  z: number,
+  radius: number,
+  zone: ZoneId,
+  gateUnlocked: boolean,
+  dynamicObstacles?: RectObstacle[]
+): { x: number; z: number; hitObstacle: boolean } {
+  let curX = x;
+  let curZ = z;
+  let hitObstacle = false;
+  const list = dynamicObstacles ?? [];
+  for (const obs of list) {
+    if (obs.zone !== zone) continue;
+    if (obs.kind === "water") continue; // Arrows fly over water!
+    if (obs.kind === "gate" && gateUnlocked) continue;
+    const res = resolveCircleRectCollision(curX, curZ, radius, obs);
+    if (res.collided) {
+      hitObstacle = true;
+    }
+    curX = res.x;
+    curZ = res.z;
+  }
+  if (Math.abs(curX) >= 39.2 || Math.abs(curZ) >= 39.2) {
+    hitObstacle = true;
+  }
+  return { x: curX, z: curZ, hitObstacle };
+}
+
+/**
+ * Checks whether a circle of `clearanceRadius` has an unobstructed straight-line path
+ * from `(x0, z0)` to `(x1, z1)` in `zone`.
+ */
+export function hasClearLineOfSight(
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  clearanceRadius: number,
+  zone: ZoneId,
+  gateUnlocked: boolean,
+  dynamicObstacles?: RectObstacle[]
+): boolean {
+  const dx = x1 - x0;
+  const dz = z1 - z0;
+  const dist = Math.hypot(dx, dz);
+  if (dist < 0.25) return true;
+  const steps = Math.max(2, Math.ceil(dist / 0.55));
+  const list = dynamicObstacles ?? [];
+  for (let s = 1; s < steps; s++) {
+    const t = s / steps;
+    const px = x0 + dx * t;
+    const pz = z0 + dz * t;
+    for (const obs of list) {
+      if (obs.zone !== zone) continue;
+      if (obs.kind === "gate" && gateUnlocked) continue;
+      if (resolveCircleRectCollision(px, pz, clearanceRadius, obs).collided) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * Hybrid A* Navigation Grid + 11-Ray Local Context Steering Pathfinder for Enemies & Boss!
+ * - First checks if direct line-of-sight is clear.
+ * - If blocked by a pillar, wall, room divider, tree, boulder, or river, runs an 8-directional
+ *   A* search over a 2.0-unit navigation grid with string-pulling smoothing to find the next
+ *   unobstructed waypoint around the obstacle.
+ * - Then applies 11-ray local context steering with lookahead probes so wide-bodied enemies
+ *   (especially Malakor the Boss and Iron Sentinel Knights) smoothly glide around pillar corners
+ *   and doorway edges without ever getting stuck.
+ */
+export function computePathfindingMoveDir(
+  startX: number,
+  startZ: number,
+  targetX: number,
+  targetZ: number,
+  radius: number,
+  zone: ZoneId,
+  gateUnlocked: boolean,
+  dynamicObstacles?: RectObstacle[]
+): { dirX: number; dirZ: number; angle: number } {
+  const toTargetX = targetX - startX;
+  const toTargetZ = targetZ - startZ;
+  const directDist = Math.hypot(toTargetX, toTargetZ);
+  if (directDist < 0.05) {
+    return { dirX: 0, dirZ: 0, angle: 0 };
+  }
+
+  const list = dynamicObstacles ?? [];
+  const navClearance = radius + 0.16;
+
+  let desiredX = targetX;
+  let desiredZ = targetZ;
+
+  // 1. If direct line-of-sight is blocked, run 8-directional A* on 2.0-unit grid
+  if (
+    directDist > 1.2 &&
+    !hasClearLineOfSight(
+      startX,
+      startZ,
+      targetX,
+      targetZ,
+      navClearance,
+      zone,
+      gateUnlocked,
+      list
+    )
+  ) {
+    const CELL = 2.0;
+    const HALF = 40.0;
+    const GRID_N = 41; // -40..40 in steps of 2.0
+
+    const toGrid = (v: number): number =>
+      Math.max(0, Math.min(GRID_N - 1, Math.round((v + HALF) / CELL)));
+    const toWorld = (idx: number): number => -HALF + idx * CELL;
+
+    const sx = toGrid(startX);
+    const sz = toGrid(startZ);
+    const gx = toGrid(targetX);
+    const gz = toGrid(targetZ);
+
+    const isCellWalkable = (cx: number, cz: number): boolean => {
+      if (cx <= 0 || cx >= GRID_N - 1 || cz <= 0 || cz >= GRID_N - 1) return false;
+      if ((cx === sx && cz === sz) || (cx === gx && cz === gz)) return true;
+      const wx = toWorld(cx);
+      const wz = toWorld(cz);
+      for (const obs of list) {
+        if (obs.zone !== zone) continue;
+        if (obs.kind === "gate" && gateUnlocked) continue;
+        if (resolveCircleRectCollision(wx, wz, radius + 0.1, obs).collided) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    const totalCells = GRID_N * GRID_N;
+    const gScore = new Float32Array(totalCells).fill(1e9);
+    const fScore = new Float32Array(totalCells).fill(1e9);
+    const cameFrom = new Int16Array(totalCells).fill(-1);
+    const closed = new Uint8Array(totalCells);
+    const openList: number[] = [];
+
+    const startId = sz * GRID_N + sx;
+    const goalId = gz * GRID_N + gx;
+
+    const octile = (x0: number, z0: number, x1: number, z1: number): number => {
+      const dx = Math.abs(x1 - x0);
+      const dz = Math.abs(z1 - z0);
+      return dx + dz + (1.4142 - 2) * Math.min(dx, dz);
+    };
+
+    gScore[startId] = 0;
+    fScore[startId] = octile(sx, sz, gx, gz);
+    openList.push(startId);
+
+    const dirs = [
+      [0, 1, 1.0],
+      [1, 0, 1.0],
+      [0, -1, 1.0],
+      [-1, 0, 1.0],
+      [1, 1, 1.4142],
+      [1, -1, 1.4142],
+      [-1, 1, 1.4142],
+      [-1, -1, 1.4142],
+    ];
+
+    let bestNode = startId;
+    let bestH = fScore[startId];
+    let iterations = 0;
+    const maxIterations = 520;
+
+    while (openList.length > 0 && iterations < maxIterations) {
+      iterations++;
+      let minIdx = 0;
+      for (let i = 1; i < openList.length; i++) {
+        if (fScore[openList[i]] < fScore[openList[minIdx]]) {
+          minIdx = i;
+        }
+      }
+      const current = openList[minIdx];
+      openList[minIdx] = openList[openList.length - 1];
+      openList.pop();
+
+      if (current === goalId) {
+        bestNode = goalId;
+        break;
+      }
+      if (closed[current]) continue;
+      closed[current] = 1;
+
+      const cx = current % GRID_N;
+      const cz = Math.floor(current / GRID_N);
+      const hCur = octile(cx, cz, gx, gz);
+      if (hCur < bestH && current !== startId) {
+        bestH = hCur;
+        bestNode = current;
+      }
+
+      for (const [ox, oz, stepCost] of dirs) {
+        const nx = cx + ox;
+        const nz = cz + oz;
+        if (!isCellWalkable(nx, nz)) continue;
+        // Prevent diagonal corner clipping through obstacle corners
+        if (ox !== 0 && oz !== 0) {
+          if (!isCellWalkable(cx + ox, cz) || !isCellWalkable(cx, cz + oz)) {
+            continue;
+          }
+        }
+        const nId = nz * GRID_N + nx;
+        if (closed[nId]) continue;
+
+        const tentativeG = gScore[current] + stepCost;
+        if (tentativeG < gScore[nId]) {
+          cameFrom[nId] = current;
+          gScore[nId] = tentativeG;
+          fScore[nId] = tentativeG + octile(nx, nz, gx, gz);
+          if (!openList.includes(nId)) {
+            openList.push(nId);
+          }
+        }
+      }
+    }
+
+    if (bestNode !== startId) {
+      const pathNodes: Array<{ x: number; z: number }> = [];
+      let cur = bestNode;
+      while (cur !== -1 && cur !== startId) {
+        const px = toWorld(cur % GRID_N);
+        const pz = toWorld(Math.floor(cur / GRID_N));
+        pathNodes.push({ x: px, z: pz });
+        cur = cameFrom[cur];
+      }
+      pathNodes.reverse();
+
+      if (pathNodes.length > 0) {
+        desiredX = pathNodes[0].x;
+        desiredZ = pathNodes[0].z;
+        // String-pulling: pick the furthest visible waypoint up to 5 steps ahead
+        const maxLook = Math.min(pathNodes.length - 1, 5);
+        for (let k = maxLook; k >= 1; k--) {
+          if (
+            hasClearLineOfSight(
+              startX,
+              startZ,
+              pathNodes[k].x,
+              pathNodes[k].z,
+              radius * 0.9,
+              zone,
+              gateUnlocked,
+              list
+            )
+          ) {
+            desiredX = pathNodes[k].x;
+            desiredZ = pathNodes[k].z;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  const baseAngle = Math.atan2(desiredX - startX, desiredZ - startZ);
+
+  // 2. 11-Ray Local Context Steering & Corner Unsticking
+  const steerOffsets = [
+    0,
+    0.32,
+    -0.32,
+    0.65,
+    -0.65,
+    0.98,
+    -0.98,
+    1.32,
+    -1.32,
+    1.68,
+    -1.68,
+  ];
+
+  const probeRadius = radius + 0.08;
+  let chosenAngle = baseAngle;
+
+  for (const offset of steerOffsets) {
+    const candAngle = baseAngle + offset;
+    const dx = Math.sin(candAngle);
+    const dz = Math.cos(candAngle);
+
+    let clear = true;
+    for (const lookDist of [0.65, 1.35]) {
+      const tx = startX + dx * lookDist;
+      const tz = startZ + dz * lookDist;
+      for (const obs of list) {
+        if (obs.zone !== zone) continue;
+        if (obs.kind === "gate" && gateUnlocked) continue;
+        if (resolveCircleRectCollision(tx, tz, probeRadius, obs).collided) {
+          clear = false;
+          break;
+        }
+      }
+      if (!clear) break;
+    }
+
+    if (clear) {
+      chosenAngle = candAngle;
+      break;
+    }
+  }
+
+  return {
+    dirX: Math.sin(chosenAngle),
+    dirZ: Math.cos(chosenAngle),
+    angle: chosenAngle,
+  };
+}
+
