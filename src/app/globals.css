@@ -172,7 +172,7 @@ body {
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-  max-width: 380px;
+  max-width: 460px;
 }
 
 .hud-counters {
@@ -214,6 +214,30 @@ body {
   font-size: 12px;
   font-weight: 700;
   color: #f3ead3;
+}
+
+.fps-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  background: rgba(16, 28, 22, 0.78);
+  border: 1px solid rgba(107, 255, 156, 0.4);
+  border-radius: 9px;
+  padding: 5px 9px;
+}
+
+.fps-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+  font-weight: 800;
+  color: #7affaa;
+}
+
+.fps-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #a8d5ba;
 }
 
 .mute-btn {

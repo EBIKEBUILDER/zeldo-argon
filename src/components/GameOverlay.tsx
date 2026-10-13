@@ -115,6 +115,7 @@ export default function GameOverlay() {
   const stats = useGameStore((s) => s.stats);
   const banner = useGameStore((s) => s.banner);
   const muted = useGameStore((s) => s.muted);
+  const fps = useGameStore((s) => s.fps);
   const startGame = useGameStore((s) => s.startGame);
   const restartGame = useGameStore((s) => s.restartGame);
   const toggleMute = useGameStore((s) => s.toggleMute);
@@ -204,7 +205,7 @@ export default function GameOverlay() {
             </div>
           )}
 
-        {/* Right: Rupees, Sanctum Key, Objective, Mute */}
+        {/* Right: Rupees, Sanctum Key, FPS, Objective, Mute */}
         <div className="hud-panel hud-right">
           <div className="hud-counters">
             {/* Rupee Counter */}
@@ -257,6 +258,12 @@ export default function GameOverlay() {
                   ? "Gate Opened"
                   : "No Key"}
               </span>
+            </div>
+
+            {/* Live FPS Badge */}
+            <div className="fps-chip" title="Frames Per Second">
+              <span className="fps-value">{fps}</span>
+              <span className="fps-label">FPS</span>
             </div>
 
             <button

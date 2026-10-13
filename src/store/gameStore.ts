@@ -158,12 +158,14 @@ export interface SerializableGameState {
   chestNoticeCooldown: number;
   armorNoticeCooldown: number;
   muted: boolean;
+  fps: number;
 }
 
 export interface GameActions {
   startGame: () => void;
   restartGame: () => void;
   toggleMute: () => void;
+  setFps: (fps: number) => void;
   tick: (dt: number, input: FrameInput) => void;
 }
 
@@ -211,7 +213,7 @@ function createInitialRupees(): RupeeItemState[] {
   }));
 }
 
-function createInitialState(phase: GamePhase = "title", muted = false): SerializableGameState {
+function createInitialState(phase: GamePhase = "title", muted = false, fps = 60): SerializableGameState {
   return {
     phase,
     zone: "overworld",
@@ -263,6 +265,7 @@ function createInitialState(phase: GamePhase = "title", muted = false): Serializ
     chestNoticeCooldown: 0,
     armorNoticeCooldown: 0,
     muted,
+    fps,
   };
 }
 
@@ -279,19 +282,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
   startGame: () => {
     soundEngine.unlock();
     soundEngine.playKeyPickup();
-    set((state) => createInitialState("playing", state.muted));
+    set((state) => createInitialState("playing", state.muted, state.fps));
   },
 
   restartGame: () => {
     soundEngine.unlock();
     soundEngine.playKeyPickup();
-    set((state) => createInitialState("playing", state.muted));
+    set((state) => createInitialState("playing", state.muted, state.fps));
   },
 
   toggleMute: () => {
     const nextMuted = !get().muted;
     soundEngine.setMuted(nextMuted);
     set({ muted: nextMuted });
+  },
+
+  setFps: (fps: number) => {
+    if (get().fps !== fps) {
+      set({ fps });
+    }
   },
 
   tick: (rawDt: number, input: FrameInput) => {
