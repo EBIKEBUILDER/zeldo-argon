@@ -23,8 +23,11 @@ import {
   BOSS_CHEST_POS,
   DUNGEON_EXIT_POS,
   DUNGEON_KEY_POS,
+  EnemyKind,
   LOCKED_GATE_POS,
   OVERWORLD_PORTAL_POS,
+  SHOP_INTERACT_POS,
+  SHOP_STALL_POS,
   WORLD_OBSTACLES,
   ZoneId,
 } from "@/game/worldData";
@@ -41,11 +44,11 @@ interface EnemyMeshRig {
   barY: number;
   materials: StandardMaterial[];
   baseColors: Color3[];
-  // Boss-specific visual nodes
   chargeCorridorRoot?: TransformNode;
   chargeCorridorMat?: StandardMaterial;
   lungeShieldMesh?: Mesh;
   stunStarsRoot?: TransformNode;
+  archerAimLine?: Mesh;
 }
 
 interface ProjectileVisualRig {
@@ -84,27 +87,22 @@ function createSculptedPoringBodyMesh(name: string, scene: Scene): Mesh {
       const vy = positions[i + 1];
       const vz = positions[i + 2];
 
-      // Normalize height (-0.725 .. +0.725) -> (-1 .. +1)
       const ny = vy / 0.725;
       const angle = Math.atan2(vz, vx);
 
-      // Organic 5-lobe + 3-lobe blobby asymmetry around the equator/skirt
       const lobeWave =
         1.0 +
         0.065 * Math.sin(angle * 5 + 0.4) +
         0.045 * Math.cos(angle * 3 - 0.7);
 
-      // Teardrop profile: wide squishy bottom & cheeks, tapered top peak
       let radialScale = lobeWave;
       let yOut = vy;
       let zShift = 0;
 
       if (ny < 0) {
-        // Flatten the underside so it sits like a heavy jelly drop on the ground
         yOut = vy * (0.58 + 0.18 * (1 + ny));
         radialScale *= 1.18 + 0.16 * Math.cos(ny * Math.PI * 0.5);
       } else {
-        // Taper toward the top droplet peak and tilt peak slightly backward
         radialScale *= 1.16 * (1 - 0.48 * Math.pow(ny, 1.35));
         yOut = vy * 1.08 + Math.pow(ny, 2.2) * 0.14;
         zShift = -Math.pow(ny, 1.8) * 0.14;
@@ -163,7 +161,7 @@ export default function BabylonCanvas() {
     const camera = new ArcRotateCamera(
       "overheadCam",
       -Math.PI / 2,
-      0.72, // ~41 degrees from vertical for classic overhead 3D adventure feel
+      0.72,
       25,
       new Vector3(0, 0, -32),
       scene
@@ -186,7 +184,6 @@ export default function BabylonCanvas() {
     sanctumPointLight.diffuse = new Color3(1.0, 0.78, 0.32);
     sanctumPointLight.range = 26;
 
-    // Shared helper to create clean StandardMaterials with specular control
     const makeMat = (
       name: string,
       diffuse: Color3,
@@ -204,7 +201,6 @@ export default function BabylonCanvas() {
       return m;
     };
 
-    // Shared palette materials for characters & environment
     const darkEyeMat = makeMat(
       "darkEyeMat",
       new Color3(0.06, 0.05, 0.09),
@@ -259,9 +255,7 @@ export default function BabylonCanvas() {
 
     const owGrassMat = makeMat("owGrassMat", new Color3(0.24, 0.55, 0.28), undefined, new Color3(0.06, 0.08, 0.06));
     const pathMat = makeMat("owPathMat", new Color3(0.75, 0.65, 0.46), undefined, new Color3(0.08, 0.08, 0.06));
-    const stoneFloorMat = makeMat("owStoneFloorMat", new Color3(0.54, 0.55, 0.59));
     const woodMat = makeMat("woodMat", new Color3(0.52, 0.34, 0.18));
-    const templeStoneMat = makeMat("templeStoneMat", new Color3(0.48, 0.5, 0.56));
     const goldKeyMat = makeMat(
       "goldKeyMat",
       new Color3(1.0, 0.84, 0.22),
@@ -300,8 +294,17 @@ export default function BabylonCanvas() {
       1.0,
       96
     );
+    const shopCanopyMat = makeMat(
+      "shopCanopyMat",
+      new Color3(0.82, 0.18, 0.26),
+      new Color3(0.18, 0.03, 0.05)
+    );
+    const merchantRobeMat = makeMat(
+      "merchantRobeMat",
+      new Color3(0.42, 0.2, 0.68),
+      new Color3(0.08, 0.03, 0.15)
+    );
 
-    // Batching buckets to merge static environment geometry per material (huge draw-call optimization!)
     const owPathBuckets: Mesh[] = [];
     const owWoodBuckets: Mesh[] = [];
     const owFoliageBuckets: Mesh[] = [];
@@ -332,7 +335,11 @@ export default function BabylonCanvas() {
     crossRoad.position.set(0, 0.025, -2.5);
     owPathBuckets.push(crossRoad);
 
-    // Crossroads cobblestone plaza medallion
+    // Path leading from South Spawn to the Merchant Shop Stall
+    const shopPath = MeshBuilder.CreateBox("shopPath", { width: 14, height: 0.05, depth: 3.6 }, scene);
+    shopPath.position.set(6, 0.026, -30.5);
+    owPathBuckets.push(shopPath);
+
     const plazaDisc = MeshBuilder.CreateCylinder(
       "plazaDisc",
       { diameter: 8.5, height: 0.07, tessellation: 24 },
@@ -348,6 +355,109 @@ export default function BabylonCanvas() {
     );
     westCourtyard.position.set(-26, 0.035, 1);
     owRuinBuckets.push(westCourtyard);
+
+    // --- MERCHANT BAZAAR STALL IN SOUTH CLEARING (11.5, -32.2) ---
+    const sx = SHOP_STALL_POS.x;
+    const sz = SHOP_STALL_POS.z;
+
+    const shopCounter = MeshBuilder.CreateBox(
+      "shopCounter",
+      { width: 5.2, height: 1.15, depth: 2.2 },
+      scene
+    );
+    shopCounter.position.set(sx, 0.58, sz + 0.3);
+    owWoodBuckets.push(shopCounter);
+
+    for (const px of [-2.4, 2.4]) {
+      for (const pz of [-1.1, 1.1]) {
+        const post = MeshBuilder.CreateCylinder(
+          `shopPost-${px}-${pz}`,
+          { diameter: 0.26, height: 3.4, tessellation: 10 },
+          scene
+        );
+        post.position.set(sx + px, 1.7, sz + pz);
+        owWoodBuckets.push(post);
+      }
+    }
+
+    const shopAwning = MeshBuilder.CreateCylinder(
+      "shopAwning",
+      { diameterTop: 0.8, diameterBottom: 6.8, height: 1.4, tessellation: 4 },
+      scene
+    );
+    shopAwning.rotation.y = Math.PI / 4;
+    shopAwning.position.set(sx, 3.85, sz);
+    shopAwning.material = shopCanopyMat;
+    shopAwning.parent = overworldRoot;
+    shopAwning.freezeWorldMatrix();
+
+    // Glowing Interactive Shop Rug in front of the counter
+    const shopRug = MeshBuilder.CreateCylinder(
+      "shopRug",
+      { diameter: 4.4, height: 0.06, tessellation: 24 },
+      scene
+    );
+    shopRug.position.set(SHOP_INTERACT_POS.x, 0.035, SHOP_INTERACT_POS.z);
+    shopRug.material = goldKeyMat;
+    shopRug.parent = overworldRoot;
+    shopRug.freezeWorldMatrix();
+
+    // Merchant Bramble NPC standing behind the counter
+    const merchantBody = MeshBuilder.CreateCylinder(
+      "merchantBody",
+      { diameterTop: 0.65, diameterBottom: 0.95, height: 1.25, tessellation: 14 },
+      scene
+    );
+    merchantBody.position.set(sx, 1.1, sz - 0.65);
+    merchantBody.material = merchantRobeMat;
+    merchantBody.parent = overworldRoot;
+
+    const merchantHead = MeshBuilder.CreateSphere(
+      "merchantHead",
+      { diameter: 0.72, segments: 14 },
+      scene
+    );
+    merchantHead.position.set(sx, 1.95, sz - 0.65);
+    merchantHead.material = whiteEyeMat;
+    merchantHead.parent = overworldRoot;
+
+    const merchantHat = MeshBuilder.CreateCylinder(
+      "merchantHat",
+      { diameterTop: 0.05, diameterBottom: 1.05, height: 0.95, tessellation: 12 },
+      scene
+    );
+    merchantHat.position.set(sx, 2.55, sz - 0.65);
+    merchantHat.material = merchantRobeMat;
+    merchantHat.parent = overworldRoot;
+
+    // Display Items on the Shop Counter (Boomerang, Bow, Arrows, Heart)
+    const displayBoomerang = MeshBuilder.CreateTorus(
+      "displayBoomerang",
+      { diameter: 0.75, thickness: 0.14, tessellation: 12 },
+      scene
+    );
+    displayBoomerang.position.set(sx - 1.6, 1.32, sz + 0.4);
+    displayBoomerang.material = goldKeyMat;
+    displayBoomerang.parent = overworldRoot;
+
+    const displayBow = MeshBuilder.CreateTorus(
+      "displayBow",
+      { diameter: 0.85, thickness: 0.1, tessellation: 16 },
+      scene
+    );
+    displayBow.rotation.x = Math.PI / 2;
+    displayBow.position.set(sx - 0.5, 1.38, sz + 0.4);
+    displayBow.material = goldKeyMat;
+    displayBow.parent = overworldRoot;
+
+    const displayHeart = MeshBuilder.CreateSphere(
+      "displayHeart",
+      { diameter: 0.46, segments: 12 },
+      scene
+    );
+    displayHeart.position.set(sx + 1.5, 1.38, sz + 0.4);
+    displayHeart.material = glowingCrimsonMat;
+    displayHeart.parent = overworldRoot;
 
     // Wooden Bridge across the river at z = -20.5
     const bridgeDeck = MeshBuilder.CreateBox(
@@ -378,13 +488,13 @@ export default function BabylonCanvas() {
     }
 
     // Northern Sanctum Temple Facade
-    for (const sx of [-3.6, 3.6]) {
+    for (const tx of [-3.6, 3.6]) {
       const archCol = MeshBuilder.CreateCylinder(
-        `templeArchCol-${sx}`,
+        `templeArchCol-${tx}`,
         { diameterTop: 2.2, diameterBottom: 2.6, height: 5.6, tessellation: 16 },
         scene
       );
-      archCol.position.set(sx, 2.8, 35);
+      archCol.position.set(tx, 2.8, 35);
       owRuinBuckets.push(archCol);
     }
     const templeLintel = MeshBuilder.CreateBox(
@@ -429,7 +539,7 @@ export default function BabylonCanvas() {
     keyPedestal.position.set(DUNGEON_KEY_POS.x, 0.35, DUNGEON_KEY_POS.z);
     owRuinBuckets.push(keyPedestal);
 
-    // Floating 3D Golden Sanctum Key (merged into a single mesh)
+    // Floating 3D Golden Sanctum Key
     const keyNode = new TransformNode("sanctumKeyNode", scene);
     keyNode.parent = overworldRoot;
     keyNode.position.set(DUNGEON_KEY_POS.x, 1.6, DUNGEON_KEY_POS.z);
@@ -523,12 +633,12 @@ export default function BabylonCanvas() {
     bossArenaRing.parent = dungeonRoot;
     bossArenaRing.freezeWorldMatrix();
 
-    // Locked Gate Node (iron bars merged into 1 draw call!)
     const lockedGateNode = new TransformNode("lockedGateNode", scene);
     lockedGateNode.parent = dungeonRoot;
     lockedGateNode.position.set(LOCKED_GATE_POS.x, 0, LOCKED_GATE_POS.z);
 
     WORLD_OBSTACLES.forEach((obs) => {
+      if (obs.id === "ow-shop-stall") return; // Already custom-built above
       const w = obs.maxX - obs.minX;
       const d = obs.maxZ - obs.minZ;
       const h = obs.height ?? 4.0;
@@ -673,7 +783,6 @@ export default function BabylonCanvas() {
       }
     });
 
-    // Decorative Dungeon Torch Braziers along the chambers (merged into dungeon buckets)
     const torchCoords = [
       { x: -11.5, z: -32 },
       { x: 11.5, z: -32 },
@@ -705,7 +814,6 @@ export default function BabylonCanvas() {
       dgGoldBuckets.push(flame);
     });
 
-    // Merge all static Overworld & Dungeon buckets by material (1 draw call per material!)
     mergeGroupWithMaterial("owMergedPaths", owPathBuckets, pathMat, overworldRoot)?.freezeWorldMatrix();
     mergeGroupWithMaterial("owMergedWood", owWoodBuckets, woodMat, overworldRoot)?.freezeWorldMatrix();
     mergeGroupWithMaterial("owMergedFoliage", owFoliageBuckets, foliageMat, overworldRoot)?.freezeWorldMatrix();
@@ -760,7 +868,6 @@ export default function BabylonCanvas() {
     chestLid.material = goldKeyMat;
     chestLid.parent = chestRoot;
 
-    // Crimson Arcane Seal Ring around Chest (visible while Boss is alive)
     const chestSealRing = MeshBuilder.CreateTorus(
       "chestSealRing",
       { diameter: 3.4, thickness: 0.16, tessellation: 28 },
@@ -770,7 +877,6 @@ export default function BabylonCanvas() {
     chestSealRing.material = glowingCrimsonMat;
     chestSealRing.parent = chestRoot;
 
-    // Golden Unsealed Aura Ring (visible once Boss is defeated)
     const chestUnsealedRing = MeshBuilder.CreateTorus(
       "chestUnsealedRing",
       { diameter: 3.6, thickness: 0.14, tessellation: 32 },
@@ -780,7 +886,6 @@ export default function BabylonCanvas() {
     chestUnsealedRing.material = goldKeyMat;
     chestUnsealedRing.parent = chestRoot;
 
-    // The Zeldo Crest (3 interlocking golden diamond shards rising from chest, merged into 1 draw call)
     const zeldoCrestNode = new TransformNode("zeldoCrestNode", scene);
     zeldoCrestNode.parent = chestRoot;
     zeldoCrestNode.position.set(0, 2.7, 0);
@@ -803,17 +908,15 @@ export default function BabylonCanvas() {
     mergeGroupWithMaterial("mergedZeldoCrest", crestParts, goldKeyMat, zeldoCrestNode);
 
     // =========================================================
-    // UPGRADED HERO 3D CHARACTER RIG (Batch-Merged Static Parts)
+    // UPGRADED HERO 3D CHARACTER RIG + SHIELD BLOCK WARD
     // =========================================================
     const heroRoot = new TransformNode("heroRoot", scene);
 
     const tunicMat = makeMat("heroTunicMat", new Color3(0.15, 0.68, 0.32), new Color3(0.03, 0.12, 0.05));
     const skinMat = makeMat("heroSkinMat", new Color3(0.97, 0.81, 0.66));
-    const hairMat = makeMat("heroHairMat", new Color3(0.95, 0.78, 0.24));
     const shieldMat = makeMat("heroShieldMat", new Color3(0.2, 0.42, 0.8), new Color3(0.05, 0.1, 0.22));
     const bootMat = makeMat("heroBootMat", new Color3(0.38, 0.24, 0.14));
 
-    // Articulated stride boots
     const heroLeftBoot = MeshBuilder.CreateCylinder(
       "heroLeftBoot",
       { diameterTop: 0.28, diameterBottom: 0.34, height: 0.52, tessellation: 12 },
@@ -832,7 +935,6 @@ export default function BabylonCanvas() {
     heroRightBoot.material = bootMat;
     heroRightBoot.parent = heroRoot;
 
-    // Tunic & Cap group (1 draw call)
     const heroTunicParts: Mesh[] = [];
     const heroTorso = MeshBuilder.CreateCylinder(
       "heroTorso",
@@ -860,7 +962,6 @@ export default function BabylonCanvas() {
     heroTunicParts.push(heroCap);
     mergeGroupWithMaterial("heroTunicMerged", heroTunicParts, tunicMat, heroRoot);
 
-    // Skin Head + Pointed Ears (1 draw call)
     const heroSkinParts: Mesh[] = [];
     const heroHead = MeshBuilder.CreateSphere(
       "heroHead",
@@ -883,7 +984,6 @@ export default function BabylonCanvas() {
     }
     mergeGroupWithMaterial("heroSkinMerged", heroSkinParts, skinMat, heroRoot);
 
-    // Eyes (1 draw call)
     const heroEyeParts: Mesh[] = [];
     for (const ex of [-0.15, 0.15]) {
       const eye = MeshBuilder.CreateSphere(`heroEye-${ex}`, { diameter: 0.13, segments: 10 }, scene);
@@ -893,7 +993,6 @@ export default function BabylonCanvas() {
     }
     mergeGroupWithMaterial("heroEyesMerged", heroEyeParts, darkEyeMat, heroRoot);
 
-    // Golden Hair & Belt Buckle + Shield Trim (1 draw call)
     const heroGoldParts: Mesh[] = [];
     const heroHairBand = MeshBuilder.CreateTorus(
       "heroHairBand",
@@ -910,27 +1009,47 @@ export default function BabylonCanvas() {
     );
     beltBuckle.position.set(0, 0.72, 0.44);
     heroGoldParts.push(beltBuckle);
+    mergeGroupWithMaterial("heroGoldMerged", heroGoldParts, goldKeyMat, heroRoot);
+
+    // Articulated Kite Shield Pivot (swings to front when Right-Click Blocking!)
+    const heroShieldPivot = new TransformNode("heroShieldPivot", scene);
+    heroShieldPivot.position.set(-0.56, 0.9, 0.24);
+    heroShieldPivot.parent = heroRoot;
+
+    const heroShield = MeshBuilder.CreateCylinder(
+      "heroShield",
+      { diameterTop: 0.78, diameterBottom: 0.36, height: 0.14, tessellation: 12 },
+      scene
+    );
+    heroShield.rotation.z = Math.PI / 2;
+    heroShield.material = shieldMat;
+    heroShield.parent = heroShieldPivot;
 
     const shieldCrest = MeshBuilder.CreatePolyhedron(
       "heroShieldCrest",
       { type: 1, size: 0.16 },
       scene
     );
-    shieldCrest.position.set(-0.62, 0.92, 0.25);
-    heroGoldParts.push(shieldCrest);
-    mergeGroupWithMaterial("heroGoldMerged", heroGoldParts, goldKeyMat, heroRoot);
+    shieldCrest.position.set(-0.08, 0.02, 0);
+    shieldCrest.material = goldKeyMat;
+    shieldCrest.parent = heroShieldPivot;
 
-    // Kite Shield on Left Arm
-    const heroShield = MeshBuilder.CreateCylinder(
-      "heroShield",
-      { diameterTop: 0.72, diameterBottom: 0.35, height: 0.14, tessellation: 12 },
+    // Glowing Azure Guard Ward when Right-Click Blocking
+    const heroBlockWard = MeshBuilder.CreateSphere(
+      "heroBlockWard",
+      { diameterX: 1.85, diameterY: 1.85, diameterZ: 0.85, segments: 14 },
       scene
     );
-    heroShield.rotation.z = Math.PI / 2;
-    heroShield.rotation.y = -0.25;
-    heroShield.position.set(-0.56, 0.9, 0.24);
-    heroShield.material = shieldMat;
-    heroShield.parent = heroRoot;
+    heroBlockWard.position.set(0, 1.0, 0.65);
+    heroBlockWard.material = makeMat(
+      "heroBlockWardMat",
+      new Color3(0.25, 0.72, 1.0),
+      new Color3(0.18, 0.55, 0.95),
+      new Color3(1, 1, 1),
+      0.38
+    );
+    heroBlockWard.parent = heroRoot;
+    heroBlockWard.setEnabled(false);
 
     // Sword Pivot on Right Side
     const swordPivot = new TransformNode("swordPivot", scene);
@@ -957,7 +1076,6 @@ export default function BabylonCanvas() {
     swordBlade.material = bladeMat;
     swordBlade.parent = swordPivot;
 
-    // Glowing Crescent Slash Arc (visible during sword attack)
     const slashArc = MeshBuilder.CreateTorus(
       "slashArc",
       { diameter: 4.1, thickness: 0.22, tessellation: 28 },
@@ -975,10 +1093,42 @@ export default function BabylonCanvas() {
     slashArc.material = slashMat;
     slashArc.parent = heroRoot;
 
+    // --- 3D SPINNING BOOMERANG PROJECTILE ---
+    const boomerangNode = new TransformNode("boomerangNode", scene);
+    const wing1 = MeshBuilder.CreateBox(
+      "boomWing1",
+      { width: 0.95, height: 0.12, depth: 0.24 },
+      scene
+    );
+    wing1.position.set(0.32, 0, 0.15);
+    wing1.rotation.y = 0.48;
+    wing1.material = goldKeyMat;
+    wing1.parent = boomerangNode;
+
+    const wing2 = MeshBuilder.CreateBox(
+      "boomWing2",
+      { width: 0.95, height: 0.12, depth: 0.24 },
+      scene
+    );
+    wing2.position.set(-0.32, 0, 0.15);
+    wing2.rotation.y = -0.48;
+    wing2.material = goldKeyMat;
+    wing2.parent = boomerangNode;
+
+    const boomRing = MeshBuilder.CreateTorus(
+      "boomRing",
+      { diameter: 1.5, thickness: 0.06, tessellation: 20 },
+      scene
+    );
+    boomRing.material = slashMat;
+    boomRing.parent = boomerangNode;
+    boomerangNode.setEnabled(false);
+
     // =========================================================
-    // DYNAMIC ENEMY, PROJECTILE, HAZARD & RUPEE REGISTRIES
+    // DYNAMIC ENEMY, ARROW, PROJECTILE, HAZARD & RUPEE REGISTRIES
     // =========================================================
     const enemyRigs = new Map<string, EnemyMeshRig>();
+    const arrowRigs = new Map<string, TransformNode>();
     const projectileRigs = new Map<string, ProjectileVisualRig>();
     const hazardRigs = new Map<string, HazardVisualRig>();
     const rupeeMeshes = new Map<string, Mesh>();
@@ -1002,11 +1152,31 @@ export default function BabylonCanvas() {
       new Color3(1.0, 0.9, 0.9)
     );
 
-    const buildEnemyRig = (
-      id: string,
-      kind: "slime" | "goblin" | "knight" | "minion" | "boss",
-      zone: ZoneId
-    ): EnemyMeshRig => {
+    const buildArrowRig = (id: string, fromHero: boolean): TransformNode => {
+      const node = new TransformNode(`arrow-${id}`, scene);
+      const shaft = MeshBuilder.CreateCylinder(
+        `arrowShaft-${id}`,
+        { diameter: 0.08, height: 1.35, tessellation: 8 },
+        scene
+      );
+      shaft.rotation.x = Math.PI / 2;
+      shaft.material = woodMat;
+      shaft.parent = node;
+
+      const tip = MeshBuilder.CreateCylinder(
+        `arrowTip-${id}`,
+        { diameterTop: 0.01, diameterBottom: 0.22, height: 0.36, tessellation: 8 },
+        scene
+      );
+      tip.rotation.x = Math.PI / 2;
+      tip.position.set(0, 0, 0.72);
+      tip.material = fromHero ? slashMat : glowingCrimsonMat;
+      tip.parent = node;
+
+      return node;
+    };
+
+    const buildEnemyRig = (id: string, kind: EnemyKind, zone: ZoneId): EnemyMeshRig => {
       const root = new TransformNode(`enemy-${id}`, scene);
       const body = new TransformNode(`enemyBodyNode-${id}`, scene);
       body.parent = root;
@@ -1035,11 +1205,10 @@ export default function BabylonCanvas() {
       let chargeCorridorMat: StandardMaterial | undefined;
       let lungeShieldMesh: Mesh | undefined;
       let stunStarsRoot: TransformNode | undefined;
+      let archerAimLine: Mesh | undefined;
 
       if (kind === "slime") {
-        // =====================================================
         // PORING-INSPIRED BLOBBY JELLY CREATURE WITH BIG GOOFY EYES
-        // =====================================================
         const isDungeon = zone === "dungeon";
         const poringJellyMat = registerMat(
           `poringMat-${id}`,
@@ -1051,12 +1220,10 @@ export default function BabylonCanvas() {
         );
 
         const jellyParts: Mesh[] = [];
-        // Sculpted non-spherical blobby droplet body
         const blobMesh = createSculptedPoringBodyMesh(`poringBlob-${id}`, scene);
         blobMesh.position.set(0, 0.56, 0);
         jellyParts.push(blobMesh);
 
-        // Cute droplet stem & round tip bead on top of the Poring's head
         const stemNeck = MeshBuilder.CreateCylinder(
           `poringStem-${id}`,
           { diameterTop: 0.1, diameterBottom: 0.28, height: 0.28, tessellation: 12 },
@@ -1076,7 +1243,6 @@ export default function BabylonCanvas() {
 
         mergeGroupWithMaterial(`poringJellyMerged-${id}`, jellyParts, poringJellyMat, body);
 
-        // Big Goofy White Sclera Eyes + Catchlight Sparkles (1 draw call)
         const whiteParts: Mesh[] = [];
         const leftSclera = MeshBuilder.CreateSphere(
           `poringLeftEyeW-${id}`,
@@ -1100,7 +1266,6 @@ export default function BabylonCanvas() {
         rightSclera.rotation.z = -0.1;
         whiteParts.push(rightSclera);
 
-        // Eye shine catchlights
         const leftShine = MeshBuilder.CreateSphere(`poringLShine-${id}`, { diameter: 0.08, segments: 8 }, scene);
         leftShine.position.set(-0.2, 0.69, 0.81);
         whiteParts.push(leftShine);
@@ -1111,7 +1276,6 @@ export default function BabylonCanvas() {
 
         mergeGroupWithMaterial(`poringWhites-${id}`, whiteParts, whiteEyeMat, body);
 
-        // Big Goofy Cross-Eyed Pupils + Cute Mouth (1 draw call)
         const darkParts: Mesh[] = [];
         const leftPupil = MeshBuilder.CreateSphere(
           `poringLPupil-${id}`,
@@ -1119,7 +1283,6 @@ export default function BabylonCanvas() {
           scene
         );
         leftPupil.scaling.set(0.95, 1.18, 0.5);
-        // Slightly inward/upward for goofy expression
         leftPupil.position.set(-0.22, 0.64, 0.77);
         darkParts.push(leftPupil);
 
@@ -1129,11 +1292,9 @@ export default function BabylonCanvas() {
           scene
         );
         rightPupil.scaling.set(1.0, 1.22, 0.5);
-        // Slightly inward/downward for asymmetrical goofy look
         rightPupil.position.set(0.21, 0.6, 0.77);
         darkParts.push(rightPupil);
 
-        // Cute happy little mouth
         const mouthL = MeshBuilder.CreateTorus(
           `poringMouthL-${id}`,
           { diameter: 0.16, thickness: 0.04, tessellation: 12 },
@@ -1154,7 +1315,6 @@ export default function BabylonCanvas() {
 
         mergeGroupWithMaterial(`poringPupils-${id}`, darkParts, darkEyeMat, body);
 
-        // Rosy Blush Cheeks (1 draw call)
         const blushParts: Mesh[] = [];
         for (const bx of [-0.44, 0.44]) {
           const cheek = MeshBuilder.CreateSphere(
@@ -1168,18 +1328,20 @@ export default function BabylonCanvas() {
           blushParts.push(cheek);
         }
         mergeGroupWithMaterial(`poringBlush-${id}`, blushParts, blushMat, body);
-      } else if (kind === "goblin") {
-        // =====================================================
-        // SCULPTED GOBLIN RAIDERS (Ears, Snout, Brow, Spiked Club)
-        // =====================================================
+      } else if (kind === "goblin" || kind === "archer") {
+        // SCULPTED GOBLIN RAIDER OR GOBLIN BOWMAN ARCHER
+        const isArcher = kind === "archer";
         const gobSkinMat = registerMat(
           `gobSkinMat-${id}`,
-          zone === "dungeon" ? new Color3(0.46, 0.32, 0.62) : new Color3(0.42, 0.68, 0.24),
+          isArcher
+            ? new Color3(0.28, 0.62, 0.38)
+            : zone === "dungeon"
+            ? new Color3(0.46, 0.32, 0.62)
+            : new Color3(0.42, 0.68, 0.24),
           new Color3(0.06, 0.04, 0.02)
         );
         const skinParts: Mesh[] = [];
 
-        // Hunched torso & pot-belly
         const torso = MeshBuilder.CreateCylinder(
           `gobTorso-${id}`,
           { diameterTop: 0.72, diameterBottom: 0.92, height: 0.95, tessellation: 14 },
@@ -1189,7 +1351,6 @@ export default function BabylonCanvas() {
         torso.rotation.x = 0.15;
         skinParts.push(torso);
 
-        // Muscular shoulders & arms
         for (const sx of [-0.48, 0.48]) {
           const arm = MeshBuilder.CreateCylinder(
             `gobArm-${id}-${sx}`,
@@ -1201,7 +1362,6 @@ export default function BabylonCanvas() {
           skinParts.push(arm);
         }
 
-        // Sculpted Goblin Head + Long Pointed Snout + Big Bat-Like Ears
         const head = MeshBuilder.CreateSphere(
           `gobHead-${id}`,
           { diameter: 0.82, segments: 16 },
@@ -1234,7 +1394,6 @@ export default function BabylonCanvas() {
 
         mergeGroupWithMaterial(`gobSkinMerged-${id}`, skinParts, gobSkinMat, body);
 
-        // Armor Tunic / Loincloth & Boots (1 draw call)
         const armorParts: Mesh[] = [];
         const loin = MeshBuilder.CreateCylinder(
           `gobLoin-${id}`,
@@ -1253,9 +1412,19 @@ export default function BabylonCanvas() {
           boot.position.set(lx, 0.21, 0);
           armorParts.push(boot);
         }
+        if (isArcher) {
+          // Archer Quiver on back
+          const quiver = MeshBuilder.CreateCylinder(
+            `gobQuiver-${id}`,
+            { diameter: 0.34, height: 0.85, tessellation: 10 },
+            scene
+          );
+          quiver.position.set(-0.22, 1.05, -0.45);
+          quiver.rotation.z = -0.35;
+          armorParts.push(quiver);
+        }
         mergeGroupWithMaterial(`gobGearMerged-${id}`, armorParts, darkObsidianMat, body);
 
-        // Glowing Yellow Eyes (1 draw call)
         const eyeParts: Mesh[] = [];
         for (const ex of [-0.18, 0.18]) {
           const eye = MeshBuilder.CreateSphere(`gobEye-${id}-${ex}`, { diameter: 0.16, segments: 10 }, scene);
@@ -1264,35 +1433,67 @@ export default function BabylonCanvas() {
         }
         mergeGroupWithMaterial(`gobEyesMerged-${id}`, eyeParts, glowingYellowEyeMat, body);
 
-        // Spiked Wooden Club on Weapon Node
-        const clubShaft = MeshBuilder.CreateCylinder(
-          `gobClub-${id}`,
-          { diameterTop: 0.38, diameterBottom: 0.16, height: 1.25, tessellation: 12 },
-          scene
-        );
-        clubShaft.rotation.x = Math.PI / 2;
-        clubShaft.position.set(0.55, 0.9, 0.55);
-        clubShaft.material = woodMat;
-        clubShaft.parent = weapon;
-
-        const spikeParts: Mesh[] = [];
-        for (let s = 0; s < 4; s++) {
-          const a = (s / 4) * Math.PI * 2;
-          const spike = MeshBuilder.CreateCylinder(
-            `gobSpike-${id}-${s}`,
-            { diameterTop: 0.02, diameterBottom: 0.12, height: 0.28, tessellation: 8 },
+        if (isArcher) {
+          // Curved Hunting Bow + Nocked Arrow on Weapon Node
+          const bowArc = MeshBuilder.CreateTorus(
+            `gobBow-${id}`,
+            { diameter: 1.15, thickness: 0.1, tessellation: 18 },
             scene
           );
-          spike.position.set(0.55 + Math.cos(a) * 0.22, 0.9 + Math.sin(a) * 0.22, 0.88);
-          spike.rotation.z = -Math.cos(a) * (Math.PI / 2);
-          spike.rotation.x = Math.sin(a) * (Math.PI / 2);
-          spikeParts.push(spike);
+          bowArc.rotation.y = Math.PI / 2;
+          bowArc.position.set(0, 0.98, 0.58);
+          bowArc.material = woodMat;
+          bowArc.parent = weapon;
+
+          const nockedArrow = MeshBuilder.CreateCylinder(
+            `gobNockedArrow-${id}`,
+            { diameter: 0.06, height: 0.95, tessellation: 8 },
+            scene
+          );
+          nockedArrow.rotation.x = Math.PI / 2;
+          nockedArrow.position.set(0, 0.98, 0.72);
+          nockedArrow.material = glowingCrimsonMat;
+          nockedArrow.parent = weapon;
+
+          // Red laser-sight aim telegraph line on ground during windup
+          archerAimLine = MeshBuilder.CreateBox(
+            `archerAim-${id}`,
+            { width: 0.1, height: 0.04, depth: 9.5 },
+            scene
+          );
+          archerAimLine.position.set(0, 0.08, 4.8);
+          archerAimLine.material = glowingCrimsonMat;
+          archerAimLine.parent = root;
+          archerAimLine.setEnabled(false);
+        } else {
+          // Spiked Wooden Club
+          const clubShaft = MeshBuilder.CreateCylinder(
+            `gobClub-${id}`,
+            { diameterTop: 0.38, diameterBottom: 0.16, height: 1.25, tessellation: 12 },
+            scene
+          );
+          clubShaft.rotation.x = Math.PI / 2;
+          clubShaft.position.set(0.55, 0.9, 0.55);
+          clubShaft.material = woodMat;
+          clubShaft.parent = weapon;
+
+          const spikeParts: Mesh[] = [];
+          for (let s = 0; s < 4; s++) {
+            const a = (s / 4) * Math.PI * 2;
+            const spike = MeshBuilder.CreateCylinder(
+              `gobSpike-${id}-${s}`,
+              { diameterTop: 0.02, diameterBottom: 0.12, height: 0.28, tessellation: 8 },
+              scene
+            );
+            spike.position.set(0.55 + Math.cos(a) * 0.22, 0.9 + Math.sin(a) * 0.22, 0.88);
+            spike.rotation.z = -Math.cos(a) * (Math.PI / 2);
+            spike.rotation.x = Math.sin(a) * (Math.PI / 2);
+            spikeParts.push(spike);
+          }
+          mergeGroupWithMaterial(`gobSpikes-${id}`, spikeParts, bladeMat, weapon);
         }
-        mergeGroupWithMaterial(`gobSpikes-${id}`, spikeParts, bladeMat, weapon);
       } else if (kind === "knight") {
-        // =====================================================
-        // GOTHIC PLATE-ARMORED SENTINEL KNIGHT (Plumed Greathelm, Shield & Halberd)
-        // =====================================================
+        // GOTHIC PLATE-ARMORED SENTINEL KNIGHT
         const armorMat = registerMat(
           `knightMat-${id}`,
           zone === "dungeon" ? new Color3(0.32, 0.38, 0.52) : new Color3(0.62, 0.22, 0.24),
@@ -1303,7 +1504,6 @@ export default function BabylonCanvas() {
         );
         const armorParts: Mesh[] = [];
 
-        // Greave legs
         for (const lx of [-0.28, 0.28]) {
           const leg = MeshBuilder.CreateCylinder(
             `knightLeg-${id}-${lx}`,
@@ -1314,7 +1514,6 @@ export default function BabylonCanvas() {
           armorParts.push(leg);
         }
 
-        // V-Tapered Breastplate Cuirass
         const cuirass = MeshBuilder.CreateCylinder(
           `knightCuirass-${id}`,
           { diameterTop: 1.24, diameterBottom: 0.88, height: 1.15, tessellation: 14 },
@@ -1324,7 +1523,6 @@ export default function BabylonCanvas() {
         cuirass.position.set(0, 1.12, 0);
         armorParts.push(cuirass);
 
-        // Domed Shoulder Pauldrons
         for (const px of [-0.72, 0.72]) {
           const pauldron = MeshBuilder.CreateSphere(
             `knightPauldron-${id}-${px}`,
@@ -1336,7 +1534,6 @@ export default function BabylonCanvas() {
           armorParts.push(pauldron);
         }
 
-        // Visored Greathelm
         const helm = MeshBuilder.CreateCylinder(
           `knightHelm-${id}`,
           { diameterTop: 0.72, diameterBottom: 0.82, height: 0.78, tessellation: 14 },
@@ -1353,7 +1550,6 @@ export default function BabylonCanvas() {
         helmDome.position.set(0, 2.32, 0);
         armorParts.push(helmDome);
 
-        // Left Arm Tower Shield
         const knightShield = MeshBuilder.CreateBox(
           `knightShield-${id}`,
           { width: 0.18, height: 1.18, depth: 0.78 },
@@ -1365,7 +1561,6 @@ export default function BabylonCanvas() {
 
         mergeGroupWithMaterial(`knightArmorMerged-${id}`, armorParts, armorMat, body);
 
-        // Glowing Visor Eye Slit & Helmet Plume Crest (1 draw call)
         const crimsonParts: Mesh[] = [];
         const visorSlit = MeshBuilder.CreateBox(
           `knightVisor-${id}`,
@@ -1385,7 +1580,6 @@ export default function BabylonCanvas() {
         crimsonParts.push(plume);
         mergeGroupWithMaterial(`knightCrimsonMerged-${id}`, crimsonParts, glowingCrimsonMat, body);
 
-        // Polearm Halberd on Weapon Node
         const halberdParts: Mesh[] = [];
         const shaft = MeshBuilder.CreateCylinder(
           `halberdShaft-${id}`,
@@ -1416,9 +1610,7 @@ export default function BabylonCanvas() {
 
         mergeGroupWithMaterial(`knightHalberd-${id}`, halberdParts, bladeMat, weapon);
       } else if (kind === "minion") {
-        // =====================================================
         // HOODED ECLIPSE WRAITH MINION WITH ORBITING SHARDS
-        // =====================================================
         const minionMat = registerMat(
           `minionMat-${id}`,
           new Color3(0.58, 0.16, 0.76),
@@ -1426,7 +1618,6 @@ export default function BabylonCanvas() {
         );
         const wraithParts: Mesh[] = [];
 
-        // Tattered Wraith Cloak Cone
         const cloak = MeshBuilder.CreateCylinder(
           `minionCloak-${id}`,
           { diameterTop: 0.42, diameterBottom: 1.25, height: 1.35, tessellation: 14 },
@@ -1435,7 +1626,6 @@ export default function BabylonCanvas() {
         cloak.position.set(0, 0.85, 0);
         wraithParts.push(cloak);
 
-        // Cowl Hood
         const hood = MeshBuilder.CreateSphere(
           `minionHood-${id}`,
           { diameter: 0.76, segments: 14 },
@@ -1444,7 +1634,6 @@ export default function BabylonCanvas() {
         hood.position.set(0, 1.62, 0.04);
         wraithParts.push(hood);
 
-        // Orbiting Arcane Shards
         for (let s = 0; s < 3; s++) {
           const a = (s / 3) * Math.PI * 2;
           const shard = MeshBuilder.CreatePolyhedron(
@@ -1457,7 +1646,6 @@ export default function BabylonCanvas() {
         }
         mergeGroupWithMaterial(`minionWraithMerged-${id}`, wraithParts, minionMat, body);
 
-        // Glowing Eyes inside the Cowl
         const eyeParts: Mesh[] = [];
         for (const ex of [-0.14, 0.14]) {
           const eye = MeshBuilder.CreateSphere(`minionEye-${id}-${ex}`, { diameter: 0.13, segments: 8 }, scene);
@@ -1466,9 +1654,7 @@ export default function BabylonCanvas() {
         }
         mergeGroupWithMaterial(`minionEyes-${id}`, eyeParts, glowingYellowEyeMat, body);
       } else {
-        // =====================================================
         // CUSTOM SCULPTED BOSS MODEL: MALAKOR, WARDEN OF THE ECLIPSE
-        // =====================================================
         const bossArmorMat = registerMat(
           `bossMat-${id}`,
           new Color3(0.72, 0.12, 0.18),
@@ -1483,7 +1669,6 @@ export default function BabylonCanvas() {
         const bossHornParts: Mesh[] = [];
         const bossCrimsonParts: Mesh[] = [];
 
-        // 1. Wide-Planted Armored Greaves & Sabatons
         for (const lx of [-0.62, 0.62]) {
           const greave = MeshBuilder.CreateCylinder(
             `bossGreave-${id}-${lx}`,
@@ -1502,7 +1687,6 @@ export default function BabylonCanvas() {
           bossArmorParts.push(kneeGuard);
         }
 
-        // 2. Armored Pelvis & Waist Tassets
         const pelvis = MeshBuilder.CreateCylinder(
           `bossPelvis-${id}`,
           { diameterTop: 1.65, diameterBottom: 1.95, height: 0.75, tessellation: 14 },
@@ -1511,7 +1695,6 @@ export default function BabylonCanvas() {
         pelvis.position.set(0, 1.25, 0);
         bossObsidianParts.push(pelvis);
 
-        // 3. Broad V-Tapered Demon-Lord Breastplate Cuirass
         const torso = MeshBuilder.CreateCylinder(
           `bossTorso-${id}`,
           { diameterTop: 2.55, diameterBottom: 1.55, height: 1.65, tessellation: 18 },
@@ -1521,7 +1704,6 @@ export default function BabylonCanvas() {
         torso.position.set(0, 2.22, 0);
         bossArmorParts.push(torso);
 
-        // Flowing Tattered Royal Cape on Back
         const cape = MeshBuilder.CreateBox(
           `bossCape-${id}`,
           { width: 2.35, height: 2.55, depth: 0.16 },
@@ -1531,7 +1713,6 @@ export default function BabylonCanvas() {
         cape.rotation.x = 0.18;
         bossObsidianParts.push(cape);
 
-        // 4. Massive Layered Shoulder Pauldrons & Muscular Arms
         for (const sx of [-1, 1]) {
           const pauldron = MeshBuilder.CreateSphere(
             `bossPauldron-${id}-${sx}`,
@@ -1542,7 +1723,6 @@ export default function BabylonCanvas() {
           pauldron.position.set(sx * 1.48, 2.85, 0);
           bossArmorParts.push(pauldron);
 
-          // Curved Pauldron Spikes
           const pSpike = MeshBuilder.CreateCylinder(
             `bossPSpike-${id}-${sx}`,
             { diameterTop: 0.04, diameterBottom: 0.34, height: 0.95, tessellation: 12 },
@@ -1552,7 +1732,6 @@ export default function BabylonCanvas() {
           pSpike.rotation.z = -sx * 0.68;
           bossHornParts.push(pSpike);
 
-          // Muscular Gauntleted Forearms
           const arm = MeshBuilder.CreateCylinder(
             `bossArm-${id}-${sx}`,
             { diameterTop: 0.56, diameterBottom: 0.48, height: 1.25, tessellation: 12 },
@@ -1564,7 +1743,6 @@ export default function BabylonCanvas() {
           bossObsidianParts.push(arm);
         }
 
-        // 5. Sculpted Demon-Helm Head & Sweeping Curved Bull Horns
         const bossHelm = MeshBuilder.CreateSphere(
           `bossHelm-${id}`,
           { diameter: 1.18, segments: 16 },
@@ -1582,7 +1760,6 @@ export default function BabylonCanvas() {
         faceplate.position.set(0, 3.22, 0.25);
         bossArmorParts.push(faceplate);
 
-        // Two Sweeping 3D Curved Bull Horns using CreateTube
         for (const hx of [-1, 1]) {
           const hornPath = [
             new Vector3(hx * 0.42, 3.55, 0.08),
@@ -1603,7 +1780,6 @@ export default function BabylonCanvas() {
           bossHornParts.push(horn);
         }
 
-        // Glowing Heart Core in Chest + Burning Eyes + Floating Eclipse Halo
         const chestCore = MeshBuilder.CreatePolyhedron(
           `bossChestCore-${id}`,
           { type: 1, size: 0.36 },
@@ -1632,13 +1808,11 @@ export default function BabylonCanvas() {
         eclipseHalo.position.set(0, 3.65, -0.45);
         bossCrimsonParts.push(eclipseHalo);
 
-        // Merge Boss Body into 4 clean material meshes
         mergeGroupWithMaterial(`bossArmorMerged-${id}`, bossArmorParts, bossArmorMat, body);
         mergeGroupWithMaterial(`bossObsidianMerged-${id}`, bossObsidianParts, darkObsidianMat, body);
         mergeGroupWithMaterial(`bossHornsMerged-${id}`, bossHornParts, boneHornMat, body);
         mergeGroupWithMaterial(`bossCrimsonMerged-${id}`, bossCrimsonParts, glowingCrimsonMat, body);
 
-        // 6. Massive Twin-Bladed Eclipse Greataxe on Weapon Node
         const axeParts: Mesh[] = [];
         const axeShaft = MeshBuilder.CreateCylinder(
           `bossAxeShaft-${id}`,
@@ -1649,14 +1823,13 @@ export default function BabylonCanvas() {
         axeShaft.position.set(1.55, 1.95, 0.85);
         axeParts.push(axeShaft);
 
-        // Double Crescent Battleaxe Blades
         for (const bx of [-0.55, 0.55]) {
           const crescentBlade = MeshBuilder.CreateCylinder(
             `bossAxeBlade-${id}-${bx}`,
             { diameterTop: 1.45, diameterBottom: 0.45, height: 0.14, tessellation: 16 },
             scene
           );
-          crescentBlade. scaling.set(1.15, 1.0, 0.65);
+          crescentBlade.scaling.set(1.15, 1.0, 0.65);
           crescentBlade.position.set(1.55 + bx, 1.95, 1.85);
           axeParts.push(crescentBlade);
         }
@@ -1672,7 +1845,6 @@ export default function BabylonCanvas() {
 
         mergeGroupWithMaterial(`bossGreataxeMerged-${id}`, axeParts, goldKeyMat, weapon);
 
-        // 7. Boss Ground Lunge Path Telegraph Corridor
         chargeCorridorRoot = new TransformNode(`bossChargeCorridor-${id}`, scene);
         chargeCorridorMat = makeMat(
           `bossChargeCorridorMat-${id}`,
@@ -1708,7 +1880,6 @@ export default function BabylonCanvas() {
         mergeGroupWithMaterial(`bossCorridorRails-${id}`, railParts, railMat, chargeCorridorRoot);
         chargeCorridorRoot.setEnabled(false);
 
-        // 8. Boss Invulnerable Lunge Shield Aura (visible while launching)
         lungeShieldMesh = MeshBuilder.CreateSphere(
           `bossLungeShield-${id}`,
           { diameter: 4.2, segments: 16 },
@@ -1725,7 +1896,6 @@ export default function BabylonCanvas() {
         lungeShieldMesh.parent = root;
         lungeShieldMesh.setEnabled(false);
 
-        // 9. Boss Stunned Orbiting Stars (merged into 1 draw call!)
         stunStarsRoot = new TransformNode(`bossStunStars-${id}`, scene);
         stunStarsRoot.position.set(0, 4.35, 0);
         stunStarsRoot.parent = root;
@@ -1744,7 +1914,6 @@ export default function BabylonCanvas() {
         stunStarsRoot.setEnabled(false);
       }
 
-      // Telegraph ground ring for windup / attack
       const telegraphRing = MeshBuilder.CreateTorus(
         `telegraph-${id}`,
         {
@@ -1762,7 +1931,6 @@ export default function BabylonCanvas() {
       );
       telegraphRing.parent = root;
 
-      // World-space Billboard Overhead Enemy HP Bar (never rotates with enemy!)
       const barY = kind === "boss" ? 4.85 : kind === "knight" ? 2.95 : 2.25;
       const barW = kind === "boss" ? 2.8 : 1.25;
       const hpBarHolder = new TransformNode(`hpHolder-${id}`, scene);
@@ -1804,6 +1972,7 @@ export default function BabylonCanvas() {
         chargeCorridorMat,
         lungeShieldMesh,
         stunStarsRoot,
+        archerAimLine,
       };
     };
 
@@ -1930,10 +2099,13 @@ export default function BabylonCanvas() {
     };
 
     // =========================================================
-    // KEYBOARD & POINTER INPUT LISTENERS
+    // KEYBOARD & POINTER INPUT LISTENERS (Incl. Right-Click Shield Block)
     // =========================================================
     const pressedKeys = new Set<string>();
     let attackTriggeredOnce = false;
+    let boomerangTriggeredOnce = false;
+    let bowTriggeredOnce = false;
+    let rightMouseHeld = false;
 
     const onKeyDown = (e: KeyboardEvent) => {
       const code = e.code;
@@ -1952,6 +2124,15 @@ export default function BabylonCanvas() {
       ) {
         attackTriggeredOnce = true;
       }
+      if ((code === "KeyQ" || code === "Digit1") && !pressedKeys.has(code)) {
+        boomerangTriggeredOnce = true;
+      }
+      if (
+        (code === "KeyE" || code === "KeyF" || code === "Digit2") &&
+        !pressedKeys.has(code)
+      ) {
+        bowTriggeredOnce = true;
+      }
       pressedKeys.add(code);
     };
 
@@ -1962,12 +2143,26 @@ export default function BabylonCanvas() {
     const onPointerDown = (e: PointerEvent) => {
       if (e.button === 0) {
         attackTriggeredOnce = true;
+      } else if (e.button === 2) {
+        rightMouseHeld = true;
       }
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.button === 2) {
+        rightMouseHeld = false;
+      }
+    };
+
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
     };
 
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("contextmenu", onContextMenu);
 
     // =========================================================
     // MAIN BABYLON RENDER & STORE VIEW SYNC LOOP
@@ -1980,7 +2175,6 @@ export default function BabylonCanvas() {
       const dt = (now - lastTime) / 1000;
       lastTime = now;
 
-      // Update live FPS counter in HUD every 0.25s
       fpsUpdateAccumulator += dt;
       if (fpsUpdateAccumulator >= 0.25) {
         fpsUpdateAccumulator = 0;
@@ -1988,7 +2182,6 @@ export default function BabylonCanvas() {
         useGameStore.getState().setFps(currentFps);
       }
 
-      // Gather directional input (WASD + Arrow Keys)
       let moveX = 0;
       let moveZ = 0;
       if (pressedKeys.has("KeyW") || pressedKeys.has("ArrowUp")) moveZ += 1;
@@ -2001,15 +2194,29 @@ export default function BabylonCanvas() {
         pressedKeys.has("Space") ||
         pressedKeys.has("KeyJ") ||
         pressedKeys.has("KeyZ");
-      attackTriggeredOnce = false;
+      const blockHeld =
+        rightMouseHeld ||
+        pressedKeys.has("ShiftLeft") ||
+        pressedKeys.has("ShiftRight");
+      const boomerangPressed = boomerangTriggeredOnce;
+      const bowPressed = bowTriggeredOnce;
 
-      // Advance serializable game state
+      attackTriggeredOnce = false;
+      boomerangTriggeredOnce = false;
+      bowTriggeredOnce = false;
+
       const store = useGameStore.getState();
       if (store.phase === "playing") {
-        store.tick(dt, { moveX, moveZ, attackPressed });
+        store.tick(dt, {
+          moveX,
+          moveZ,
+          attackPressed,
+          blockHeld,
+          boomerangPressed,
+          bowPressed,
+        });
       }
 
-      // Read latest serializable state to project onto Babylon 3D scene
       const snap = useGameStore.getState();
       const t = now * 0.001;
 
@@ -2030,22 +2237,31 @@ export default function BabylonCanvas() {
         sanctumPointLight.intensity = snap.flags.bossDefeated ? 1.35 : 0.72;
       }
 
-      // 2. Sync Hero 3D Model & Boot Stride Animation
+      // 2. Sync Hero 3D Model, Shield Block Posture & Sword Swing
       const stride = Math.sin(snap.hero.walkCycle);
       heroRoot.position.set(snap.hero.x, Math.abs(stride) * 0.11, snap.hero.z);
       heroRoot.rotation.y = snap.hero.facing;
       heroLeftBoot.position.z = stride * 0.22;
       heroRightBoot.position.z = -stride * 0.22;
 
-      // Hero invulnerability blink
       const heroBlinkHide =
         snap.hero.invulnerableTimer > 0 &&
         Math.floor(snap.hero.invulnerableTimer * 18) % 2 === 0;
       heroRoot.setEnabled(!heroBlinkHide);
 
-      // Hero Sword Swing Animation
+      // Shield Block Animation (Right-Click raises shield front-and-center with glowing ward)
+      if (snap.hero.isBlocking) {
+        heroShieldPivot.position.set(0, 0.96, 0.56);
+        heroShieldPivot.rotation.y = Math.PI / 2;
+        heroBlockWard.setEnabled(true);
+      } else {
+        heroShieldPivot.position.set(-0.56, 0.9, 0.24);
+        heroShieldPivot.rotation.y = -0.25;
+        heroBlockWard.setEnabled(false);
+      }
+
       if (snap.hero.isAttacking) {
-        const progress = 1 - snap.hero.attackTimer / 0.25;
+        const progress = 1 - snap.hero.attackTimer / 0.24;
         swordPivot.rotation.y = -1.25 + progress * 2.5;
         slashArc.setEnabled(true);
         slashArc.rotation.y = -0.8 + progress * 1.6;
@@ -2054,7 +2270,38 @@ export default function BabylonCanvas() {
         slashArc.setEnabled(false);
       }
 
-      // 3. Smooth Camera Follow (or scenic orbit on title screen)
+      // Sync Boomerang 3D Mesh
+      if (snap.boomerang && snap.boomerang.zone === snap.zone) {
+        boomerangNode.setEnabled(true);
+        boomerangNode.position.set(snap.boomerang.x, 1.0, snap.boomerang.z);
+        boomerangNode.rotation.y = snap.boomerang.spinAngle;
+      } else {
+        boomerangNode.setEnabled(false);
+      }
+
+      // Sync 3D Arrows (Hero & Goblin Archer)
+      const activeArrowIds = new Set<string>();
+      for (const arrow of snap.arrows) {
+        activeArrowIds.add(arrow.id);
+        let aRig = arrowRigs.get(arrow.id);
+        if (!aRig) {
+          aRig = buildArrowRig(arrow.id, arrow.fromHero);
+          arrowRigs.set(arrow.id, aRig);
+        }
+        const showArrow = arrow.zone === snap.zone;
+        aRig.setEnabled(showArrow);
+        if (showArrow) {
+          aRig.position.set(arrow.x, 1.0, arrow.z);
+          aRig.rotation.y = arrow.angle;
+        }
+      }
+      arrowRigs.forEach((aRig, id) => {
+        if (!activeArrowIds.has(id)) {
+          aRig.setEnabled(false);
+        }
+      });
+
+      // 3. Smooth Camera Follow
       if (snap.phase === "title") {
         camera.target.set(
           Math.sin(t * 0.25) * 6,
@@ -2111,13 +2358,13 @@ export default function BabylonCanvas() {
         rig.hpBarHolder.setEnabled(visible);
         if (!visible) {
           if (rig.chargeCorridorRoot) rig.chargeCorridorRoot.setEnabled(false);
+          if (rig.archerAimLine) rig.archerAimLine.setEnabled(false);
           continue;
         }
 
-        // Poring squash-and-stretch hop animation vs standard bob
         let bob = 0;
         if (enemy.kind === "slime") {
-          const hopWave = Math.sin(t * 5.8 + eIdx * 1.3);
+          const hopWave = Math.sin(t * 6.2 + eIdx * 1.3);
           bob = Math.max(0, hopWave) * 0.34;
           const stretchY = 1.0 + hopWave * 0.15;
           const squashXZ = 1.0 - hopWave * 0.09;
@@ -2129,11 +2376,14 @@ export default function BabylonCanvas() {
         rig.root.position.set(enemy.x, bob, enemy.z);
         rig.root.rotation.y = enemy.facing;
 
-        // Position Floating Health Bar in world space above enemy (locked facing camera!)
         rig.hpBarHolder.position.set(enemy.x, rig.barY + bob, enemy.z);
         const hpRatio = Math.max(0, enemy.hp / enemy.maxHp);
         rig.hpBarFill.scaling.x = Math.max(0.001, hpRatio);
         rig.hpBarFill.position.x = -rig.barWidth * (1 - hpRatio) * 0.5;
+
+        if (rig.archerAimLine) {
+          rig.archerAimLine.setEnabled(enemy.state === "windup");
+        }
 
         // Boss-specific telegraph & state visuals
         if (enemy.kind === "boss") {
@@ -2177,7 +2427,6 @@ export default function BabylonCanvas() {
           }
         }
 
-        // Windup & Attack weapon / telegraph cue
         const isWindingOrAttacking =
           enemy.state === "windup" ||
           enemy.state === "attack" ||
@@ -2191,7 +2440,7 @@ export default function BabylonCanvas() {
           enemy.state === "charge_lock" ||
           enemy.state === "lob_windup"
         ) {
-          rig.weapon.rotation.x = -0.85;
+          rig.weapon.rotation.x = enemy.kind === "archer" ? 0 : -0.85;
           rig.telegraphRing.scaling.setAll(1 + Math.sin(t * 18) * 0.12);
         } else if (enemy.state === "attack" || enemy.state === "charge_lunge") {
           rig.weapon.rotation.x = 0.65;
@@ -2199,12 +2448,14 @@ export default function BabylonCanvas() {
           rig.weapon.rotation.x = 0;
         }
 
-        // Hit Flash highlight
-        const flashing = enemy.hitFlashTimer > 0;
+        const flashing = enemy.hitFlashTimer > 0 || enemy.stunTimer > 0;
         rig.materials.forEach((mat, idx) => {
-          if (flashing) {
+          if (enemy.hitFlashTimer > 0) {
             mat.diffuseColor.set(1, 1, 1);
             mat.emissiveColor.set(0.85, 0.35, 0.2);
+          } else if (flashing) {
+            mat.diffuseColor.set(0.95, 0.9, 0.45);
+            mat.emissiveColor.set(0.35, 0.3, 0.08);
           } else {
             mat.diffuseColor.copyFrom(rig!.baseColors[idx]);
             mat.emissiveColor.set(0.08, 0.04, 0.06);
@@ -2217,6 +2468,7 @@ export default function BabylonCanvas() {
           rig.root.setEnabled(false);
           rig.hpBarHolder.setEnabled(false);
           if (rig.chargeCorridorRoot) rig.chargeCorridorRoot.setEnabled(false);
+          if (rig.archerAimLine) rig.archerAimLine.setEnabled(false);
         }
       });
 
@@ -2342,7 +2594,9 @@ export default function BabylonCanvas() {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("pointerup", onPointerUp);
       canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("contextmenu", onContextMenu);
       scene.dispose();
       engine.dispose();
     };
