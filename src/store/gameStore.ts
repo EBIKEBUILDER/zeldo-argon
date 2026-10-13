@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import {
   BOSS_CHEST_POS,
+  BOSS_MAX_LUNGE_RANGE,
+  computeBossChargePathLength,
   DUNGEON_ENTRY_SPAWN,
   DUNGEON_EXIT_POS,
   DUNGEON_KEY_POS,
@@ -19,7 +21,18 @@ import {
 import { soundEngine } from "@/audio/soundEngine";
 
 export type GamePhase = "title" | "playing" | "gameover" | "victory";
-export type EnemyAIState = "idle" | "aggro" | "windup" | "attack" | "recover" | "dead";
+export type EnemyAIState =
+  | "idle"
+  | "aggro"
+  | "windup"
+  | "attack"
+  | "recover"
+  | "charge_aim"
+  | "charge_lock"
+  | "charge_lunge"
+  | "stunned"
+  | "lob_windup"
+  | "dead";
 
 export interface HeroState {
   x: number;
@@ -60,6 +73,35 @@ export interface EnemyState {
   speed: number;
   damage: number;
   rupeeDrop: RupeeTier | "boss";
+  // Boss-specific serializable combat state
+  chargeAngle: number;
+  chargePathLength: number;
+  chargeDistanceTraveled: number;
+  actionCounter: number;
+  actionCooldown: number;
+}
+
+export interface BossProjectileState {
+  id: string;
+  zone: ZoneId;
+  startX: number;
+  startZ: number;
+  targetX: number;
+  targetZ: number;
+  flightTime: number;
+  totalFlightTime: number;
+  aoeRadius: number;
+  directHitRadius: number;
+}
+
+export interface HazardZoneState {
+  id: string;
+  zone: ZoneId;
+  x: number;
+  z: number;
+  radius: number;
+  timer: number;
+  maxTimer: number;
 }
 
 export interface RupeeItemState {
@@ -106,12 +148,15 @@ export interface SerializableGameState {
   dungeonRoom: DungeonRoomId;
   hero: HeroState;
   enemies: EnemyState[];
+  projectiles: BossProjectileState[];
+  hazards: HazardZoneState[];
   rupees: RupeeItemState[];
   flags: GameFlags;
   stats: GameStats;
   banner: BannerMessage | null;
   gateNoticeCooldown: number;
   chestNoticeCooldown: number;
+  armorNoticeCooldown: number;
   muted: boolean;
 }
 
@@ -146,6 +191,11 @@ function createInitialEnemies(): EnemyState[] {
     speed: spawn.speed,
     damage: spawn.damage,
     rupeeDrop: spawn.rupeeDrop,
+    chargeAngle: Math.PI,
+    chargePathLength: BOSS_MAX_LUNGE_RANGE,
+    chargeDistanceTraveled: 0,
+    actionCounter: 0,
+    actionCooldown: 1.2,
   }));
 }
 
@@ -184,6 +234,8 @@ function createInitialState(phase: GamePhase = "title", muted = false): Serializ
       walkCycle: 0,
     },
     enemies: createInitialEnemies(),
+    projectiles: [],
+    hazards: [],
     rupees: createInitialRupees(),
     flags: {
       keyPickedUp: false,
@@ -209,6 +261,7 @@ function createInitialState(phase: GamePhase = "title", muted = false): Serializ
         : null,
     gateNoticeCooldown: 0,
     chestNoticeCooldown: 0,
+    armorNoticeCooldown: 0,
     muted,
   };
 }
@@ -273,8 +326,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     };
 
+    const damageHero = (amount: number, pushX: number, pushZ: number) => {
+      if (hero.invulnerableTimer > 0 || phase !== "playing") return;
+      hero.hp = Math.max(0, hero.hp - amount);
+      hero.invulnerableTimer = 1.05;
+      stats.damageTaken += amount;
+      hero.knockbackVx = pushX;
+      hero.knockbackVz = pushZ;
+      soundEngine.playHeroHurt();
+      if (hero.hp <= 0) {
+        phase = "gameover";
+        soundEngine.playGameOver();
+      }
+    };
+
     let gateNoticeCooldown = Math.max(0, state.gateNoticeCooldown - dt);
     let chestNoticeCooldown = Math.max(0, state.chestNoticeCooldown - dt);
+    let armorNoticeCooldown = Math.max(0, state.armorNoticeCooldown - dt);
 
     // 1. Update Hero timers
     hero.attackTimer = Math.max(0, hero.attackTimer - dt);
@@ -421,12 +489,70 @@ export const useGameStore = create<GameStore>((set, get) => ({
       soundEngine.playBossRoar();
       pushBanner(
         "Malakor, Warden of the Eclipse",
-        "Defeat the Dread Warden and his minions to unseal the Sanctum Chest!",
-        4.5
+        "Bait his charging lunge into a wall or pillar to shatter his armor and stun him!",
+        5.0
       );
     }
 
-    // 7. Update Enemies & Combat
+    // 7. Update Arcing Boss Projectiles & Toxic/Fire Ground Hazards
+    const projectiles: BossProjectileState[] = [];
+    const hazards: HazardZoneState[] = state.hazards
+      .map((h) => ({ ...h, timer: h.timer - dt }))
+      .filter((h) => h.timer > 0);
+
+    for (const proj of state.projectiles) {
+      const updatedProj: BossProjectileState = {
+        ...proj,
+        flightTime: proj.flightTime + dt,
+      };
+      if (updatedProj.flightTime >= updatedProj.totalFlightTime) {
+        // Projectile impacts the ground and explodes!
+        if (updatedProj.zone === zone) {
+          soundEngine.playBombExplode();
+          const dx = hero.x - updatedProj.targetX;
+          const dz = hero.z - updatedProj.targetZ;
+          const dist = Math.hypot(dx, dz);
+          const pushDirX = dist > 0.01 ? dx / dist : 0;
+          const pushDirZ = dist > 0.01 ? dz / dist : -1;
+
+          if (dist <= updatedProj.directHitRadius) {
+            // Direct hit deals 2 half-hearts (1 full heart)
+            damageHero(2, pushDirX * 13, pushDirZ * 13);
+          } else if (dist <= updatedProj.aoeRadius) {
+            // Splash explosion deals 1 half-heart
+            damageHero(1, pushDirX * 9.5, pushDirZ * 9.5);
+          }
+        }
+
+        // Spawn lingering toxic/fire ground hazard pool
+        hazards.push({
+          id: `hazard-${updatedProj.id}`,
+          zone: updatedProj.zone,
+          x: updatedProj.targetX,
+          z: updatedProj.targetZ,
+          radius: updatedProj.aoeRadius,
+          timer: 5.2,
+          maxTimer: 5.2,
+        });
+      } else {
+        projectiles.push(updatedProj);
+      }
+    }
+
+    // Check if Hero is standing inside any active Toxic/Fire Ground Hazard
+    for (const hazard of hazards) {
+      if (hazard.zone !== zone) continue;
+      const dx = hero.x - hazard.x;
+      const dz = hero.z - hazard.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist <= hazard.radius) {
+        const pushDirX = dist > 0.01 ? dx / dist : 0;
+        const pushDirZ = dist > 0.01 ? dz / dist : -1;
+        damageHero(1, pushDirX * 5.5, pushDirZ * 5.5);
+      }
+    }
+
+    // 8. Update Enemies & Combat
     const rupees: RupeeItemState[] = state.rupees.map((r) => ({ ...r }));
     const enemies: EnemyState[] = state.enemies.map((e) => ({ ...e }));
 
@@ -456,47 +582,77 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const angleDiff = Math.abs(normalizeAngleDiff(angleToEnemy, hero.facing));
           if (angleDiff <= 1.35 || dist <= 1.35) {
             enemy.lastHitSwingId = hero.swingId;
-            enemy.hp -= 1;
-            enemy.hitFlashTimer = 0.22;
 
-            // Knockback away from hero
-            const kbDirX = dist > 0.01 ? dx / dist : Math.sin(hero.facing);
-            const kbDirZ = dist > 0.01 ? dz / dist : Math.cos(hero.facing);
-            const kbStrength = enemy.kind === "boss" ? 5.5 : 12.5;
-            enemy.knockbackVx = kbDirX * kbStrength;
-            enemy.knockbackVz = kbDirZ * kbStrength;
-
-            if (enemy.state === "idle") {
-              enemy.state = "aggro";
-            }
-
-            if (enemy.hp <= 0) {
-              enemy.hp = 0;
-              enemy.state = "dead";
-              stats.enemiesDefeated += 1;
-
-              if (enemy.kind === "boss") {
-                soundEngine.playBossDefeat();
-                // Boss drops a burst of Rupees
-                const bossDrops: Array<{ tier: RupeeTier; val: number; ox: number; oz: number }> = [
-                  { tier: "red", val: 20, ox: 0, oz: 0 },
-                  { tier: "red", val: 20, ox: -1.4, oz: 0.8 },
-                  { tier: "blue", val: 5, ox: 1.4, oz: 0.8 },
-                  { tier: "blue", val: 5, ox: -1.1, oz: -1.1 },
-                  { tier: "green", val: 1, ox: 1.1, oz: -1.1 },
-                ];
-                bossDrops.forEach((drop, idx) => {
-                  rupees.push({
-                    id: `drop-${enemy.id}-${idx}-${ stats.elapsedSeconds.toFixed(2) }`,
-                    zone,
-                    x: enemy.x + drop.ox,
-                    z: enemy.z + drop.oz,
-                    tier: drop.tier,
-                    value: drop.val,
-                    collected: false,
-                  });
-                });
+            if (enemy.kind === "boss") {
+              // Boss is invulnerable while lunging OR while his obsidian armor is intact!
+              // He can ONLY be damaged while STUNNED after crashing into a wall or pillar.
+              if (enemy.state !== "stunned") {
+                soundEngine.playArmorDeflect();
+                if (enemy.state !== "charge_lunge" && armorNoticeCooldown <= 0) {
+                  armorNoticeCooldown = 4.0;
+                  pushBanner(
+                    "Malakor's Armor Deflects Your Blade!",
+                    "Bait his telegraphed charge into a wall or pillar to stun him!",
+                    3.6
+                  );
+                }
               } else {
+                // Boss is STUNNED — deal full sword damage, zero knockback!
+                enemy.hp -= 1;
+                enemy.hitFlashTimer = 0.22;
+
+                if (enemy.hp <= 0) {
+                  enemy.hp = 0;
+                  enemy.state = "dead";
+                  stats.enemiesDefeated += 1;
+                  soundEngine.playBossDefeat();
+
+                  const bossDrops: Array<{
+                    tier: RupeeTier;
+                    val: number;
+                    ox: number;
+                    oz: number;
+                  }> = [
+                    { tier: "red", val: 20, ox: 0, oz: 0 },
+                    { tier: "red", val: 20, ox: -1.4, oz: 0.8 },
+                    { tier: "blue", val: 5, ox: 1.4, oz: 0.8 },
+                    { tier: "blue", val: 5, ox: -1.1, oz: -1.1 },
+                    { tier: "green", val: 1, ox: 1.1, oz: -1.1 },
+                  ];
+                  bossDrops.forEach((drop, idx) => {
+                    rupees.push({
+                      id: `drop-${enemy.id}-${idx}-${stats.elapsedSeconds.toFixed(2)}`,
+                      zone,
+                      x: enemy.x + drop.ox,
+                      z: enemy.z + drop.oz,
+                      tier: drop.tier,
+                      value: drop.val,
+                      collected: false,
+                    });
+                  });
+                  continue;
+                } else {
+                  soundEngine.playEnemyHit(true);
+                }
+              }
+            } else {
+              // Standard enemy hit + knockback
+              enemy.hp -= 1;
+              enemy.hitFlashTimer = 0.22;
+
+              const kbDirX = dist > 0.01 ? dx / dist : Math.sin(hero.facing);
+              const kbDirZ = dist > 0.01 ? dz / dist : Math.cos(hero.facing);
+              enemy.knockbackVx = kbDirX * 12.5;
+              enemy.knockbackVz = kbDirZ * 12.5;
+
+              if (enemy.state === "idle") {
+                enemy.state = "aggro";
+              }
+
+              if (enemy.hp <= 0) {
+                enemy.hp = 0;
+                enemy.state = "dead";
+                stats.enemiesDefeated += 1;
                 soundEngine.playEnemyDefeat();
                 const tier: RupeeTier =
                   enemy.rupeeDrop === "boss" ? "red" : enemy.rupeeDrop;
@@ -510,10 +666,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   value,
                   collected: false,
                 });
+                continue;
+              } else {
+                soundEngine.playEnemyHit(false);
               }
-              continue;
-            } else {
-              soundEngine.playEnemyHit(enemy.kind === "boss");
             }
           }
         }
@@ -554,6 +710,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
             speed: 4.6,
             damage: 1,
             rupeeDrop: "green",
+            chargeAngle: Math.PI,
+            chargePathLength: 0,
+            chargeDistanceTraveled: 0,
+            actionCounter: 0,
+            actionCooldown: 0,
           },
           {
             id: "dg-minion-wave2-2",
@@ -576,16 +737,228 @@ export const useGameStore = create<GameStore>((set, get) => ({
             speed: 4.6,
             damage: 1,
             rupeeDrop: "blue",
+            chargeAngle: Math.PI,
+            chargePathLength: 0,
+            chargeDistanceTraveled: 0,
+            actionCounter: 0,
+            actionCooldown: 0,
           }
         );
       }
 
-      // AI State Machine
       const toHeroX = hero.x - enemy.x;
       const toHeroZ = hero.z - enemy.z;
       const distToHero = Math.hypot(toHeroX, toHeroZ);
       const isSanctumEnemy = enemy.zone === "dungeon" && enemy.spawnZ > 13;
 
+      // =====================================================
+      // DEDICATED BOSS AI STATE MACHINE (Charge + Lobbed Bomb)
+      // =====================================================
+      if (enemy.kind === "boss") {
+        if (enemy.state === "idle") {
+          if (flags.bossAwakened) {
+            enemy.state = "aggro";
+            enemy.actionCooldown = 1.0;
+          }
+        } else if (enemy.state === "aggro") {
+          if (distToHero > 0.05) {
+            enemy.facing = Math.atan2(toHeroX, toHeroZ);
+          }
+          // Stalk toward hero while cooling down next special attack
+          const stalkVx = distToHero > 2.5 ? (toHeroX / distToHero) * enemy.speed : 0;
+          const stalkVz = distToHero > 2.5 ? (toHeroZ / distToHero) * enemy.speed : 0;
+          const nextBx = enemy.x + stalkVx * dt;
+          const nextBz = Math.max(14.5, enemy.z + stalkVz * dt);
+          const resolvedB = resolveWorldCollisions(
+            nextBx,
+            nextBz,
+            enemyRadius,
+            zone,
+            flags.gateUnlocked
+          );
+          enemy.x = resolvedB.x;
+          enemy.z = resolvedB.z;
+
+          // Contact damage if player walks directly into armored boss
+          if (distToHero <= 1.95) {
+            const pushX = distToHero > 0.01 ? (toHeroX / distToHero) * 10 : 0;
+            const pushZ = distToHero > 0.01 ? (toHeroZ / distToHero) * 10 : -10;
+            damageHero(1, pushX, pushZ);
+          }
+
+          enemy.actionCooldown -= dt;
+          if (enemy.actionCooldown <= 0) {
+            if (enemy.actionCounter % 2 === 0) {
+              // Ranged Lobbed Bomb Attack
+              enemy.state = "lob_windup";
+              enemy.stateTimer = 0.6;
+              enemy.facing = Math.atan2(toHeroX, toHeroZ);
+            } else {
+              // Charging Lunge Attack: stop, aim at player, and charge up
+              enemy.state = "charge_aim";
+              enemy.stateTimer = 0.72;
+              enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+              enemy.facing = enemy.chargeAngle;
+              enemy.chargePathLength = computeBossChargePathLength(
+                enemy.x,
+                enemy.z,
+                enemy.chargeAngle,
+                enemyRadius,
+                BOSS_MAX_LUNGE_RANGE
+              );
+              soundEngine.playBossChargeAim();
+            }
+          }
+        } else if (enemy.state === "lob_windup") {
+          if (distToHero > 0.05) {
+            enemy.facing = Math.atan2(toHeroX, toHeroZ);
+          }
+          if (enemy.stateTimer <= 0) {
+            soundEngine.playBossLob();
+            const targetX = Math.max(-14.5, Math.min(14.5, hero.x));
+            const targetZ = Math.max(15.0, Math.min(33.5, hero.z));
+            projectiles.push({
+              id: `proj-${stats.elapsedSeconds.toFixed(3)}-1`,
+              zone: "dungeon",
+              startX: enemy.x,
+              startZ: enemy.z,
+              targetX,
+              targetZ,
+              flightTime: 0,
+              totalFlightTime: 1.15,
+              aoeRadius: 3.3,
+              directHitRadius: 1.45,
+            });
+
+            // In Phase 2, lob a second volatile orb slightly offset!
+            if (flags.bossPhase2) {
+              const offsetAngle = enemy.facing + 0.45;
+              const tX2 = Math.max(
+                -14.5,
+                Math.min(14.5, hero.x + Math.sin(offsetAngle) * 3.8)
+              );
+              const tZ2 = Math.max(
+                15.0,
+                Math.min(33.5, hero.z + Math.cos(offsetAngle) * 3.8)
+              );
+              projectiles.push({
+                id: `proj-${stats.elapsedSeconds.toFixed(3)}-2`,
+                zone: "dungeon",
+                startX: enemy.x,
+                startZ: enemy.z,
+                targetX: tX2,
+                targetZ: tZ2,
+                flightTime: 0,
+                totalFlightTime: 1.3,
+                aoeRadius: 3.1,
+                directHitRadius: 1.4,
+              });
+            }
+
+            enemy.actionCounter += 1;
+            enemy.state = "recover";
+            enemy.stateTimer = 0.55;
+            enemy.actionCooldown = 1.05;
+          }
+        } else if (enemy.state === "charge_aim") {
+          // Boss stops and aims directly at the player, updating ground path telegraph
+          if (distToHero > 0.05) {
+            enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+            enemy.facing = enemy.chargeAngle;
+          }
+          enemy.chargePathLength = computeBossChargePathLength(
+            enemy.x,
+            enemy.z,
+            enemy.chargeAngle,
+            enemyRadius,
+            BOSS_MAX_LUNGE_RANGE
+          );
+          if (enemy.stateTimer <= 0) {
+            // Lock aim direction for a short delay so player can see telegraph and dodge out of the way
+            enemy.state = "charge_lock";
+            enemy.stateTimer = 0.55;
+          }
+        } else if (enemy.state === "charge_lock") {
+          // Aim is locked on the ground telegraph; short window for player to sidestep
+          enemy.facing = enemy.chargeAngle;
+          if (enemy.stateTimer <= 0) {
+            enemy.state = "charge_lunge";
+            enemy.chargeDistanceTraveled = 0;
+            enemy.stateTimer = 1.25;
+            soundEngine.playBossAttack();
+          }
+        } else if (enemy.state === "charge_lunge") {
+          // High-speed lunge along locked chargeAngle; boss is invulnerable while lunging
+          const lungeSpeed = 19.5;
+          const stepDist = lungeSpeed * dt;
+          enemy.chargeDistanceTraveled += stepDist;
+
+          const nextBx = enemy.x + Math.sin(enemy.chargeAngle) * stepDist;
+          const nextBz = enemy.z + Math.cos(enemy.chargeAngle) * stepDist;
+
+          // Check if boss hits the Hero during the lunge
+          if (distToHero <= 2.3) {
+            const perpX = Math.cos(enemy.chargeAngle);
+            const perpZ = -Math.sin(enemy.chargeAngle);
+            damageHero(
+              enemy.damage,
+              (Math.sin(enemy.chargeAngle) + perpX * 0.6) * 14,
+              (Math.cos(enemy.chargeAngle) + perpZ * 0.6) * 14
+            );
+          }
+
+          // Check collision with Sanctum walls or pillars
+          const hitSouthBarrier = nextBz - enemyRadius < 13.0;
+          const resolvedB = resolveWorldCollisions(
+            nextBx,
+            Math.max(13.0 + enemyRadius, nextBz),
+            enemyRadius,
+            zone,
+            flags.gateUnlocked
+          );
+          enemy.x = resolvedB.x;
+          enemy.z = resolvedB.z;
+
+          if (resolvedB.hitObstacle || hitSouthBarrier) {
+            // Boss slammed into a wall or pillar -> STUNNED for 3.5 seconds!
+            soundEngine.playBossWallCrash();
+            enemy.state = "stunned";
+            enemy.stateTimer = 3.5;
+            enemy.actionCounter += 1;
+            enemy.actionCooldown = 1.2;
+            pushBanner(
+              "Malakor Crashed into the Wall!",
+              "His obsidian armor is shattered — strike him with your sword now!",
+              3.4
+            );
+          } else if (
+            enemy.chargeDistanceTraveled >= BOSS_MAX_LUNGE_RANGE ||
+            enemy.stateTimer <= 0
+          ) {
+            // Reached max lunge range in the open without hitting a wall -> not stunned
+            enemy.state = "recover";
+            enemy.stateTimer = 0.65;
+            enemy.actionCounter += 1;
+            enemy.actionCooldown = 1.15;
+          }
+        } else if (enemy.state === "stunned") {
+          // Boss is dazed and vulnerable to sword attacks
+          if (enemy.stateTimer <= 0) {
+            enemy.state = "aggro";
+            enemy.actionCooldown = 0.9;
+          }
+        } else if (enemy.state === "recover") {
+          if (enemy.stateTimer <= 0) {
+            enemy.state = "aggro";
+          }
+        }
+
+        continue;
+      }
+
+      // =====================================================
+      // STANDARD ENEMY AI STATE MACHINE (Slime, Goblin, Knight, Minion)
+      // =====================================================
       let moveVx = 0;
       let moveVz = 0;
 
@@ -609,7 +982,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
           enemy.state = "aggro";
         }
       } else if (enemy.state === "aggro") {
-        // Leash back if hero retreats very far in overworld
         if (!isSanctumEnemy && distToHero > enemy.aggroRadius * 2.15) {
           enemy.state = "idle";
         } else {
@@ -619,11 +991,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
             moveVz = (toHeroZ / distToHero) * enemy.speed;
           }
 
-          const triggerAttackDist =
-            enemy.kind === "boss" ? 2.85 : enemy.kind === "knight" ? 2.0 : 1.7;
+          const triggerAttackDist = enemy.kind === "knight" ? 2.0 : 1.7;
           if (distToHero <= triggerAttackDist) {
             enemy.state = "windup";
-            enemy.stateTimer = enemy.kind === "boss" ? 0.52 : 0.38;
+            enemy.stateTimer = 0.38;
           }
         }
       } else if (enemy.state === "windup") {
@@ -632,37 +1003,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
         if (enemy.stateTimer <= 0) {
           enemy.state = "attack";
-          enemy.stateTimer = enemy.kind === "boss" ? 0.32 : 0.22;
-          if (enemy.kind === "boss") {
-            soundEngine.playBossAttack();
-          }
+          enemy.stateTimer = 0.22;
         }
       } else if (enemy.state === "attack") {
-        const lungeSpeed = enemy.speed * (enemy.kind === "boss" ? 2.35 : 2.05);
+        const lungeSpeed = enemy.speed * 2.05;
         moveVx = Math.sin(enemy.facing) * lungeSpeed;
         moveVz = Math.cos(enemy.facing) * lungeSpeed;
 
         // Check hit on Hero
-        const hitDist = enemy.kind === "boss" ? 2.35 : 1.42;
-        if (distToHero <= hitDist && hero.invulnerableTimer <= 0) {
-          hero.hp = Math.max(0, hero.hp - enemy.damage);
-          hero.invulnerableTimer = 1.1;
-          stats.damageTaken += enemy.damage;
+        const hitDist = 1.42;
+        if (distToHero <= hitDist) {
           const pushDirX = distToHero > 0.01 ? toHeroX / distToHero : Math.sin(enemy.facing);
           const pushDirZ = distToHero > 0.01 ? toHeroZ / distToHero : Math.cos(enemy.facing);
-          hero.knockbackVx = pushDirX * 11.5;
-          hero.knockbackVz = pushDirZ * 11.5;
-          soundEngine.playHeroHurt();
-
-          if (hero.hp <= 0) {
-            phase = "gameover";
-            soundEngine.playGameOver();
-          }
+          damageHero(enemy.damage, pushDirX * 11.5, pushDirZ * 11.5);
         }
 
         if (enemy.stateTimer <= 0) {
           enemy.state = "recover";
-          enemy.stateTimer = enemy.kind === "boss" ? 0.65 : 0.5;
+          enemy.stateTimer = 0.5;
         }
       } else if (enemy.state === "recover") {
         if (enemy.stateTimer <= 0) {
@@ -703,7 +1061,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       enemy.z = resolvedEnemy.z;
     }
 
-    // 8. Check if Boss and all Sanctum Minions are defeated
+    // 9. Check if Boss and all Sanctum Minions are defeated
     if (!flags.bossDefeated) {
       const bossEnemy = enemies.find((e) => e.kind === "boss");
       const aliveSanctumMinions = enemies.filter(
@@ -719,7 +1077,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 9. Rupee Magnet & Pickup
+    // 10. Rupee Magnet & Pickup
     for (const rupee of rupees) {
       if (rupee.zone !== zone || rupee.collected) continue;
       const dx = hero.x - rupee.x;
@@ -736,7 +1094,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 10. Boss Chest Unlock → Victory State
+    // 11. Boss Chest Unlock → Victory State
     if (zone === "dungeon" && !flags.chestUnlocked) {
       const distToChest = Math.hypot(
         hero.x - BOSS_CHEST_POS.x,
@@ -770,12 +1128,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       dungeonRoom,
       hero,
       enemies,
+      projectiles,
+      hazards,
       rupees,
       flags,
       stats,
       banner,
       gateNoticeCooldown,
       chestNoticeCooldown,
+      armorNoticeCooldown,
     });
   },
 }));

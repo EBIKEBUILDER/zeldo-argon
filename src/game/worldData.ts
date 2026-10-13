@@ -77,6 +77,8 @@ export const BOSS_CHEST_POS = {
   z: 33,
 };
 
+export const BOSS_MAX_LUNGE_RANGE = 14.5;
+
 export const INITIAL_ENEMIES: EnemySpawn[] = [
   // Overworld — Central Meadow (well outside hero spawn at z=-32)
   {
@@ -325,9 +327,9 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     zone: "dungeon",
     x: 0,
     z: 26,
-    hp: 12,
-    aggroRadius: 13.0,
-    speed: 3.9,
+    hp: 20,
+    aggroRadius: 14.0,
+    speed: 3.6,
     damage: 2,
     rupeeDrop: "boss",
   },
@@ -414,7 +416,7 @@ export function resolveCircleRectCollision(
   z: number,
   radius: number,
   rect: RectObstacle
-): { x: number; z: number } {
+): { x: number; z: number; collided: boolean } {
   const closestX = Math.max(rect.minX, Math.min(x, rect.maxX));
   const closestZ = Math.max(rect.minZ, Math.min(z, rect.maxZ));
 
@@ -423,7 +425,7 @@ export function resolveCircleRectCollision(
   const distSq = dx * dx + dz * dz;
 
   if (distSq >= radius * radius) {
-    return { x, z };
+    return { x, z, collided: false };
   }
 
   // If center is strictly inside the rectangle, push out to nearest edge
@@ -433,10 +435,10 @@ export function resolveCircleRectCollision(
     const bottomPen = Math.abs(z - rect.minZ);
     const topPen = Math.abs(rect.maxZ - z);
     const minPen = Math.min(leftPen, rightPen, bottomPen, topPen);
-    if (minPen === leftPen) return { x: rect.minX - radius, z };
-    if (minPen === rightPen) return { x: rect.maxX + radius, z };
-    if (minPen === bottomPen) return { x, z: rect.minZ - radius };
-    return { x, z: rect.maxZ + radius };
+    if (minPen === leftPen) return { x: rect.minX - radius, z, collided: true };
+    if (minPen === rightPen) return { x: rect.maxX + radius, z, collided: true };
+    if (minPen === bottomPen) return { x, z: rect.minZ - radius, collided: true };
+    return { x, z: rect.maxZ + radius, collided: true };
   }
 
   const dist = Math.sqrt(distSq);
@@ -444,6 +446,7 @@ export function resolveCircleRectCollision(
   return {
     x: x + (dx / dist) * overlap,
     z: z + (dz / dist) * overlap,
+    collided: true,
   };
 }
 
@@ -453,15 +456,52 @@ export function resolveWorldCollisions(
   radius: number,
   zone: ZoneId,
   gateUnlocked: boolean
-): { x: number; z: number } {
+): { x: number; z: number; hitObstacle: boolean } {
   let curX = x;
   let curZ = z;
+  let hitObstacle = false;
   for (const obs of WORLD_OBSTACLES) {
     if (obs.zone !== zone) continue;
     if (obs.kind === "gate" && gateUnlocked) continue;
     const res = resolveCircleRectCollision(curX, curZ, radius, obs);
+    if (res.collided) {
+      hitObstacle = true;
+    }
     curX = res.x;
     curZ = res.z;
   }
-  return { x: curX, z: curZ };
+  return { x: curX, z: curZ, hitObstacle };
+}
+
+/**
+ * Computes how far a circle of `radius` can travel from `(startX, startZ)` along `angle`
+ * before hitting a dungeon wall/pillar, up to `maxDist`. Used for the boss lunge path telegraph.
+ */
+export function computeBossChargePathLength(
+  startX: number,
+  startZ: number,
+  angle: number,
+  radius: number,
+  maxDist: number = BOSS_MAX_LUNGE_RANGE
+): number {
+  const dirX = Math.sin(angle);
+  const dirZ = Math.cos(angle);
+  const step = 0.35;
+  for (let d = step; d <= maxDist; d += step) {
+    const testX = startX + dirX * d;
+    const testZ = startZ + dirZ * d;
+    // Also seal the boss inside Room 3 (z >= 13.5)
+    if (testZ - radius < 13.0) {
+      return d;
+    }
+    for (const obs of WORLD_OBSTACLES) {
+      if (obs.zone !== "dungeon") continue;
+      if (obs.kind === "gate") continue;
+      const res = resolveCircleRectCollision(testX, testZ, radius, obs);
+      if (res.collided) {
+        return d;
+      }
+    }
+  }
+  return maxDist;
 }

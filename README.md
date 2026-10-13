@@ -20,4 +20,6 @@ An overhead 3D action-adventure browser game built with **Next.js 16 (App Router
    - Use the **Sanctum Key** to open the **Locked Iron Gate** barring the northern passage.
 3. **Boss Fight & The Zeldo Crest**:
    - Enter **Room III (Dread Sanctum)** to confront **Malakor, Warden of the Eclipse** and his **Shadow Minions**.
+   - **Tactical Boss Strategy**: Malakor's obsidian armor deflects sword attacks while he is standing or lunging. Watch the ground path telegraph when he aims his charging lunge, sidestep near a wall or pillar so he crashes into the stone, and strike while he is **Stunned**!
+   - **Lobbed Hazard Bombs**: Dodge the arcing toxic-fire bombs he lobs into the air and stay out of the lingering ground hazard pools they leave behind.
    - Vanquish the Warden to shatter the crimson seal on the **Golden Sanctum Chest**, then open the chest to restore the **Zeldo Crest**!
