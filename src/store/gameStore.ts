@@ -2,18 +2,22 @@ import { create } from "zustand";
 import {
   BOSS_CHEST_POS,
   BOSS_MAX_LUNGE_RANGE,
+  buildInitialMapProps,
+  buildObstaclesFromMapProps,
   computeBossChargePathLength,
-  DUNGEON_ENTRY_SPAWN,
-  DUNGEON_EXIT_POS,
+  CustomModelAsset,
   DUNGEON_KEY_POS,
   DungeonRoomId,
   EnemyKind,
+  getDefaultEnemyWeight,
   HERO_SPAWN,
   INITIAL_ENEMIES,
+  INITIAL_PORTALS,
   INITIAL_WORLD_RUPEES,
   LOCKED_GATE_POS,
-  OVERWORLD_PORTAL_POS,
-  OVERWORLD_RETURN_SPAWN,
+  MapPortal,
+  MapPropInstance,
+  PropPrefabId,
   resolveWorldCollisions,
   RupeeTier,
   SHOP_INTERACT_POS,
@@ -23,6 +27,21 @@ import { soundEngine } from "@/audio/soundEngine";
 
 export type GamePhase = "title" | "playing" | "gameover" | "victory";
 export type ShopItemId = "boomerang" | "bow" | "arrows" | "heart";
+export type EditorToolId = "select" | "place" | "terrain" | "delete";
+export type EditorEntityKind = "prop" | "enemy" | "rupee" | "portal";
+export type EditorPlaceCategory = "props" | "monsters" | "rupees" | "portals" | "custom";
+export type TerrainBrushMode = "raise" | "lower" | "flatten" | "paint";
+
+export interface EditorSelection {
+  kind: EditorEntityKind;
+  id: string;
+}
+
+export interface TerrainCellData {
+  h: number;
+  c?: string;
+}
+
 export type EnemyAIState =
   | "idle"
   | "aggro"
@@ -53,6 +72,7 @@ export interface HeroState {
   attackTimer: number;
   attackCooldown: number;
   bowCooldown: number;
+  portalCooldown: number;
   swingId: number;
   invulnerableTimer: number;
   knockbackVx: number;
@@ -71,6 +91,7 @@ export interface EnemyState {
   facing: number;
   hp: number;
   maxHp: number;
+  weight: number; // Controls sword knockback (0.5 = light, 2.0 = medium, 6.5 = heavy, 100 = immovable)
   state: EnemyAIState;
   stateTimer: number;
   hitFlashTimer: number;
@@ -190,6 +211,11 @@ export interface SerializableGameState {
   projectiles: BossProjectileState[];
   hazards: HazardZoneState[];
   rupees: RupeeItemState[];
+  mapProps: MapPropInstance[];
+  portals: MapPortal[];
+  customModels: CustomModelAsset[];
+  terrainCells: Record<ZoneId, Record<string, TerrainCellData>>;
+  terrainRevision: number;
   flags: GameFlags;
   stats: GameStats;
   banner: BannerMessage | null;
@@ -201,6 +227,16 @@ export interface SerializableGameState {
   armorNoticeCooldown: number;
   muted: boolean;
   fps: number;
+  // Unity-Style Live Play / Pause Map Editor State
+  editorMode: boolean;
+  editorTool: EditorToolId;
+  editorSelected: EditorSelection | null;
+  editorPlaceCategory: EditorPlaceCategory;
+  editorPlacePrefab: string;
+  terrainBrushMode: TerrainBrushMode;
+  terrainBrushRadius: number;
+  terrainBrushStrength: number;
+  terrainPaintColor: string;
 }
 
 export interface GameActions {
@@ -211,9 +247,208 @@ export interface GameActions {
   setShopOpen: (open: boolean) => void;
   buyShopItem: (item: ShopItemId) => void;
   tick: (dt: number, input: FrameInput) => void;
+  // Map Editor Actions
+  setEditorMode: (enabled: boolean) => void;
+  setEditorZone: (zone: ZoneId, teleportHero?: boolean, targetX?: number, targetZ?: number) => void;
+  setEditorTool: (tool: EditorToolId) => void;
+  setEditorSelected: (sel: EditorSelection | null) => void;
+  setEditorPlaceItem: (category: EditorPlaceCategory, prefab: string) => void;
+  setTerrainBrush: (
+    patch: Partial<{
+      mode: TerrainBrushMode;
+      radius: number;
+      strength: number;
+      color: string;
+    }>
+  ) => void;
+  applyTerrainStroke: (worldX: number, worldZ: number, dt: number) => void;
+  placeEntityAt: (worldX: number, worldZ: number) => void;
+  moveSelectedEntityTo: (worldX: number, worldZ: number) => void;
+  updatePropInstance: (id: string, patch: Partial<MapPropInstance>) => void;
+  updateEnemyInstance: (id: string, patch: Partial<EnemyState>) => void;
+  updateRupeeInstance: (id: string, patch: Partial<RupeeItemState>) => void;
+  updatePortalInstance: (id: string, patch: Partial<MapPortal>) => void;
+  duplicateSelectedEntity: () => void;
+  deleteEntity: (kind: EditorEntityKind, id: string) => void;
+  deleteSelectedEntity: () => void;
+  importCustomObjModel: (name: string, objText: string, colorHex?: string) => boolean;
+  resetPlaySimulation: () => void;
+  exportMapJson: () => string;
+  importMapJson: (jsonText: string) => boolean;
 }
 
 export type GameStore = SerializableGameState & GameActions;
+
+/**
+ * Built-in sample custom 3D meshes so the Custom 3D Assets tab has ready-to-place meshes immediately,
+ * alongside full Wavefront .OBJ file importing!
+ */
+function createBuiltInCustomModels(): CustomModelAsset[] {
+  // Crystal Obelisk (Octagonal spire)
+  const obeliskPos = [
+    // Base square-ish ring (y=0)
+    -0.8, 0, -0.8,  0.8, 0, -0.8,  0.8, 0, 0.8,  -0.8, 0, 0.8,
+    // Mid ring (y=2.6)
+    -0.55, 2.6, -0.55,  0.55, 2.6, -0.55,  0.55, 2.6, 0.55,  -0.55, 2.6, 0.55,
+    // Apex point (y=4.0)
+    0, 4.0, 0,
+  ];
+  const obeliskIdx = [
+    // Sides lower
+    0, 1, 5, 0, 5, 4,
+    1, 2, 6, 1, 6, 5,
+    2, 3, 7, 2, 7, 6,
+    3, 0, 4, 3, 4, 7,
+    // Pyramid tip
+    4, 5, 8,
+    5, 6, 8,
+    6, 7, 8,
+    7, 4, 8,
+  ];
+  const obeliskNorms = [
+    -0.5, 0.2, -0.5,  0.5, 0.2, -0.5,  0.5, 0.2, 0.5,  -0.5, 0.2, 0.5,
+    -0.5, 0.4, -0.5,  0.5, 0.4, -0.5,  0.5, 0.4, 0.5,  -0.5, 0.4, 0.5,
+    0, 1, 0,
+  ];
+
+  return [
+    {
+      id: "custom-crystal-obelisk",
+      name: "Arcane Crystal Spire",
+      positions: obeliskPos,
+      indices: obeliskIdx,
+      normals: obeliskNorms,
+      colorHex: "#4fd8ff",
+    },
+  ];
+}
+
+/**
+ * Parses a standard Wavefront .OBJ text file into positions, indices, and normals,
+ * auto-centering on X/Z, resting on Y=0, and normalizing to a ~3.0 unit height.
+ */
+export function parseWavefrontObj(
+  name: string,
+  objText: string,
+  colorHex = "#d8c49a"
+): CustomModelAsset | null {
+  const rawVerts: Array<[number, number, number]> = [];
+  const positions: number[] = [];
+  const indices: number[] = [];
+
+  const lines = objText.split(/\r?\n/);
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const parts = line.split(/\s+/);
+    if (parts[0] === "v" && parts.length >= 4) {
+      const vx = parseFloat(parts[1]);
+      const vy = parseFloat(parts[2]);
+      const vz = parseFloat(parts[3]);
+      if (Number.isFinite(vx) && Number.isFinite(vy) && Number.isFinite(vz)) {
+        rawVerts.push([vx, vy, vz]);
+      }
+    } else if (parts[0] === "f" && parts.length >= 4) {
+      const faceIndices: number[] = [];
+      for (let i = 1; i < parts.length; i++) {
+        const token = parts[i].split("/")[0];
+        let vIdx = parseInt(token, 10);
+        if (!Number.isFinite(vIdx)) continue;
+        if (vIdx < 0) vIdx = rawVerts.length + vIdx;
+        else vIdx = vIdx - 1;
+        if (vIdx >= 0 && vIdx < rawVerts.length) {
+          faceIndices.push(vIdx);
+        }
+      }
+      for (let t = 1; t + 1 < faceIndices.length; t++) {
+        const i0 = faceIndices[0];
+        const i1 = faceIndices[t];
+        const i2 = faceIndices[t + 1];
+        const baseIdx = positions.length / 3;
+        positions.push(...rawVerts[i0], ...rawVerts[i1], ...rawVerts[i2]);
+        indices.push(baseIdx, baseIdx + 1, baseIdx + 2);
+      }
+    }
+  }
+
+  if (positions.length < 9 || indices.length < 3) {
+    return null;
+  }
+
+  // Normalize bounding box to rest at Y=0 and have max dimension ~3.2 units
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < positions.length; i += 3) {
+    const x = positions[i];
+    const y = positions[i + 1];
+    const z = positions[i + 2];
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z;
+    if (z > maxZ) maxZ = z;
+  }
+  const cx = (minX + maxX) * 0.5;
+  const cz = (minZ + maxZ) * 0.5;
+  const span = Math.max(0.001, maxX - minX, maxY - minY, maxZ - minZ);
+  const scale = 3.0 / span;
+
+  const normals: number[] = new Array(positions.length).fill(0);
+  for (let i = 0; i < positions.length; i += 3) {
+    positions[i] = (positions[i] - cx) * scale;
+    positions[i + 1] = (positions[i + 1] - minY) * scale;
+    positions[i + 2] = (positions[i + 2] - cz) * scale;
+  }
+
+  for (let i = 0; i < indices.length; i += 3) {
+    const a = indices[i] * 3;
+    const b = indices[i + 1] * 3;
+    const c = indices[i + 2] * 3;
+    const ux = positions[b] - positions[a];
+    const uy = positions[b + 1] - positions[a + 1];
+    const uz = positions[b + 2] - positions[a + 2];
+    const vx = positions[c] - positions[a];
+    const vy = positions[c + 1] - positions[a + 1];
+    const vz = positions[c + 2] - positions[a + 2];
+    let nx = uy * vz - uz * vy;
+    let ny = uz * vx - ux * vz;
+    let nz = ux * vy - uy * vx;
+    const len = Math.hypot(nx, ny, nz) || 1;
+    nx /= len;
+    ny /= len;
+    nz /= len;
+    normals[a] = nx; normals[a + 1] = ny; normals[a + 2] = nz;
+    normals[b] = nx; normals[b + 1] = ny; normals[b + 2] = nz;
+    normals[c] = nx; normals[c + 1] = ny; normals[c + 2] = nz;
+  }
+
+  return {
+    id: `custom-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    name,
+    positions,
+    indices,
+    normals,
+    colorHex,
+  };
+}
+
+/**
+ * Samples the sculpted terrain elevation at `(x, z)` in `zone`.
+ */
+export function sampleTerrainHeight(
+  cells: Record<string, TerrainCellData> | undefined,
+  x: number,
+  z: number
+): number {
+  if (!cells) return 0;
+  const step = 2.0;
+  const gx = Math.round(x / step);
+  const gz = Math.round(z / step);
+  const cell = cells[`${gx},${gz}`];
+  return cell ? cell.h : 0;
+}
 
 function createInitialEnemies(): EnemyState[] {
   return INITIAL_ENEMIES.map((spawn) => ({
@@ -227,6 +462,7 @@ function createInitialEnemies(): EnemyState[] {
     facing: Math.PI,
     hp: spawn.hp,
     maxHp: spawn.hp,
+    weight: spawn.weight ?? getDefaultEnemyWeight(spawn.kind),
     state: "idle",
     stateTimer: 0,
     hitFlashTimer: 0,
@@ -285,6 +521,7 @@ function createInitialState(
       attackTimer: 0,
       attackCooldown: 0,
       bowCooldown: 0,
+      portalCooldown: 0,
       swingId: 0,
       invulnerableTimer: 0,
       knockbackVx: 0,
@@ -297,6 +534,14 @@ function createInitialState(
     projectiles: [],
     hazards: [],
     rupees: createInitialRupees(),
+    mapProps: buildInitialMapProps(),
+    portals: INITIAL_PORTALS.map((p) => ({ ...p })),
+    customModels: createBuiltInCustomModels(),
+    terrainCells: {
+      overworld: {},
+      dungeon: {},
+    },
+    terrainRevision: 1,
     flags: {
       keyPickedUp: false,
       gateUnlocked: false,
@@ -316,7 +561,7 @@ function createInitialState(
             id: 1,
             text: "Whispering Vale",
             subtext:
-              "Visit Merchant Bramble's Shop to the East, find the Sanctum Key in the West, then breach the Northern Sanctum!",
+              "Visit Merchant Bramble's Shop to the East, find the Sanctum Key in the West, or click 'Map Editor' at the top!",
             timer: 5.5,
           }
         : null,
@@ -328,6 +573,15 @@ function createInitialState(
     armorNoticeCooldown: 0,
     muted,
     fps,
+    editorMode: false,
+    editorTool: "select",
+    editorSelected: null,
+    editorPlaceCategory: "props",
+    editorPlacePrefab: "pine_tree",
+    terrainBrushMode: "raise",
+    terrainBrushRadius: 5.5,
+    terrainBrushStrength: 1.0,
+    terrainPaintColor: "#bfa675",
   };
 }
 
@@ -338,19 +592,64 @@ function normalizeAngleDiff(a: number, b: number): number {
   return diff;
 }
 
+const DEFAULT_PROP_META: Record<
+  PropPrefabId,
+  {
+    label: string;
+    hasCollider: boolean;
+    w: number;
+    d: number;
+    scaleX: number;
+    scaleY: number;
+    scaleZ: number;
+    kind: "cliff" | "wall" | "water" | "tree" | "pillar" | "ruin";
+  }
+> = {
+  pine_tree: { label: "Pine Tree", hasCollider: true, w: 2.1, d: 2.1, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "tree" },
+  bush: { label: "Meadow Bush", hasCollider: false, w: 1.4, d: 1.4, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "tree" },
+  flower_patch: { label: "Wildflower Patch", hasCollider: false, w: 1.2, d: 1.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "tree" },
+  boulder: { label: "Mossy Boulder", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
+  ruin_pillar: { label: "Watchtower Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
+  dungeon_pillar: { label: "Sanctum Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
+  wall_torch: { label: "Flame Brazier", hasCollider: false, w: 0.9, d: 0.9, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
+  wooden_crate: { label: "Supply Crate", hasCollider: true, w: 1.4, d: 1.4, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "wall" },
+  stone_wall: { label: "Stone Wall Block", hasCollider: true, w: 4.0, d: 2.0, scaleX: 4.0, scaleY: 3.6, scaleZ: 2.0, kind: "wall" },
+  cliff_block: { label: "Cliff Ridge Block", hasCollider: true, w: 6.0, d: 3.0, scaleX: 6.0, scaleY: 4.5, scaleZ: 3.0, kind: "cliff" },
+  water_tile: { label: "Water Stream Tile", hasCollider: true, w: 6.0, d: 4.0, scaleX: 6.0, scaleY: 1.0, scaleZ: 4.0, kind: "water" },
+  path_tile: { label: "Cobblestone Path", hasCollider: false, w: 5.0, d: 5.0, scaleX: 5.0, scaleY: 1.0, scaleZ: 5.0, kind: "ruin" },
+  wooden_bridge: { label: "Wooden Bridge", hasCollider: false, w: 7.4, d: 5.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "wall" },
+  temple_arch: { label: "Temple Archway", hasCollider: false, w: 10.0, d: 3.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
+  custom_model: { label: "Custom 3D Mesh", hasCollider: true, w: 2.2, d: 2.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
+};
+
 export const useGameStore = create<GameStore>((set, get) => ({
   ...createInitialState("title", false),
 
   startGame: () => {
     soundEngine.unlock();
     soundEngine.playKeyPickup();
-    set((state) => createInitialState("playing", state.muted, state.fps));
+    set((state) => ({
+      ...createInitialState("playing", state.muted, state.fps),
+      // Preserve authored map edits if user customized the world before starting!
+      mapProps: state.mapProps,
+      portals: state.portals,
+      customModels: state.customModels,
+      terrainCells: state.terrainCells,
+      terrainRevision: state.terrainRevision + 1,
+    }));
   },
 
   restartGame: () => {
     soundEngine.unlock();
     soundEngine.playKeyPickup();
-    set((state) => createInitialState("playing", state.muted, state.fps));
+    set((state) => ({
+      ...createInitialState("playing", state.muted, state.fps),
+      mapProps: state.mapProps,
+      portals: state.portals,
+      customModels: state.customModels,
+      terrainCells: state.terrainCells,
+      terrainRevision: state.terrainRevision + 1,
+    }));
   },
 
   toggleMute: () => {
@@ -372,6 +671,529 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }));
   },
 
+  // =========================================================
+  // UNITY-STYLE MAP EDITOR ACTIONS
+  // =========================================================
+  setEditorMode: (enabled: boolean) => {
+    set((state) => ({
+      editorMode: enabled,
+      shopOpen: enabled ? false : state.shopOpen,
+      phase: state.phase === "title" && enabled ? "playing" : state.phase,
+    }));
+  },
+
+  setEditorZone: (zone: ZoneId, teleportHero = false, targetX?: number, targetZ?: number) => {
+    set((state) => {
+      const hero = { ...state.hero };
+      if (teleportHero) {
+        hero.x = targetX ?? (zone === "overworld" ? 0 : 0);
+        hero.z = targetZ ?? (zone === "overworld" ? -28 : -30.5);
+      }
+      return {
+        zone,
+        hero,
+        editorSelected: null,
+        terrainRevision: state.terrainRevision + 1,
+      };
+    });
+  },
+
+  setEditorTool: (tool: EditorToolId) => {
+    set({ editorTool: tool });
+  },
+
+  setEditorSelected: (sel: EditorSelection | null) => {
+    set({ editorSelected: sel });
+  },
+
+  setEditorPlaceItem: (category: EditorPlaceCategory, prefab: string) => {
+    set({
+      editorPlaceCategory: category,
+      editorPlacePrefab: prefab,
+      editorTool: "place",
+    });
+  },
+
+  setTerrainBrush: (patch) => {
+    set((state) => ({
+      terrainBrushMode: patch.mode ?? state.terrainBrushMode,
+      terrainBrushRadius: patch.radius ?? state.terrainBrushRadius,
+      terrainBrushStrength: patch.strength ?? state.terrainBrushStrength,
+      terrainPaintColor: patch.color ?? state.terrainPaintColor,
+    }));
+  },
+
+  applyTerrainStroke: (worldX: number, worldZ: number, dt: number) => {
+    const state = get();
+    const zone = state.zone;
+    const radius = state.terrainBrushRadius;
+    const strength = state.terrainBrushStrength;
+    const mode = state.terrainBrushMode;
+    const paintColor = state.terrainPaintColor;
+
+    const step = 2.0;
+    const minGx = Math.ceil((worldX - radius) / step);
+    const maxGx = Math.floor((worldX + radius) / step);
+    const minGz = Math.ceil((worldZ - radius) / step);
+    const maxGz = Math.floor((worldZ + radius) / step);
+
+    const nextZoneCells: Record<string, TerrainCellData> = {
+      ...state.terrainCells[zone],
+    };
+    let changed = false;
+
+    for (let gx = minGx; gx <= maxGx; gx++) {
+      for (let gz = minGz; gz <= maxGz; gz++) {
+        const vx = gx * step;
+        const vz = gz * step;
+        const dist = Math.hypot(vx - worldX, vz - worldZ);
+        if (dist > radius) continue;
+
+        const falloff = 0.5 * (1 + Math.cos((dist / radius) * Math.PI));
+        const key = `${gx},${gz}`;
+        const prev = nextZoneCells[key] ?? { h: 0 };
+        let nextH = prev.h;
+        let nextC = prev.c;
+
+        if (mode === "raise") {
+          nextH = Math.min(8.0, prev.h + falloff * strength * dt * 4.5);
+        } else if (mode === "lower") {
+          nextH = Math.max(-4.5, prev.h - falloff * strength * dt * 4.5);
+        } else if (mode === "flatten") {
+          nextH = prev.h * Math.max(0, 1 - falloff * strength * dt * 6.0);
+          if (Math.abs(nextH) < 0.02) nextH = 0;
+        } else if (mode === "paint") {
+          if (falloff > 0.25) {
+            nextC = paintColor;
+          }
+        }
+
+        if (nextH !== prev.h || nextC !== prev.c) {
+          changed = true;
+          if (nextH === 0 && !nextC) {
+            delete nextZoneCells[key];
+          } else {
+            nextZoneCells[key] = { h: Number(nextH.toFixed(3)), c: nextC };
+          }
+        }
+      }
+    }
+
+    if (changed) {
+      set({
+        terrainCells: {
+          ...state.terrainCells,
+          [zone]: nextZoneCells,
+        },
+        terrainRevision: state.terrainRevision + 1,
+      });
+    }
+  },
+
+  placeEntityAt: (worldX: number, worldZ: number) => {
+    const state = get();
+    const zone = state.zone;
+    const x = Number(worldX.toFixed(2));
+    const z = Number(worldZ.toFixed(2));
+    const prefabKey = state.editorPlacePrefab;
+    const uid = `${Date.now().toString(36)}-${Math.floor(Math.random() * 999)}`;
+
+    if (prefabKey.startsWith("enemy:")) {
+      const kind = prefabKey.replace("enemy:", "") as EnemyKind;
+      const defaultHp =
+        kind === "boss" ? 25 : kind === "knight" || kind === "minion" ? 5 : kind === "goblin" ? 4 : 3;
+      const defaultWeight = getDefaultEnemyWeight(kind);
+      const newEnemy: EnemyState = {
+        id: `ed-enemy-${kind}-${uid}`,
+        kind,
+        zone,
+        x,
+        z,
+        spawnX: x,
+        spawnZ: z,
+        facing: Math.PI,
+        hp: defaultHp,
+        maxHp: defaultHp,
+        weight: defaultWeight,
+        state: "idle",
+        stateTimer: 0,
+        hitFlashTimer: 0,
+        knockbackImmunityTimer: 0,
+        stunTimer: 0,
+        lastHitSwingId: -1,
+        knockbackVx: 0,
+        knockbackVz: 0,
+        aggroRadius: kind === "archer" ? 11.5 : 8.5,
+        speed: kind === "boss" ? 3.9 : kind === "goblin" || kind === "minion" ? 5.5 : 4.8,
+        damage: kind === "knight" || kind === "archer" || kind === "boss" || kind === "minion" ? 2 : 1,
+        rupeeDrop: kind === "boss" ? "boss" : kind === "knight" ? "red" : "blue",
+        chargeAngle: Math.PI,
+        chargePathLength: BOSS_MAX_LUNGE_RANGE,
+        chargeDistanceTraveled: 0,
+        actionCounter: 0,
+        actionCooldown: 1.0,
+      };
+      set({
+        enemies: [...state.enemies, newEnemy],
+        editorSelected: { kind: "enemy", id: newEnemy.id },
+      });
+      return;
+    }
+
+    if (prefabKey.startsWith("rupee:")) {
+      const tier = prefabKey.replace("rupee:", "") as RupeeTier;
+      const value = tier === "red" ? 20 : tier === "blue" ? 5 : 1;
+      const newRupee: RupeeItemState = {
+        id: `ed-rupee-${tier}-${uid}`,
+        zone,
+        x,
+        z,
+        tier,
+        value,
+        collected: false,
+      };
+      set({
+        rupees: [...state.rupees, newRupee],
+        editorSelected: { kind: "rupee", id: newRupee.id },
+      });
+      return;
+    }
+
+    if (prefabKey.startsWith("portal:")) {
+      const targetZone: ZoneId = zone === "overworld" ? "dungeon" : "overworld";
+      const newPortal: MapPortal = {
+        id: `ed-portal-${uid}`,
+        zone,
+        x,
+        z,
+        radius: 2.0,
+        targetZone,
+        targetX: 0,
+        targetZ: targetZone === "dungeon" ? -30.5 : 0,
+        targetFacing: 0,
+        label: targetZone === "dungeon" ? "Enter Sunken Sanctum" : "Return to Whispering Vale",
+        sublabel: "Linked Portal Transition",
+        color: "purple",
+      };
+      set({
+        portals: [...state.portals, newPortal],
+        editorSelected: { kind: "portal", id: newPortal.id },
+      });
+      return;
+    }
+
+    if (prefabKey.startsWith("custom:")) {
+      const customId = prefabKey.replace("custom:", "");
+      const model = state.customModels.find((m) => m.id === customId);
+      const newProp: MapPropInstance = {
+        id: `ed-custom-${uid}`,
+        prefab: "custom_model",
+        name: model ? model.name : "Custom 3D Object",
+        zone,
+        x,
+        y: 0,
+        z,
+        rotY: 0,
+        scaleX: 1,
+        scaleY: 1,
+        scaleZ: 1,
+        hasCollider: true,
+        colliderWidth: 2.2,
+        colliderDepth: 2.2,
+        colliderKind: "ruin",
+        customModelId: customId,
+        colorHex: model?.colorHex ?? "#4fd8ff",
+      };
+      set({
+        mapProps: [...state.mapProps, newProp],
+        editorSelected: { kind: "prop", id: newProp.id },
+      });
+      return;
+    }
+
+    // Standard 3D Prop Prefab
+    const pId = prefabKey as PropPrefabId;
+    const meta = DEFAULT_PROP_META[pId] ?? DEFAULT_PROP_META.pine_tree;
+    const newProp: MapPropInstance = {
+      id: `ed-prop-${pId}-${uid}`,
+      prefab: pId,
+      name: meta.label,
+      zone,
+      x,
+      y: 0,
+      z,
+      rotY: 0,
+      scaleX: meta.scaleX,
+      scaleY: meta.scaleY,
+      scaleZ: meta.scaleZ,
+      hasCollider: meta.hasCollider,
+      colliderWidth: meta.w,
+      colliderDepth: meta.d,
+      colliderKind: meta.kind,
+    };
+    set({
+      mapProps: [...state.mapProps, newProp],
+      editorSelected: { kind: "prop", id: newProp.id },
+    });
+  },
+
+  moveSelectedEntityTo: (worldX: number, worldZ: number) => {
+    const state = get();
+    const sel = state.editorSelected;
+    if (!sel) return;
+    const x = Number(worldX.toFixed(2));
+    const z = Number(worldZ.toFixed(2));
+
+    if (sel.kind === "prop") {
+      set({
+        mapProps: state.mapProps.map((p) => (p.id === sel.id ? { ...p, x, z } : p)),
+      });
+    } else if (sel.kind === "enemy") {
+      set({
+        enemies: state.enemies.map((e) =>
+          e.id === sel.id ? { ...e, x, z, spawnX: x, spawnZ: z } : e
+        ),
+      });
+    } else if (sel.kind === "rupee") {
+      set({
+        rupees: state.rupees.map((r) => (r.id === sel.id ? { ...r, x, z } : r)),
+      });
+    } else if (sel.kind === "portal") {
+      set({
+        portals: state.portals.map((pt) => (pt.id === sel.id ? { ...pt, x, z } : pt)),
+      });
+    }
+  },
+
+  updatePropInstance: (id: string, patch: Partial<MapPropInstance>) => {
+    set((state) => ({
+      mapProps: state.mapProps.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    }));
+  },
+
+  updateEnemyInstance: (id: string, patch: Partial<EnemyState>) => {
+    set((state) => ({
+      enemies: state.enemies.map((e) =>
+        e.id === id
+          ? {
+              ...e,
+              ...patch,
+              spawnX: patch.x !== undefined ? patch.x : e.spawnX,
+              spawnZ: patch.z !== undefined ? patch.z : e.spawnZ,
+            }
+          : e
+      ),
+    }));
+  },
+
+  updateRupeeInstance: (id: string, patch: Partial<RupeeItemState>) => {
+    set((state) => ({
+      rupees: state.rupees.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+    }));
+  },
+
+  updatePortalInstance: (id: string, patch: Partial<MapPortal>) => {
+    set((state) => ({
+      portals: state.portals.map((pt) => (pt.id === id ? { ...pt, ...patch } : pt)),
+    }));
+  },
+
+  duplicateSelectedEntity: () => {
+    const state = get();
+    const sel = state.editorSelected;
+    if (!sel) return;
+    const uid = `${Date.now().toString(36)}-${Math.floor(Math.random() * 999)}`;
+
+    if (sel.kind === "prop") {
+      const orig = state.mapProps.find((p) => p.id === sel.id);
+      if (!orig) return;
+      const copy: MapPropInstance = {
+        ...orig,
+        id: `${orig.id}-copy-${uid}`,
+        name: `${orig.name} (Copy)`,
+        x: Number((orig.x + 2.0).toFixed(2)),
+        z: Number((orig.z + 2.0).toFixed(2)),
+      };
+      set({
+        mapProps: [...state.mapProps, copy],
+        editorSelected: { kind: "prop", id: copy.id },
+      });
+    } else if (sel.kind === "enemy") {
+      const orig = state.enemies.find((e) => e.id === sel.id);
+      if (!orig) return;
+      const copy: EnemyState = {
+        ...orig,
+        id: `${orig.id}-copy-${uid}`,
+        x: Number((orig.x + 2.0).toFixed(2)),
+        z: Number((orig.z + 2.0).toFixed(2)),
+        spawnX: Number((orig.x + 2.0).toFixed(2)),
+        spawnZ: Number((orig.z + 2.0).toFixed(2)),
+      };
+      set({
+        enemies: [...state.enemies, copy],
+        editorSelected: { kind: "enemy", id: copy.id },
+      });
+    } else if (sel.kind === "rupee") {
+      const orig = state.rupees.find((r) => r.id === sel.id);
+      if (!orig) return;
+      const copy: RupeeItemState = {
+        ...orig,
+        id: `${orig.id}-copy-${uid}`,
+        x: Number((orig.x + 1.5).toFixed(2)),
+        z: Number((orig.z + 1.5).toFixed(2)),
+      };
+      set({
+        rupees: [...state.rupees, copy],
+        editorSelected: { kind: "rupee", id: copy.id },
+      });
+    } else if (sel.kind === "portal") {
+      const orig = state.portals.find((p) => p.id === sel.id);
+      if (!orig) return;
+      const copy: MapPortal = {
+        ...orig,
+        id: `${orig.id}-copy-${uid}`,
+        x: Number((orig.x + 2.5).toFixed(2)),
+        z: Number((orig.z + 2.5).toFixed(2)),
+      };
+      set({
+        portals: [...state.portals, copy],
+        editorSelected: { kind: "portal", id: copy.id },
+      });
+    }
+  },
+
+  deleteEntity: (kind: EditorEntityKind, id: string) => {
+    set((state) => {
+      const clearSel =
+        state.editorSelected?.kind === kind && state.editorSelected?.id === id
+          ? null
+          : state.editorSelected;
+      if (kind === "prop") {
+        return {
+          mapProps: state.mapProps.filter((p) => p.id !== id),
+          editorSelected: clearSel,
+        };
+      }
+      if (kind === "enemy") {
+        return {
+          enemies: state.enemies.filter((e) => e.id !== id),
+          editorSelected: clearSel,
+        };
+      }
+      if (kind === "rupee") {
+        return {
+          rupees: state.rupees.filter((r) => r.id !== id),
+          editorSelected: clearSel,
+        };
+      }
+      return {
+        portals: state.portals.filter((pt) => pt.id !== id),
+        editorSelected: clearSel,
+      };
+    });
+  },
+
+  deleteSelectedEntity: () => {
+    const sel = get().editorSelected;
+    if (!sel) return;
+    get().deleteEntity(sel.kind, sel.id);
+  },
+
+  importCustomObjModel: (name: string, objText: string, colorHex = "#4fd8ff") => {
+    const parsed = parseWavefrontObj(name, objText, colorHex);
+    if (!parsed) return false;
+    set((state) => ({
+      customModels: [...state.customModels, parsed],
+      editorPlaceCategory: "custom",
+      editorPlacePrefab: `custom:${parsed.id}`,
+      editorTool: "place",
+    }));
+    return true;
+  },
+
+  resetPlaySimulation: () => {
+    set((state) => ({
+      phase: "playing",
+      enemies: state.enemies
+        .filter((e) => !e.id.startsWith("dg-minion-wave2-"))
+        .map((e) => ({
+          ...e,
+          x: e.spawnX,
+          z: e.spawnZ,
+          hp: e.maxHp,
+          state: "idle",
+          stateTimer: 0,
+          hitFlashTimer: 0,
+          knockbackImmunityTimer: 0,
+          stunTimer: 0,
+          knockbackVx: 0,
+          knockbackVz: 0,
+          actionCounter: 0,
+          actionCooldown: 1.0,
+        })),
+      rupees: state.rupees
+        .filter((r) => !r.id.startsWith("drop-"))
+        .map((r) => ({ ...r, collected: false })),
+      arrows: [],
+      projectiles: [],
+      hazards: [],
+      boomerang: null,
+      flags: {
+        ...state.flags,
+        bossAwakened: false,
+        bossPhase2: false,
+        bossDefeated: false,
+        chestUnlocked: false,
+      },
+      hero: {
+        ...state.hero,
+        hp: state.hero.maxHp,
+        invulnerableTimer: 0,
+        knockbackVx: 0,
+        knockbackVz: 0,
+      },
+    }));
+  },
+
+  exportMapJson: () => {
+    const state = get();
+    const payload = {
+      version: 1,
+      mapProps: state.mapProps,
+      enemies: state.enemies,
+      rupees: state.rupees,
+      portals: state.portals,
+      customModels: state.customModels,
+      terrainCells: state.terrainCells,
+    };
+    return JSON.stringify(payload, null, 2);
+  },
+
+  importMapJson: (jsonText: string) => {
+    try {
+      const data = JSON.parse(jsonText);
+      if (!data || !Array.isArray(data.mapProps)) return false;
+      set((state) => ({
+        mapProps: data.mapProps,
+        enemies: Array.isArray(data.enemies) ? data.enemies : state.enemies,
+        rupees: Array.isArray(data.rupees) ? data.rupees : state.rupees,
+        portals: Array.isArray(data.portals) ? data.portals : state.portals,
+        customModels: Array.isArray(data.customModels)
+          ? data.customModels
+          : state.customModels,
+        terrainCells: data.terrainCells ?? state.terrainCells,
+        terrainRevision: state.terrainRevision + 1,
+        editorSelected: null,
+      }));
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  // =========================================================
+  // MERCHANT SHOP PURCHASE ACTION
+  // =========================================================
   buyShopItem: (item: ShopItemId) => {
     const state = get();
     const hero = { ...state.hero };
@@ -449,11 +1271,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
 
+  // =========================================================
+  // LIVE GAMEPLAY SIMULATION TICK (PAUSED WHEN editorMode IS TRUE)
+  // =========================================================
   tick: (rawDt: number, input: FrameInput) => {
     const state = get();
-    if (state.phase !== "playing") return;
+    if (state.phase !== "playing" || state.editorMode) return;
 
     const dt = Math.min(rawDt, 0.05);
+    const dynamicObstacles = buildObstaclesFromMapProps(state.mapProps);
 
     const hero: HeroState = { ...state.hero };
     const flags: GameFlags = { ...state.flags };
@@ -498,7 +1324,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (rawAmount >= 2) {
           finalDamage = Math.ceil(rawAmount * 0.5);
         } else {
-          // For 1 half-heart attacks, alternate absorbing 0 and taking 1 (50% reduction!)
           hero.shieldAbsorbToggle = !hero.shieldAbsorbToggle;
           finalDamage = hero.shieldAbsorbToggle ? 0 : 1;
         }
@@ -526,6 +1351,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     hero.attackTimer = Math.max(0, hero.attackTimer - dt);
     hero.attackCooldown = Math.max(0, hero.attackCooldown - dt);
     hero.bowCooldown = Math.max(0, hero.bowCooldown - dt);
+    hero.portalCooldown = Math.max(0, hero.portalCooldown - dt);
     hero.invulnerableTimer = Math.max(0, hero.invulnerableTimer - dt);
     hero.isAttacking = hero.attackTimer > 0;
 
@@ -566,11 +1392,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let arrows: ArrowProjectileState[] = state.arrows.map((a) => ({ ...a }));
     if (input.bowPressed && !state.shopOpen && hero.bowCooldown <= 0) {
       if (!hero.hasBow) {
-        pushBanner("No Bow Equipped!", "Buy the Ranger's Bow at Merchant Bramble's Shop in the South Clearing.", 2.8);
+        pushBanner(
+          "No Bow Equipped!",
+          "Buy the Ranger's Bow at Merchant Bramble's Shop in the South Clearing.",
+          2.8
+        );
         hero.bowCooldown = 0.4;
       } else if (hero.arrows <= 0) {
         soundEngine.playGateLocked();
-        pushBanner("Out of Arrows!", "Buy a Bundle of Arrows at the Shop in the South Clearing.", 2.8);
+        pushBanner(
+          "Out of Arrows!",
+          "Buy a Bundle of Arrows at the Shop in the South Clearing.",
+          2.8
+        );
         hero.bowCooldown = 0.4;
       } else {
         hero.arrows -= 1;
@@ -615,7 +1449,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       nextHeroZ,
       0.72,
       zone,
-      flags.gateUnlocked
+      flags.gateUnlocked,
+      dynamicObstacles
     );
     hero.x = resolvedHero.x;
     hero.z = resolvedHero.z;
@@ -646,42 +1481,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 3. Check Zone Portal Transitions
-    if (zone === "overworld") {
-      const distToPortal = Math.hypot(
-        hero.x - OVERWORLD_PORTAL_POS.x,
-        hero.z - OVERWORLD_PORTAL_POS.z
-      );
-      if (distToPortal < 2.2) {
-        zone = "dungeon";
-        dungeonRoom = "entry";
-        hero.x = DUNGEON_ENTRY_SPAWN.x;
-        hero.z = DUNGEON_ENTRY_SPAWN.z;
-        hero.facing = 0;
-        hero.knockbackVx = 0;
-        hero.knockbackVz = 0;
-        boomerang = null;
-        soundEngine.playPortalTransition();
-        pushBanner(
-          "The Sunken Sanctum",
-          "Room I: Torchlit Antechamber — Watch out for the pack of Dungeon Porings!"
-        );
-      }
-    } else if (zone === "dungeon") {
-      const distToExit = Math.hypot(
-        hero.x - DUNGEON_EXIT_POS.x,
-        hero.z - DUNGEON_EXIT_POS.z
-      );
-      if (distToExit < 1.85) {
-        zone = "overworld";
-        hero.x = OVERWORLD_RETURN_SPAWN.x;
-        hero.z = OVERWORLD_RETURN_SPAWN.z;
-        hero.facing = Math.PI;
-        hero.knockbackVx = 0;
-        hero.knockbackVz = 0;
-        boomerang = null;
-        soundEngine.playPortalTransition();
-        pushBanner("Whispering Vale", "Returned to the sunlit overworld.");
+    // 3. Check Dynamic Portal Transitions (supports all authored & custom Map Editor portals!)
+    if (hero.portalCooldown <= 0) {
+      for (const portal of state.portals) {
+        if (portal.zone !== zone) continue;
+        const distToPortal = Math.hypot(hero.x - portal.x, hero.z - portal.z);
+        if (distToPortal <= portal.radius) {
+          zone = portal.targetZone;
+          if (zone === "dungeon") {
+            dungeonRoom = portal.targetZ < -13.5 ? "entry" : portal.targetZ < 12.2 ? "hall" : "sanctum";
+          }
+          hero.x = portal.targetX;
+          hero.z = portal.targetZ;
+          hero.facing = portal.targetFacing;
+          hero.knockbackVx = 0;
+          hero.knockbackVz = 0;
+          hero.portalCooldown = 1.25;
+          boomerang = null;
+          soundEngine.playPortalTransition();
+          pushBanner(portal.label, portal.sublabel);
+          break;
+        }
       }
     }
 
@@ -810,7 +1630,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
           boomerang.distanceTraveled += step;
           const nextBx = boomerang.x + boomerang.dirX * step;
           const nextBz = boomerang.z + boomerang.dirZ * step;
-          const resB = resolveWorldCollisions(nextBx, nextBz, 0.45, zone, flags.gateUnlocked);
+          const resB = resolveWorldCollisions(
+            nextBx,
+            nextBz,
+            0.45,
+            zone,
+            flags.gateUnlocked,
+            dynamicObstacles
+          );
           boomerang.x = resB.x;
           boomerang.z = resB.z;
           if (resB.hitObstacle || boomerang.distanceTraveled >= 10.5) {
@@ -899,7 +1726,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       const nextAx = arrow.x + Math.sin(arrow.angle) * arrow.speed * dt;
       const nextAz = arrow.z + Math.cos(arrow.angle) * arrow.speed * dt;
-      const resA = resolveWorldCollisions(nextAx, nextAz, 0.25, zone, flags.gateUnlocked);
+      const resA = resolveWorldCollisions(
+        nextAx,
+        nextAz,
+        0.25,
+        zone,
+        flags.gateUnlocked,
+        dynamicObstacles
+      );
       if (resA.hitObstacle) continue;
 
       arrow.x = nextAx;
@@ -947,7 +1781,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     arrows = remainingArrows;
 
-    // 10. Update Enemies & Combat
+    // 10. Update Enemies & Weight-Balanced Combat Knockback
     for (let i = 0; i < enemies.length; i++) {
       const enemy = enemies[i];
       if (enemy.zone !== zone || enemy.state === "dead") continue;
@@ -1000,6 +1834,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
             enemy.lastHitSwingId = hero.swingId;
 
             if (enemy.kind === "boss") {
+              // Boss has weight 100 (immovable) — zero knockback ever!
+              enemy.knockbackVx = 0;
+              enemy.knockbackVz = 0;
               if (enemy.state !== "stunned") {
                 soundEngine.playArmorDeflect();
                 if (enemy.state !== "charge_lunge" && armorNoticeCooldown <= 0) {
@@ -1022,24 +1859,50 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 }
               }
             } else {
-              // Standard enemy hit with poise/anti-infinite-knockback!
+              // Weight-based knockback system!
+              // - Lightweight (weight <= 0.85: Purple/Pink Slimes 0.5 & Goblin Archers 0.6):
+              //   Knocked back strongly (~15-17 impulse), no poise immunity, and windup is interrupted so sword spam keeps knocking them back!
+              // - Medium weight (0.85 < weight < 4.0: Goblin Fighters 2.0 & Minions 2.2):
+              //   Moderate knockback (~4.2 impulse, reduced to ~1.5 during poise/windup).
+              // - Heavy weight (weight >= 4.0: Knights 6.5):
+              //   Barely knocked back at all (~0.45 impulse, 0 during windup/attack).
               enemy.hp -= 1;
               enemy.hitFlashTimer = 0.22;
 
               const kbDirX = dist > 0.01 ? dx / dist : Math.sin(hero.facing);
               const kbDirZ = dist > 0.01 ? dz / dist : Math.cos(hero.facing);
+              const w = Math.max(0.25, enemy.weight ?? getDefaultEnemyWeight(enemy.kind));
 
-              // If enemy is mid-windup/attack or recently knocked back, it resists knockback so it can still hit the player!
-              const hasPoise =
-                enemy.state === "windup" ||
-                enemy.state === "attack" ||
-                enemy.knockbackImmunityTimer > 0 ||
-                enemy.kind === "knight" ||
-                enemy.kind === "minion";
-              const kbImpulse = hasPoise ? 1.8 : 4.8;
+              let kbImpulse = 0;
+              if (w >= 50) {
+                // Immovable
+                kbImpulse = 0;
+              } else if (w <= 0.85) {
+                // Lightweight (Slimes & Goblin Archers): easily knocked back repeatedly!
+                kbImpulse = 8.6 / w; // ~17.2 for slime (0.5), ~14.3 for archer (0.6)
+                enemy.knockbackImmunityTimer = 0;
+                if (enemy.state === "windup") {
+                  enemy.state = "aggro";
+                  enemy.stateTimer = 0.2;
+                  enemy.actionCooldown = 0.45;
+                }
+              } else if (w >= 4.0) {
+                // Heavy (Knights): barely knocked back at all
+                const inAttack = enemy.state === "windup" || enemy.state === "attack";
+                kbImpulse = inAttack ? 0 : 2.8 / w; // ~0.43 tiny flinch
+                enemy.knockbackImmunityTimer = 1.0;
+              } else {
+                // Medium (Goblin Fighters & Minions): moderate knockback
+                const hasPoise =
+                  enemy.state === "windup" ||
+                  enemy.state === "attack" ||
+                  enemy.knockbackImmunityTimer > 0;
+                kbImpulse = hasPoise ? 2.4 / w : 8.4 / w; // ~4.2 normal, ~1.2 with poise
+                enemy.knockbackImmunityTimer = 0.65;
+              }
+
               enemy.knockbackVx = kbDirX * kbImpulse;
               enemy.knockbackVz = kbDirZ * kbImpulse;
-              enemy.knockbackImmunityTimer = 0.95;
 
               if (enemy.state === "idle") {
                 enemy.state = "aggro";
@@ -1086,6 +1949,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             facing: Math.PI,
             hp: 5,
             maxHp: 5,
+            weight: 2.2,
             state: "aggro",
             stateTimer: 0,
             hitFlashTimer: 0.2,
@@ -1134,7 +1998,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             nextBz,
             enemyRadius,
             zone,
-            flags.gateUnlocked
+            flags.gateUnlocked,
+            dynamicObstacles
           );
           enemy.x = resolvedB.x;
           enemy.z = resolvedB.z;
@@ -1161,7 +2026,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 enemy.z,
                 enemy.chargeAngle,
                 enemyRadius,
-                BOSS_MAX_LUNGE_RANGE
+                BOSS_MAX_LUNGE_RANGE,
+                dynamicObstacles
               );
               soundEngine.playBossChargeAim();
             }
@@ -1226,7 +2092,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             enemy.z,
             enemy.chargeAngle,
             enemyRadius,
-            BOSS_MAX_LUNGE_RANGE
+            BOSS_MAX_LUNGE_RANGE,
+            dynamicObstacles
           );
           if (enemy.stateTimer <= 0) {
             enemy.state = "charge_lock";
@@ -1265,7 +2132,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             Math.max(13.0 + enemyRadius, nextBz),
             enemyRadius,
             zone,
-            flags.gateUnlocked
+            flags.gateUnlocked,
+            dynamicObstacles
           );
           enemy.x = resolvedB.x;
           enemy.z = resolvedB.z;
@@ -1315,7 +2183,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           nextEz,
           enemyRadius,
           zone,
-          flags.gateUnlocked
+          flags.gateUnlocked,
+          dynamicObstacles
         );
         enemy.x = resolvedStun.x;
         enemy.z = resolvedStun.z;
@@ -1339,7 +2208,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
           if (distToHero > 0.05) {
             enemy.facing = Math.atan2(toHeroX, toHeroZ);
           }
-          // Maintain ranged spacing (retreat if < 4.5, advance if > 8.2)
           if (distToHero < 4.5 && distToHero > 0.05) {
             moveVx = -(toHeroX / distToHero) * (enemy.speed * 0.85);
             moveVz = -(toHeroZ / distToHero) * (enemy.speed * 0.85);
@@ -1392,7 +2260,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           nextEz,
           enemyRadius,
           zone,
-          flags.gateUnlocked
+          flags.gateUnlocked,
+          dynamicObstacles
         );
         enemy.x = resolvedArcher.x;
         enemy.z = resolvedArcher.z;
@@ -1432,7 +2301,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
             moveVz = (toHeroZ / distToHero) * enemy.speed;
           }
 
-          // Contact damage if enemy presses right up against the hero
           if (distToHero <= 1.28) {
             const pushDirX = distToHero > 0.01 ? toHeroX / distToHero : Math.sin(enemy.facing);
             const pushDirZ = distToHero > 0.01 ? toHeroZ / distToHero : Math.cos(enemy.facing);
@@ -1501,7 +2369,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         nextEz,
         enemyRadius,
         zone,
-        flags.gateUnlocked
+        flags.gateUnlocked,
+        dynamicObstacles
       );
       enemy.x = resolvedEnemy.x;
       enemy.z = resolvedEnemy.z;
