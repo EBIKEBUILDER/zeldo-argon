@@ -181,11 +181,17 @@ export default function GameOverlay() {
             <div className="hud-panel boss-bar-panel">
               <div className="boss-bar-header">
                 <span className="boss-name">MALAKOR, WARDEN OF THE ECLIPSE</span>
-                {activeMinions > 0 && (
-                  <span className="minion-tag">
-                    +{activeMinions} Minion{activeMinions > 1 ? "s" : ""}
-                  </span>
-                )}
+                <span className="minion-tag">
+                  {bossEnemy.state === "stunned"
+                    ? "STUNNED — STRIKE NOW!"
+                    : bossEnemy.state === "charge_aim" ||
+                      bossEnemy.state === "charge_lock" ||
+                      bossEnemy.state === "charge_lunge"
+                    ? "CHARGING — LURE INTO WALL!"
+                    : activeMinions > 0
+                    ? `ARMORED • +${activeMinions} Minion${activeMinions > 1 ? "s" : ""}`
+                    : "ARMORED — BAIT CHARGE INTO WALL"}
+                </span>
               </div>
               <div className="boss-hp-track">
                 <div

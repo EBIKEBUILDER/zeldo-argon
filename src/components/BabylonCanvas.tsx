@@ -32,10 +32,34 @@ interface EnemyMeshRig {
   body: Mesh;
   weapon: TransformNode;
   telegraphRing: Mesh;
+  hpBarHolder: TransformNode;
   hpBarBg: Mesh;
   hpBarFill: Mesh;
+  barWidth: number;
+  barY: number;
   materials: StandardMaterial[];
   baseColors: Color3[];
+  // Boss-specific visual nodes
+  chargeCorridorRoot?: TransformNode;
+  chargeCorridorMat?: StandardMaterial;
+  lungeShieldMesh?: Mesh;
+  stunStarsRoot?: TransformNode;
+}
+
+interface ProjectileVisualRig {
+  root: TransformNode;
+  orb: Mesh;
+  outerRing: Mesh;
+  innerCoreRing: Mesh;
+  fillDisc: Mesh;
+  arcDots: Mesh[];
+}
+
+interface HazardVisualRig {
+  root: TransformNode;
+  poolDisc: Mesh;
+  rimRing: Mesh;
+  bubbles: Mesh[];
 }
 
 export default function BabylonCanvas() {
@@ -700,9 +724,11 @@ export default function BabylonCanvas() {
     slashArc.parent = heroRoot;
 
     // =========================================================
-    // DYNAMIC ENEMY & RUPEE MESH REGISTRIES
+    // DYNAMIC ENEMY, PROJECTILE, HAZARD & RUPEE REGISTRIES
     // =========================================================
     const enemyRigs = new Map<string, EnemyMeshRig>();
+    const projectileRigs = new Map<string, ProjectileVisualRig>();
+    const hazardRigs = new Map<string, HazardVisualRig>();
     const rupeeMeshes = new Map<string, Mesh>();
 
     const greenRupeeMat = makeMat(
@@ -744,6 +770,10 @@ export default function BabylonCanvas() {
       weapon.parent = root;
 
       let body: Mesh;
+      let chargeCorridorRoot: TransformNode | undefined;
+      let chargeCorridorMat: StandardMaterial | undefined;
+      let lungeShieldMesh: Mesh | undefined;
+      let stunStarsRoot: TransformNode | undefined;
 
       if (kind === "slime") {
         const isDungeon = zone === "dungeon";
@@ -869,6 +899,76 @@ export default function BabylonCanvas() {
         bossHammer.position.set(1.25, 1.45, 0.95);
         bossHammer.material = goldKeyMat;
         bossHammer.parent = weapon;
+
+        // 1. Boss Ground Lunge Path Telegraph Corridor (world-space positioned & rotated)
+        chargeCorridorRoot = new TransformNode(`bossChargeCorridor-${id}`, scene);
+        chargeCorridorMat = makeMat(
+          `bossChargeCorridorMat-${id}`,
+          new Color3(1.0, 0.35, 0.15),
+          new Color3(0.95, 0.25, 0.1),
+          new Color3(0, 0, 0),
+          0.52
+        );
+        // Unit-depth box shifted by +0.5 on Z so scaling Z extends forward from the boss
+        const corridorFill = MeshBuilder.CreateBox(
+          `bossCorridorFill-${id}`,
+          { width: 2.7, height: 0.05, depth: 1.0 },
+          scene
+        );
+        corridorFill.position.set(0, 0.06, 0.5);
+        corridorFill.material = chargeCorridorMat;
+        corridorFill.parent = chargeCorridorRoot;
+
+        const railMat = makeMat(
+          `bossCorridorRailMat-${id}`,
+          new Color3(1.0, 0.85, 0.25),
+          new Color3(1.0, 0.7, 0.15)
+        );
+        for (const rx of [-1.35, 1.35]) {
+          const sideRail = MeshBuilder.CreateBox(
+            `bossCorridorRail-${id}-${rx}`,
+            { width: 0.14, height: 0.09, depth: 1.0 },
+            scene
+          );
+          sideRail.position.set(rx, 0.08, 0.5);
+          sideRail.material = railMat;
+          sideRail.parent = chargeCorridorRoot;
+        }
+        chargeCorridorRoot.setEnabled(false);
+
+        // 2. Boss Invulnerable Lunge Shield Aura (visible while launching)
+        lungeShieldMesh = MeshBuilder.CreateSphere(
+          `bossLungeShield-${id}`,
+          { diameter: 3.6, segments: 14 },
+          scene
+        );
+        lungeShieldMesh.position.set(0, 1.4, 0);
+        lungeShieldMesh.material = makeMat(
+          `bossLungeShieldMat-${id}`,
+          new Color3(1.0, 0.2, 0.25),
+          new Color3(0.9, 0.15, 0.2),
+          new Color3(1, 1, 1),
+          0.42
+        );
+        lungeShieldMesh.parent = root;
+        lungeShieldMesh.setEnabled(false);
+
+        // 3. Boss Stunned Orbiting Stars (visible after crashing into a wall)
+        stunStarsRoot = new TransformNode(`bossStunStars-${id}`, scene);
+        stunStarsRoot.position.set(0, 3.25, 0);
+        stunStarsRoot.parent = root;
+        for (let s = 0; s < 4; s++) {
+          const angle = (s / 4) * Math.PI * 2;
+          const star = MeshBuilder.CreatePolyhedron(
+            `stunStar-${id}-${s}`,
+            { type: 1, size: 0.28 },
+            scene
+          );
+          star.position.set(Math.cos(angle) * 1.15, 0, Math.sin(angle) * 1.15);
+          star.material = goldKeyMat;
+          star.parent = stunStarsRoot;
+        }
+        stunStarsRoot.setEnabled(false);
       }
 
       // Telegraph ground ring for windup / attack
@@ -889,41 +989,155 @@ export default function BabylonCanvas() {
       );
       telegraphRing.parent = root;
 
-      // Overhead Enemy HP Bar
-      const barY = kind === "boss" ? 3.55 : kind === "knight" ? 2.55 : 2.15;
-      const barW = kind === "boss" ? 2.4 : 1.25;
+      // World-space Billboard Overhead Enemy HP Bar (never rotates with enemy!)
+      const barY = kind === "boss" ? 3.85 : kind === "knight" ? 2.55 : 2.15;
+      const barW = kind === "boss" ? 2.6 : 1.25;
+      const hpBarHolder = new TransformNode(`hpHolder-${id}`, scene);
+      // Tilt slightly toward the overhead camera while keeping yaw locked at 0
+      hpBarHolder.rotation.set(-0.72, 0, 0);
+
       const hpBarBg = MeshBuilder.CreateBox(
         `hpBg-${id}`,
-        { width: barW, height: 0.14, depth: 0.08 },
+        { width: barW, height: 0.16, depth: 0.06 },
         scene
       );
-      hpBarBg.position.set(0, barY, 0);
-      hpBarBg.material = makeMat(`hpBgMat-${id}`, new Color3(0.12, 0.12, 0.15));
-      hpBarBg.parent = root;
+      hpBarBg.material = makeMat(`hpBgMat-${id}`, new Color3(0.1, 0.1, 0.14));
+      hpBarBg.parent = hpBarHolder;
 
       const hpBarFill = MeshBuilder.CreateBox(
         `hpFill-${id}`,
-        { width: barW - 0.06, height: 0.11, depth: 0.11 },
+        { width: barW - 0.06, height: 0.12, depth: 0.09 },
         scene
       );
-      hpBarFill.position.set(0, barY, 0);
       hpBarFill.material = makeMat(
         `hpFillMat-${id}`,
         new Color3(0.95, 0.25, 0.28),
         new Color3(0.45, 0.08, 0.1)
       );
-      hpBarFill.parent = root;
+      hpBarFill.parent = hpBarHolder;
 
       return {
         root,
         body,
         weapon,
         telegraphRing,
+        hpBarHolder,
         hpBarBg,
         hpBarFill,
+        barWidth: barW - 0.06,
+        barY,
         materials,
         baseColors,
+        chargeCorridorRoot,
+        chargeCorridorMat,
+        lungeShieldMesh,
+        stunStarsRoot,
       };
+    };
+
+    const buildProjectileRig = (id: string, aoeRadius: number, directRadius: number): ProjectileVisualRig => {
+      const root = new TransformNode(`projRoot-${id}`, scene);
+
+      const orbMat = makeMat(
+        `projOrbMat-${id}`,
+        new Color3(0.55, 1.0, 0.2),
+        new Color3(0.45, 0.85, 0.12)
+      );
+      const orb = MeshBuilder.CreateSphere(`projOrb-${id}`, { diameter: 0.85, segments: 12 }, scene);
+      orb.material = orbMat;
+      orb.parent = root;
+
+      const outerRing = MeshBuilder.CreateTorus(
+        `projOuterRing-${id}`,
+        { diameter: aoeRadius * 2, thickness: 0.14, tessellation: 32 },
+        scene
+      );
+      outerRing.material = makeMat(
+        `projOuterMat-${id}`,
+        new Color3(1.0, 0.45, 0.15),
+        new Color3(0.95, 0.35, 0.1)
+      );
+      outerRing.parent = root;
+
+      const innerCoreRing = MeshBuilder.CreateTorus(
+        `projInnerRing-${id}`,
+        { diameter: directRadius * 2, thickness: 0.12, tessellation: 24 },
+        scene
+      );
+      innerCoreRing.material = makeMat(
+        `projInnerMat-${id}`,
+        new Color3(1.0, 0.15, 0.2),
+        new Color3(0.95, 0.1, 0.15)
+      );
+      innerCoreRing.parent = root;
+
+      const fillDisc = MeshBuilder.CreateCylinder(
+        `projFillDisc-${id}`,
+        { diameter: aoeRadius * 2, height: 0.04, tessellation: 28 },
+        scene
+      );
+      fillDisc.material = makeMat(
+        `projFillMat-${id}`,
+        new Color3(0.95, 0.3, 0.15),
+        new Color3(0.75, 0.2, 0.08),
+        new Color3(0, 0, 0),
+        0.32
+      );
+      fillDisc.parent = root;
+
+      const arcDots: Mesh[] = [];
+      for (let d = 0; d < 7; d++) {
+        const dot = MeshBuilder.CreateSphere(`projArcDot-${id}-${d}`, { diameter: 0.24 }, scene);
+        dot.material = orbMat;
+        dot.parent = root;
+        arcDots.push(dot);
+      }
+
+      return { root, orb, outerRing, innerCoreRing, fillDisc, arcDots };
+    };
+
+    const buildHazardRig = (id: string, radius: number): HazardVisualRig => {
+      const root = new TransformNode(`hazardRoot-${id}`, scene);
+
+      const poolDisc = MeshBuilder.CreateCylinder(
+        `hazardPool-${id}`,
+        { diameter: radius * 2, height: 0.06, tessellation: 28 },
+        scene
+      );
+      poolDisc.material = makeMat(
+        `hazardPoolMat-${id}`,
+        new Color3(0.38, 0.88, 0.18),
+        new Color3(0.28, 0.65, 0.1),
+        new Color3(0, 0, 0),
+        0.65
+      );
+      poolDisc.parent = root;
+
+      const rimRing = MeshBuilder.CreateTorus(
+        `hazardRim-${id}`,
+        { diameter: radius * 2, thickness: 0.14, tessellation: 28 },
+        scene
+      );
+      rimRing.material = makeMat(
+        `hazardRimMat-${id}`,
+        new Color3(0.95, 0.42, 0.12),
+        new Color3(0.85, 0.3, 0.08)
+      );
+      rimRing.parent = root;
+
+      const bubbles: Mesh[] = [];
+      for (let b = 0; b < 5; b++) {
+        const bub = MeshBuilder.CreateSphere(`hazardBub-${id}-${b}`, { diameter: 0.42 }, scene);
+        bub.material = makeMat(
+          `hazardBubMat-${id}-${b}`,
+          new Color3(0.65, 1.0, 0.25),
+          new Color3(0.45, 0.85, 0.15)
+        );
+        bub.parent = root;
+        bubbles.push(bub);
+      }
+
+      return { root, poolDisc, rimRing, bubbles };
     };
 
     // =========================================================
@@ -1084,8 +1298,10 @@ export default function BabylonCanvas() {
         zeldoCrestNode.setEnabled(false);
       }
 
-      // 7. Sync Enemies
+      // 7. Sync Enemies & Billboard Floating Health Bars
+      const activeEnemyIds = new Set<string>();
       for (const enemy of snap.enemies) {
+        activeEnemyIds.add(enemy.id);
         let rig = enemyRigs.get(enemy.id);
         if (!rig) {
           rig = buildEnemyRig(enemy.id, enemy.kind, enemy.zone);
@@ -1094,7 +1310,11 @@ export default function BabylonCanvas() {
 
         const visible = enemy.zone === snap.zone && enemy.state !== "dead";
         rig.root.setEnabled(visible);
-        if (!visible) continue;
+        rig.hpBarHolder.setEnabled(visible);
+        if (!visible) {
+          if (rig.chargeCorridorRoot) rig.chargeCorridorRoot.setEnabled(false);
+          continue;
+        }
 
         const bob =
           enemy.kind === "slime"
@@ -1106,14 +1326,72 @@ export default function BabylonCanvas() {
         rig.root.position.set(enemy.x, bob, enemy.z);
         rig.root.rotation.y = enemy.facing;
 
-        // Windup & Attack weapon / telegraph cue
+        // Position Floating Health Bar in world space above enemy (locked facing camera!)
+        rig.hpBarHolder.position.set(enemy.x, rig.barY + bob, enemy.z);
+        const hpRatio = Math.max(0, enemy.hp / enemy.maxHp);
+        rig.hpBarFill.scaling.x = Math.max(0.001, hpRatio);
+        rig.hpBarFill.position.x = -rig.barWidth * (1 - hpRatio) * 0.5;
+
+        // Boss-specific telegraph & state visuals
+        if (enemy.kind === "boss") {
+          const showCorridor =
+            enemy.state === "charge_aim" || enemy.state === "charge_lock";
+          if (rig.chargeCorridorRoot && rig.chargeCorridorMat) {
+            rig.chargeCorridorRoot.setEnabled(showCorridor);
+            if (showCorridor) {
+              rig.chargeCorridorRoot.position.set(enemy.x, 0, enemy.z);
+              rig.chargeCorridorRoot.rotation.y = enemy.chargeAngle;
+              rig.chargeCorridorRoot.scaling.z = Math.max(1, enemy.chargePathLength);
+
+              if (enemy.state === "charge_lock") {
+                // Flash urgently during locked dodge delay
+                const pulse = Math.floor(t * 16) % 2 === 0;
+                rig.chargeCorridorMat.emissiveColor.set(
+                  pulse ? 1.0 : 0.9,
+                  pulse ? 0.85 : 0.15,
+                  pulse ? 0.3 : 0.15
+                );
+                rig.chargeCorridorMat.alpha = 0.72;
+              } else {
+                rig.chargeCorridorMat.emissiveColor.set(0.95, 0.35, 0.1);
+                rig.chargeCorridorMat.alpha = 0.48;
+              }
+            }
+          }
+
+          if (rig.lungeShieldMesh) {
+            rig.lungeShieldMesh.setEnabled(enemy.state === "charge_lunge");
+          }
+
+          if (rig.stunStarsRoot) {
+            const isStunned = enemy.state === "stunned";
+            rig.stunStarsRoot.setEnabled(isStunned);
+            if (isStunned) {
+              rig.stunStarsRoot.rotation.y = t * 5.5;
+              rig.body.rotation.x = 0.25;
+            } else {
+              rig.body.rotation.x = 0;
+            }
+          }
+        }
+
+        // Standard Windup & Attack weapon / telegraph cue
         const isWindingOrAttacking =
-          enemy.state === "windup" || enemy.state === "attack";
+          enemy.state === "windup" ||
+          enemy.state === "attack" ||
+          enemy.state === "charge_aim" ||
+          enemy.state === "charge_lock" ||
+          enemy.state === "lob_windup";
         rig.telegraphRing.setEnabled(isWindingOrAttacking);
-        if (enemy.state === "windup") {
+        if (
+          enemy.state === "windup" ||
+          enemy.state === "charge_aim" ||
+          enemy.state === "charge_lock" ||
+          enemy.state === "lob_windup"
+        ) {
           rig.weapon.rotation.x = -0.85;
           rig.telegraphRing.scaling.setAll(1 + Math.sin(t * 18) * 0.12);
-        } else if (enemy.state === "attack") {
+        } else if (enemy.state === "attack" || enemy.state === "charge_lunge") {
           rig.weapon.rotation.x = 0.65;
         } else {
           rig.weapon.rotation.x = 0;
@@ -1130,13 +1408,98 @@ export default function BabylonCanvas() {
             mat.emissiveColor.set(0.08, 0.04, 0.06);
           }
         });
-
-        // Update HP bar above enemy
-        const hpRatio = Math.max(0, enemy.hp / enemy.maxHp);
-        rig.hpBarFill.scaling.x = hpRatio;
       }
 
-      // 8. Sync Rupees
+      // Hide any enemy rigs that were removed on restart
+      enemyRigs.forEach((rig, id) => {
+        if (!activeEnemyIds.has(id)) {
+          rig.root.setEnabled(false);
+          rig.hpBarHolder.setEnabled(false);
+          if (rig.chargeCorridorRoot) rig.chargeCorridorRoot.setEnabled(false);
+        }
+      });
+
+      // 8. Sync Boss Arcing Projectiles & Landing AOE Telegraphs
+      const activeProjIds = new Set<string>();
+      for (const proj of snap.projectiles) {
+        activeProjIds.add(proj.id);
+        let pRig = projectileRigs.get(proj.id);
+        if (!pRig) {
+          pRig = buildProjectileRig(proj.id, proj.aoeRadius, proj.directHitRadius);
+          projectileRigs.set(proj.id, pRig);
+        }
+
+        const showProj = proj.zone === snap.zone;
+        pRig.root.setEnabled(showProj);
+        if (!showProj) continue;
+
+        const progress = Math.min(1, proj.flightTime / proj.totalFlightTime);
+        const arcPeak = 6.8;
+        const curX = proj.startX + (proj.targetX - proj.startX) * progress;
+        const curZ = proj.startZ + (proj.targetZ - proj.startZ) * progress;
+        const curY = 1.8 * (1 - progress) + 4 * arcPeak * progress * (1 - progress);
+
+        pRig.orb.position.set(curX, curY, curZ);
+        pRig.outerRing.position.set(proj.targetX, 0.08, proj.targetZ);
+        pRig.innerCoreRing.position.set(proj.targetX, 0.09, proj.targetZ);
+        pRig.fillDisc.position.set(proj.targetX, 0.05, proj.targetZ);
+        pRig.fillDisc.scaling.setAll(0.25 + progress * 0.75);
+
+        // Position trajectory arc preview dots along the parabola
+        pRig.arcDots.forEach((dot, idx) => {
+          const s = (idx + 1) / (pRig!.arcDots.length + 1);
+          const dx = proj.startX + (proj.targetX - proj.startX) * s;
+          const dz = proj.startZ + (proj.targetZ - proj.startZ) * s;
+          const dy = 1.8 * (1 - s) + 4 * arcPeak * s * (1 - s);
+          dot.position.set(dx, dy, dz);
+        });
+      }
+
+      projectileRigs.forEach((pRig, id) => {
+        if (!activeProjIds.has(id)) {
+          pRig.root.setEnabled(false);
+        }
+      });
+
+      // 9. Sync Lingering Fire / Toxin Ground Hazard Pools
+      const activeHazardIds = new Set<string>();
+      for (const hazard of snap.hazards) {
+        activeHazardIds.add(hazard.id);
+        let hRig = hazardRigs.get(hazard.id);
+        if (!hRig) {
+          hRig = buildHazardRig(hazard.id, hazard.radius);
+          hazardRigs.set(hazard.id, hRig);
+        }
+
+        const showHazard = hazard.zone === snap.zone && hazard.timer > 0;
+        hRig.root.setEnabled(showHazard);
+        if (!showHazard) continue;
+
+        const fadeScale = hazard.timer < 0.8 ? hazard.timer / 0.8 : 1.0;
+        hRig.poolDisc.position.set(hazard.x, 0.04, hazard.z);
+        hRig.poolDisc.scaling.set(fadeScale, 1, fadeScale);
+        hRig.rimRing.position.set(hazard.x, 0.07, hazard.z);
+        hRig.rimRing.scaling.setAll(fadeScale * (1 + Math.sin(t * 8) * 0.04));
+
+        hRig.bubbles.forEach((bub, idx) => {
+          const angle = idx * 1.25 + t * 1.4;
+          const rad = (0.3 + ((idx * 0.17) % 0.55)) * hazard.radius * fadeScale;
+          const by = 0.15 + ((t * 1.8 + idx * 0.4) % 0.75);
+          bub.position.set(
+            hazard.x + Math.cos(angle) * rad,
+            by,
+            hazard.z + Math.sin(angle) * rad
+          );
+        });
+      }
+
+      hazardRigs.forEach((hRig, id) => {
+        if (!activeHazardIds.has(id)) {
+          hRig.root.setEnabled(false);
+        }
+      });
+
+      // 10. Sync Rupees
       for (const rupee of snap.rupees) {
         let mesh = rupeeMeshes.get(rupee.id);
         if (!mesh) {
