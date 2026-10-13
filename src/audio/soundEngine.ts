@@ -38,7 +38,6 @@ class SoundEngine {
     if (!ctx) return;
     const now = ctx.currentTime;
 
-    // Noise burst through a sweeping bandpass filter for airy blade whoosh
     const bufferSize = Math.floor(ctx.sampleRate * 0.16);
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -64,7 +63,6 @@ class SoundEngine {
     noiseGain.connect(ctx.destination);
     noise.start(now);
 
-    // Metallic blade whistle layer
     const osc = ctx.createOscillator();
     const oscGain = ctx.createGain();
     osc.type = "triangle";
@@ -80,12 +78,95 @@ class SoundEngine {
     osc.stop(now + 0.14);
   }
 
+  public playShieldBlock(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Solid metallic guard clank + low thud
+    [620, 940].forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      const t = now + idx * 0.018;
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.55, t + 0.12);
+      gain.gain.setValueAtTime(0.22, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.14);
+    });
+  }
+
+  public playBoomerangThrow(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    for (let i = 0; i < 4; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const t = now + i * 0.065;
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(360 + i * 40, t);
+      osc.frequency.exponentialRampToValueAtTime(220, t + 0.06);
+      gain.gain.setValueAtTime(0.14, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.062);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.065);
+    }
+  }
+
+  public playBowShoot(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Bowstring twang + high arrow zip
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(240, now);
+    osc.frequency.exponentialRampToValueAtTime(780, now + 0.09);
+
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.12);
+  }
+
+  public playShopPurchase(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    [783.99, 987.77, 1318.51, 1567.98].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const t = now + i * 0.055;
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.2, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.19);
+    });
+  }
+
   public playArmorDeflect(): void {
     const ctx = this.getContext();
     if (!ctx) return;
     const now = ctx.currentTime;
 
-    // Metallic ricochet clang when striking the boss's un-stunned armor
     [1180, 1760].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -123,7 +204,6 @@ class SoundEngine {
     osc.start(now);
     osc.stop(now + 0.16);
 
-    // Crisp transient click
     const ping = ctx.createOscillator();
     const pingGain = ctx.createGain();
     ping.type = "triangle";
@@ -213,7 +293,6 @@ class SoundEngine {
     if (!ctx) return;
     const now = ctx.currentTime;
 
-    // Bright treasure discovery arpeggio
     const notes = [523.25, 659.25, 783.99, 987.77, 1318.51];
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
@@ -257,7 +336,6 @@ class SoundEngine {
     if (!ctx) return;
     const now = ctx.currentTime;
 
-    // Heavy iron mechanism rumble
     const rumble = ctx.createOscillator();
     const rumbleGain = ctx.createGain();
     rumble.type = "sawtooth";
@@ -270,7 +348,6 @@ class SoundEngine {
     rumble.start(now);
     rumble.stop(now + 0.5);
 
-    // Classic puzzle-solved / secret-unlocked chime
     const notes = [392.0, 440.0, 493.88, 523.25, 587.33, 659.25, 783.99];
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
@@ -374,7 +451,6 @@ class SoundEngine {
     if (!ctx) return;
     const now = ctx.currentTime;
 
-    // Heavy stone slam + dizzy stun arpeggio
     const bufferSize = Math.floor(ctx.sampleRate * 0.32);
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -399,7 +475,6 @@ class SoundEngine {
     nGain.connect(ctx.destination);
     noise.start(now);
 
-    // Dizzy stun bells
     [587.33, 783.99, 659.25, 880].forEach((freq, idx) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -440,7 +515,6 @@ class SoundEngine {
     if (!ctx) return;
     const now = ctx.currentTime;
 
-    // Explosive noise burst + sub thump
     const bufferSize = Math.floor(ctx.sampleRate * 0.28);
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -483,7 +557,6 @@ class SoundEngine {
     if (!ctx) return;
     const now = ctx.currentTime;
 
-    // Dramatic multi-burst collapse followed by triumphant chord
     for (let i = 0; i < 5; i++) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
