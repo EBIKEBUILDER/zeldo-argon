@@ -135,7 +135,7 @@ const MONSTER_PALETTE: Array<{
   { prefab: "enemy:archer", label: "Goblin Bowman Archer", weightLabel: "Light (0.6)" },
   { prefab: "enemy:goblin", label: "Goblin Fighter", weightLabel: "Medium (2.0)" },
   { prefab: "enemy:minion", label: "Shadow Minion", weightLabel: "Medium (2.2)" },
-  { prefab: "enemy:knight", label: "Sentinel Knight", weightLabel: "Heavy (6.5)" },
+  { prefab: "enemy:knight", label: "Sentinel Knight", weightLabel: "Heavy (12.0)" },
   { prefab: "enemy:boss", label: "Boss: Malakor", weightLabel: "Immovable (100)" },
 ];
 
@@ -361,16 +361,20 @@ export default function GameOverlay() {
                 hero.hasBoomerang
                   ? boomerang !== null
                     ? "gear-slot-active"
+                    : hero.boomerangCooldown > 0
+                    ? "gear-slot-warn"
                     : "gear-slot-owned"
                   : "gear-slot-locked"
               }`}
-              title="Press Q or 1 to throw the Gale Boomerang"
+              title="Press Q or 1 to throw the Gale Boomerang (2s Cooldown)"
             >
               <span className="gear-key">Q</span>
               <span className="gear-name">
                 {hero.hasBoomerang
                   ? boomerang !== null
                     ? "Flying..."
+                    : hero.boomerangCooldown > 0
+                    ? `Boomerang (${hero.boomerangCooldown.toFixed(1)}s)`
                     : "Boomerang"
                   : "No Boomerang"}
               </span>

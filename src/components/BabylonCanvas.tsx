@@ -1877,6 +1877,38 @@ export default function BabylonCanvas() {
             spikeParts.push(spike);
           }
           mergeGroupWithMaterial(`gobSpikes-${id}`, spikeParts, bladeMat, weapon);
+
+          // Ground Lunge Path Telegraph Corridor for Goblin Fighters
+          chargeCorridorRoot = new TransformNode(`gobChargeCorridor-${id}`, scene);
+          chargeCorridorMat = makeMat(
+            `gobChargeMat-${id}`,
+            new Color3(1.0, 0.38, 0.12),
+            new Color3(0.95, 0.28, 0.08),
+            new Color3(0, 0, 0),
+            0.55
+          );
+          const gobStrip = MeshBuilder.CreateBox(
+            `gobChargeStrip-${id}`,
+            { width: 1.25, height: 0.04, depth: 1.0 },
+            scene
+          );
+          gobStrip.position.set(0, 0.06, 0.5);
+          gobStrip.material = chargeCorridorMat;
+          gobStrip.isPickable = false;
+          gobStrip.parent = chargeCorridorRoot;
+
+          const gobTip = MeshBuilder.CreateCylinder(
+            `gobChargeTip-${id}`,
+            { diameterTop: 0.05, diameterBottom: 1.55, height: 0.32, tessellation: 3 },
+            scene
+          );
+          gobTip.rotation.x = Math.PI / 2;
+          gobTip.position.set(0, 0.07, 1.02);
+          gobTip.material = chargeCorridorMat;
+          gobTip.isPickable = false;
+          gobTip.parent = chargeCorridorRoot;
+
+          chargeCorridorRoot.setEnabled(false);
         }
       } else if (kind === "knight") {
         const armorMat = registerMat(
@@ -3004,7 +3036,7 @@ export default function BabylonCanvas() {
         boomerangNode.setEnabled(false);
       }
 
-      // Sync 3D Arrows (Hero & Goblin Archer)
+      // Sync 3D Arrows (Hero & Goblin Archer — including arrows stuck into walls!)
       const activeArrowIds = new Set<string>();
       for (const arrow of snap.arrows) {
         activeArrowIds.add(arrow.id);
@@ -3016,8 +3048,21 @@ export default function BabylonCanvas() {
         const showArrow = arrow.zone === snap.zone;
         aRig.setEnabled(showArrow);
         if (showArrow) {
-          aRig.position.set(arrow.x, 1.0, arrow.z);
+          const aGroundY = sampleTerrainHeight(activeCells, arrow.x, arrow.z);
+          aRig.position.set(arrow.x, aGroundY + 1.0, arrow.z);
           aRig.rotation.y = arrow.angle;
+          if (arrow.stuck) {
+            const st = arrow.stuckTimer ?? 0;
+            // Subtle impact vibration right after sticking into a wall
+            const vib = st > 2.12 ? Math.sin(t * 72) * 0.085 * ((st - 2.12) / 0.28) : 0;
+            aRig.rotation.x = vib;
+            // Smooth shrink-out in the final 0.45s before disappearing
+            const scaleFade = st < 0.45 ? Math.max(0.01, st / 0.45) : 1.0;
+            aRig.scaling.setAll(scaleFade);
+          } else {
+            aRig.rotation.x = 0;
+            aRig.scaling.setAll(1.0);
+          }
         }
       }
       arrowRigs.forEach((aRig, id) => {
@@ -3121,7 +3166,25 @@ export default function BabylonCanvas() {
           rig.archerAimLine.setEnabled(enemy.state === "windup");
         }
 
-        if (enemy.kind === "boss") {
+        if (enemy.kind === "goblin") {
+          const showGoblinCorridor = enemy.state === "windup";
+          if (rig.chargeCorridorRoot && rig.chargeCorridorMat) {
+            rig.chargeCorridorRoot.setEnabled(showGoblinCorridor);
+            if (showGoblinCorridor) {
+              rig.chargeCorridorRoot.position.set(enemy.x, enemyGroundY, enemy.z);
+              rig.chargeCorridorRoot.rotation.y = enemy.chargeAngle;
+              rig.chargeCorridorRoot.scaling.z = Math.max(2.5, enemy.chargePathLength || 4.0);
+              const lockedAim = enemy.stateTimer <= 0.56;
+              const pulse = Math.floor(t * 15) % 2 === 0;
+              rig.chargeCorridorMat.emissiveColor.set(
+                lockedAim && pulse ? 1.0 : 0.95,
+                lockedAim && pulse ? 0.78 : 0.28,
+                lockedAim && pulse ? 0.25 : 0.08
+              );
+              rig.chargeCorridorMat.alpha = lockedAim ? 0.68 : 0.45;
+            }
+          }
+        } else if (enemy.kind === "boss") {
           const showCorridor =
             enemy.state === "charge_aim" || enemy.state === "charge_lock";
           if (rig.chargeCorridorRoot && rig.chargeCorridorMat) {
