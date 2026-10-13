@@ -62,6 +62,29 @@ interface PropVisualRig {
   prefab: PropPrefabId;
   customModelId?: string;
   colorHex?: string;
+  bushFoliage?: Mesh | TransformNode;
+  bushStump?: TransformNode;
+}
+
+interface BushLeafParticle {
+  mesh: Mesh;
+  vx: number;
+  vy: number;
+  vz: number;
+  rx0: number;
+  ry0: number;
+  rz0: number;
+  wx: number;
+  wy: number;
+  wz: number;
+  flutterFreq: number;
+  flutterPhase: number;
+  baseScale: Vector3;
+}
+
+interface BushBurstVisualRig {
+  root: TransformNode;
+  particles: BushLeafParticle[];
 }
 
 interface PortalVisualRig {
@@ -782,6 +805,9 @@ export default function BabylonCanvas() {
       const root = new TransformNode(`propRoot-${prop.id}`, scene);
       const meta = { editorKind: "prop" as const, editorId: prop.id };
 
+      let bushFoliage: Mesh | TransformNode | undefined;
+      let bushStump: TransformNode | undefined;
+
       if (prop.prefab === "pine_tree") {
         const trunk = MeshBuilder.CreateCylinder(
           `trunk-${prop.id}`,
@@ -842,7 +868,34 @@ export default function BabylonCanvas() {
           lobe.position.set(off.x, 0.38, off.z);
           bushParts.push(lobe);
         }
-        mergeGroupWithMaterial(`bushMerged-${prop.id}`, bushParts, bushMat, root, meta);
+        bushFoliage =
+          mergeGroupWithMaterial(`bushMerged-${prop.id}`, bushParts, bushMat, root, meta) ??
+          undefined;
+
+        // Low cut-grass ring & woody stem stump shown after the bush is chopped down
+        const stumpNode = new TransformNode(`bushStump-${prop.id}`, scene);
+        stumpNode.parent = root;
+
+        const grassRing = MeshBuilder.CreateCylinder(
+          `bushCutRing-${prop.id}`,
+          { diameterTop: 1.05, diameterBottom: 1.2, height: 0.06, tessellation: 12 },
+          scene
+        );
+        grassRing.position.set(0, 0.03, 0);
+        grassRing.material = foliageMat;
+        grassRing.parent = stumpNode;
+
+        const woodyStem = MeshBuilder.CreateCylinder(
+          `bushCutStem-${prop.id}`,
+          { diameterTop: 0.28, diameterBottom: 0.38, height: 0.14, tessellation: 8 },
+          scene
+        );
+        woodyStem.position.set(0, 0.07, 0);
+        woodyStem.material = woodMat;
+        woodyStem.parent = stumpNode;
+
+        stumpNode.setEnabled(false);
+        bushStump = stumpNode;
       } else if (prop.prefab === "flower_patch") {
         const stemParts: Mesh[] = [];
         const petalParts: Mesh[] = [];
@@ -1096,6 +1149,8 @@ export default function BabylonCanvas() {
         prefab: prop.prefab,
         customModelId: prop.customModelId,
         colorHex: prop.colorHex,
+        bushFoliage,
+        bushStump,
       };
     };
 
@@ -2429,6 +2484,100 @@ export default function BabylonCanvas() {
     };
 
     // =========================================================
+    // 3D BUSH CHOP LEAF & GRASS PARTICLE BURST BUILDER
+    // =========================================================
+    const bushBurstRigs = new Map<string, BushBurstVisualRig>();
+    const leafBrightMat = makeMat(
+      "leafBrightMat",
+      new Color3(0.46, 0.94, 0.34),
+      new Color3(0.12, 0.28, 0.08),
+      new Color3(0.2, 0.35, 0.15)
+    );
+    leafBrightMat.backFaceCulling = false;
+
+    const leafEmeraldMat = makeMat(
+      "leafEmeraldMat",
+      new Color3(0.22, 0.78, 0.31),
+      new Color3(0.06, 0.18, 0.07),
+      new Color3(0.15, 0.3, 0.12)
+    );
+    leafEmeraldMat.backFaceCulling = false;
+
+    const leafDeepMat = makeMat(
+      "leafDeepMat",
+      new Color3(0.14, 0.56, 0.22),
+      new Color3(0.03, 0.11, 0.04),
+      new Color3(0.1, 0.2, 0.08)
+    );
+    leafDeepMat.backFaceCulling = false;
+
+    const buildBushBurstRig = (id: string, seed: number): BushBurstVisualRig => {
+      const root = new TransformNode(`bushBurstRoot-${id}`, scene);
+      const particles: BushLeafParticle[] = [];
+      const count = 22;
+
+      const pseudoRand = (n: number): number => {
+        const x = Math.sin(seed * 19.73 + n * 78.233) * 43758.5453;
+        return x - Math.floor(x);
+      };
+
+      for (let i = 0; i < count; i++) {
+        const isGrassBlade = i % 3 === 0;
+        let mesh: Mesh;
+        let baseScale: Vector3;
+
+        if (isGrassBlade) {
+          mesh = MeshBuilder.CreateBox(
+            `grassBlade-${id}-${i}`,
+            { width: 0.09, height: 0.46, depth: 0.03 },
+            scene
+          );
+          baseScale = new Vector3(
+            0.85 + pseudoRand(i * 5 + 1) * 0.45,
+            0.85 + pseudoRand(i * 5 + 2) * 0.65,
+            1.0
+          );
+        } else {
+          mesh = MeshBuilder.CreatePolyhedron(
+            `leafPart-${id}-${i}`,
+            { type: 1, size: 0.22 },
+            scene
+          );
+          const s = 0.8 + pseudoRand(i * 7 + 1) * 0.55;
+          baseScale = new Vector3(1.25 * s, 0.22 * s, 0.72 * s);
+        }
+
+        mesh.material =
+          i % 3 === 0 ? leafBrightMat : i % 3 === 1 ? leafEmeraldMat : leafDeepMat;
+        mesh.isPickable = false;
+        mesh.parent = root;
+
+        const angle =
+          (i / count) * Math.PI * 2 + (pseudoRand(i * 11 + 3) - 0.5) * 0.48;
+        const speed = 2.4 + pseudoRand(i * 13 + 4) * 4.8;
+        const vy = 4.8 + pseudoRand(i * 17 + 5) * 4.6;
+
+        particles.push({
+          mesh,
+          vx: Math.cos(angle) * speed,
+          vy,
+          vz: Math.sin(angle) * speed,
+          rx0: pseudoRand(i * 19 + 1) * Math.PI * 2,
+          ry0: pseudoRand(i * 23 + 2) * Math.PI * 2,
+          rz0: pseudoRand(i * 29 + 3) * Math.PI * 2,
+          wx: (pseudoRand(i * 31 + 4) - 0.5) * 18.0,
+          wy: (pseudoRand(i * 37 + 5) - 0.5) * 18.0,
+          wz: (pseudoRand(i * 41 + 6) - 0.5) * 18.0,
+          flutterFreq: 10.0 + pseudoRand(i * 43 + 7) * 8.0,
+          flutterPhase: pseudoRand(i * 47 + 8) * Math.PI * 2,
+          baseScale,
+        });
+      }
+
+      return { root, particles };
+    };
+
+    // =========================================================
     // KEYBOARD & POINTER INPUT + MAP EDITOR 3D RAYCAST INTERACTION
     // =========================================================
     const pressedKeys = new Set<string>();
@@ -2765,6 +2914,12 @@ export default function BabylonCanvas() {
           pRig.root.position.set(prop.x, groundY + prop.y, prop.z);
           pRig.root.rotation.y = prop.rotY;
           pRig.root.scaling.set(prop.scaleX, prop.scaleY, prop.scaleZ);
+
+          if (prop.prefab === "bush") {
+            const isCut = !snap.editorMode && snap.cutBushIds.includes(prop.id);
+            if (pRig.bushFoliage) pRig.bushFoliage.setEnabled(!isCut);
+            if (pRig.bushStump) pRig.bushStump.setEnabled(isCut);
+          }
         }
       }
       propRigs.forEach((pRig, id) => {
@@ -3131,7 +3286,62 @@ export default function BabylonCanvas() {
         }
       });
 
-      // 10. Sync Rupees (pickable in Editor Mode!)
+      // 9b. Sync 3D Bush Chop Leaf & Grass Particle Bursts
+      const activeBurstIds = new Set<string>();
+      for (const burst of snap.bushBursts) {
+        activeBurstIds.add(burst.id);
+        let bRig = bushBurstRigs.get(burst.id);
+        if (!bRig) {
+          bRig = buildBushBurstRig(burst.id, burst.seed);
+          bushBurstRigs.set(burst.id, bRig);
+        }
+
+        const showBurst = burst.zone === snap.zone && burst.timer > 0;
+        bRig.root.setEnabled(showBurst);
+        if (!showBurst) continue;
+
+        const burstGroundY = sampleTerrainHeight(activeCells, burst.x, burst.z);
+        bRig.root.position.set(burst.x, burstGroundY, burst.z);
+
+        const elapsed = Math.max(0, burst.maxTimer - burst.timer);
+        const progress = Math.min(1, elapsed / burst.maxTimer);
+        const drag = 1 - progress * 0.36;
+        const scaleFade =
+          progress > 0.68 ? Math.max(0.01, (1 - progress) / 0.32) : 1.0;
+
+        for (const p of bRig.particles) {
+          const flutterX =
+            Math.sin(elapsed * p.flutterFreq + p.flutterPhase) * 0.24 * progress;
+          const flutterZ =
+            Math.cos(elapsed * p.flutterFreq + p.flutterPhase) * 0.24 * progress;
+          const px = p.vx * elapsed * drag + flutterX;
+          const pz = p.vz * elapsed * drag + flutterZ;
+          const py = Math.max(
+            0.04,
+            0.52 + p.vy * elapsed - 0.5 * 19.5 * elapsed * elapsed
+          );
+          p.mesh.position.set(px, py, pz);
+          p.mesh.rotation.set(
+            p.rx0 + p.wx * elapsed,
+            p.ry0 + p.wy * elapsed,
+            p.rz0 + p.wz * elapsed
+          );
+          p.mesh.scaling.set(
+            p.baseScale.x * scaleFade,
+            p.baseScale.y * scaleFade,
+            p.baseScale.z * scaleFade
+          );
+        }
+      }
+
+      bushBurstRigs.forEach((bRig, id) => {
+        if (!activeBurstIds.has(id)) {
+          bRig.root.dispose();
+          bushBurstRigs.delete(id);
+        }
+      });
+
+      // 10. Sync Rupees (pickable in Editor Mode, with parabolic pop-up arc when dropped!)
       const activeRupeeIds = new Set<string>();
       for (const rupee of snap.rupees) {
         activeRupeeIds.add(rupee.id);
@@ -3158,12 +3368,23 @@ export default function BabylonCanvas() {
         mesh.setEnabled(showRupee);
         if (showRupee) {
           const rGroundY = sampleTerrainHeight(activeCells, rupee.x, rupee.z);
+          const bounceLeft = !snap.editorMode ? rupee.spawnBounceTimer ?? 0 : 0;
+          let bounceArcY = 0;
+          if (bounceLeft > 0) {
+            const bp = 1 - Math.min(1, bounceLeft / 0.46);
+            bounceArcY = 4 * 1.35 * bp * (1 - bp);
+          }
           mesh.position.set(
             rupee.x,
-            rGroundY + 0.65 + (snap.editorMode ? 0 : Math.sin(t * 4.2 + rupee.x) * 0.14),
+            rGroundY +
+              0.65 +
+              bounceArcY +
+              (snap.editorMode ? 0 : Math.sin(t * 4.2 + rupee.x) * 0.14),
             rupee.z
           );
-          mesh.rotation.y = snap.editorMode ? 0 : t * 3.0 + rupee.z;
+          mesh.rotation.y = snap.editorMode
+            ? 0
+            : t * (bounceLeft > 0 ? 11.0 : 3.0) + rupee.z;
         }
       }
       rupeeMeshes.forEach((mesh, id) => {
