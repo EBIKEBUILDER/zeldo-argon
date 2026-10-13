@@ -12,7 +12,7 @@ An overhead 3D action-adventure browser game built with **Next.js 16 (App Router
 
 1. **The Whispering Vale (Overworld)**:
    - Begin in the safe **South Clearing** and cross the wooden bridge into the Central Crossroads.
-   - Defeat patrolling Slimes, Moss Goblins, and Iron Sentinels to collect **Rupees** (`Green = 1`, `Blue = 5`, `Red = 20`).
+   - Defeat patrolling Poring-style Blobby Slimes, Moss Goblins, and Iron Sentinels to collect **Rupees** (`Green = 1`, `Blue = 5`, `Red = 20`).
    - Venture into the **Western Watchtower Ruins** to recover the golden **Sanctum Key**.
 2. **The Sunken Sanctum (Dungeon)**:
    - Travel north to enter the glowing **Sanctum Portal**.
