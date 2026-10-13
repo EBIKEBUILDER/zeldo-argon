@@ -621,6 +621,54 @@ class SoundEngine {
     });
   }
 
+  public playBushCut(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // 1. Crisp leafy foliage rustle (bandpass-filtered noise bursts)
+    const bufferSize = Math.floor(ctx.sampleRate * 0.14);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      const env = Math.sin((i / bufferSize) * Math.PI);
+      data[i] = (Math.random() * 2 - 1) * env;
+    }
+
+    [1650, 2450].forEach((freq, idx) => {
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.Q.setValueAtTime(2.2, now + idx * 0.025);
+      filter.frequency.setValueAtTime(freq, now + idx * 0.025);
+      filter.frequency.exponentialRampToValueAtTime(freq * 0.45, now + idx * 0.025 + 0.12);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.22, now + idx * 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.025 + 0.13);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      noise.start(now + idx * 0.025);
+    });
+
+    // 2. Quick woody stem snip
+    const snip = ctx.createOscillator();
+    const snipGain = ctx.createGain();
+    snip.type = "triangle";
+    snip.frequency.setValueAtTime(420, now);
+    snip.frequency.exponentialRampToValueAtTime(145, now + 0.065);
+    snipGain.gain.setValueAtTime(0.14, now);
+    snipGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+    snip.connect(snipGain);
+    snipGain.connect(ctx.destination);
+    snip.start(now);
+    snip.stop(now + 0.075);
+  }
+
   public playGameOver(): void {
     const ctx = this.getContext();
     if (!ctx) return;

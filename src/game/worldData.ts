@@ -844,18 +844,32 @@ export function buildInitialMapProps(): MapPropInstance[] {
     });
   });
 
-  // 6. Individual Leafy Bushes, Boulders, Flowers & Watchtower Pillars in Overworld
+  // 6. Individual Leafy Bushes (arranged in choppable clusters!), Boulders, Flowers & Watchtower Pillars
   const bushCoords = [
-    { x: -5.5, z: -28 },
-    { x: -7.5, z: -28 },
-    { x: 5.5, z: -26 },
-    { x: -10, z: -15 },
-    { x: 10, z: -14 },
-    { x: -11, z: 8 },
-    { x: 11, z: 9 },
-    { x: 21, z: 2 },
-    { x: 21, z: 4.2 },
-    { x: -23, z: 11 },
+    // South Clearing West Cluster (near starting path)
+    { x: -5.5, z: -28.0 },
+    { x: -7.1, z: -28.0 },
+    { x: -6.3, z: -29.4 },
+    // South Clearing East Cluster (near Merchant Shop)
+    { x: 5.2, z: -26.2 },
+    { x: 6.8, z: -26.2 },
+    { x: 6.0, z: -24.8 },
+    // South Riverbank Clusters
+    { x: -10.0, z: -15.0 },
+    { x: -11.6, z: -15.0 },
+    { x: 10.0, z: -14.2 },
+    { x: 11.6, z: -14.2 },
+    // Central Meadow & Crossroads Clusters
+    { x: -11.0, z: 8.0 },
+    { x: -12.6, z: 8.2 },
+    { x: 11.0, z: 9.0 },
+    { x: 12.6, z: 9.2 },
+    // Eastern Grove Cluster
+    { x: 21.0, z: 2.0 },
+    { x: 21.0, z: 3.7 },
+    { x: 22.5, z: 2.8 },
+    // Western Watchtower Ruins Cluster
+    { x: -23.0, z: 11.0 },
   ];
   bushCoords.forEach((bc, idx) => {
     props.push({

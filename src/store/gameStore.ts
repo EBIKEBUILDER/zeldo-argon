@@ -167,6 +167,17 @@ export interface RupeeItemState {
   tier: RupeeTier;
   value: number;
   collected: boolean;
+  spawnBounceTimer?: number;
+}
+
+export interface BushBurstState {
+  id: string;
+  zone: ZoneId;
+  x: number;
+  z: number;
+  timer: number;
+  maxTimer: number;
+  seed: number;
 }
 
 export interface GameFlags {
@@ -211,6 +222,10 @@ export interface SerializableGameState {
   projectiles: BossProjectileState[];
   hazards: HazardZoneState[];
   rupees: RupeeItemState[];
+  cutBushIds: string[];
+  lootedBushIds: string[];
+  bushRupeesEarned: number;
+  bushBursts: BushBurstState[];
   mapProps: MapPropInstance[];
   portals: MapPortal[];
   customModels: CustomModelAsset[];
@@ -534,6 +549,10 @@ function createInitialState(
     projectiles: [],
     hazards: [],
     rupees: createInitialRupees(),
+    cutBushIds: [],
+    lootedBushIds: [],
+    bushRupeesEarned: 0,
+    bushBursts: [],
     mapProps: buildInitialMapProps(),
     portals: INITIAL_PORTALS.map((p) => ({ ...p })),
     customModels: createBuiltInCustomModels(),
@@ -1132,8 +1151,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           actionCooldown: 1.0,
         })),
       rupees: state.rupees
-        .filter((r) => !r.id.startsWith("drop-"))
-        .map((r) => ({ ...r, collected: false })),
+        .filter((r) => !r.id.startsWith("drop-") && !r.id.startsWith("bush-drop-"))
+        .map((r) => ({ ...r, collected: false, spawnBounceTimer: 0 })),
+      cutBushIds: [],
+      lootedBushIds: [],
+      bushRupeesEarned: 0,
+      bushBursts: [],
       arrows: [],
       projectiles: [],
       hazards: [],
@@ -1481,6 +1504,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // Track cut bushes, looted bushes, bush rupee cap, and active leaf bursts
+    let cutBushIds = [...state.cutBushIds];
+    const lootedBushIds = [...state.lootedBushIds];
+    let bushRupeesEarned = state.bushRupeesEarned;
+    const bushBursts: BushBurstState[] = state.bushBursts
+      .map((b) => ({ ...b, timer: b.timer - dt }))
+      .filter((b) => b.timer > 0);
+
     // 3. Check Dynamic Portal Transitions (supports all authored & custom Map Editor portals!)
     if (hero.portalCooldown <= 0) {
       for (const portal of state.portals) {
@@ -1498,6 +1529,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.knockbackVz = 0;
           hero.portalCooldown = 1.25;
           boomerang = null;
+          // Regrow cut bushes when transitioning between zones (lootedBushIds & cap prevent infinite farming!)
+          cutBushIds = [];
           soundEngine.playPortalTransition();
           pushBanner(portal.label, portal.sublabel);
           break;
@@ -1616,7 +1649,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     // 8. Update Boomerang Flight
-    const rupees: RupeeItemState[] = state.rupees.map((r) => ({ ...r }));
+    const rupees: RupeeItemState[] = state.rupees.map((r) => ({
+      ...r,
+      spawnBounceTimer: Math.max(0, (r.spawnBounceTimer ?? 0) - dt),
+    }));
     const enemies: EnemyState[] = state.enemies.map((e) => ({ ...e }));
 
     if (boomerang) {
@@ -1660,10 +1696,114 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (boomerang) {
           for (const rupee of rupees) {
             if (rupee.zone !== zone || rupee.collected) continue;
+            if ((rupee.spawnBounceTimer ?? 0) > 0.12) continue;
             if (Math.hypot(rupee.x - boomerang.x, rupee.z - boomerang.z) < 1.35) {
               rupee.collected = true;
               hero.rupees += rupee.value;
               soundEngine.playRupeePickup(rupee.tier);
+            }
+          }
+        }
+      }
+    }
+
+    // 8b. Bush Chopping (via Sword Swing or Boomerang) + Green Leaf Burst & Classic Rupee Drop Table
+    const MAX_BUSH_RUPEES_CAP = 32;
+    let playedBushCutThisFrame = false;
+
+    for (const prop of state.mapProps) {
+      if (prop.prefab !== "bush" || prop.zone !== zone) continue;
+      if (cutBushIds.includes(prop.id)) continue;
+
+      const bushRadius = 0.72 * Math.max(prop.scaleX, prop.scaleZ);
+      let hitBush = false;
+
+      // Check Hero Sword Swing arc
+      if (hero.isAttacking && hero.attackTimer > 0.04) {
+        const dx = prop.x - hero.x;
+        const dz = prop.z - hero.z;
+        const dist = Math.hypot(dx, dz);
+        const reach = 2.85 + bushRadius;
+        if (dist <= reach) {
+          const angleToBush = Math.atan2(dx, dz);
+          const angleDiff = Math.abs(normalizeAngleDiff(angleToBush, hero.facing));
+          if (angleDiff <= 1.42 || dist <= 1.35) {
+            hitBush = true;
+          }
+        }
+      }
+
+      // Check Boomerang hit
+      if (!hitBush && boomerang) {
+        if (Math.hypot(prop.x - boomerang.x, prop.z - boomerang.z) <= bushRadius + 0.65) {
+          hitBush = true;
+        }
+      }
+
+      if (hitBush) {
+        cutBushIds.push(prop.id);
+        if (!playedBushCutThisFrame) {
+          playedBushCutThisFrame = true;
+          soundEngine.playBushCut();
+        }
+
+        // Spawn 3D green leaf & grass blade explosion
+        bushBursts.push({
+          id: `bush-burst-${prop.id}-${stats.elapsedSeconds.toFixed(3)}`,
+          zone,
+          x: prop.x,
+          z: prop.z,
+          timer: 0.88,
+          maxTimer: 0.88,
+          seed: Math.floor(Math.abs(prop.x * 41 + prop.z * 83) + stats.elapsedSeconds * 130),
+        });
+
+        // Classic Bush Rupee Drop Table:
+        // - First-time cut of a bush: 38% chance to drop a rupee
+        //   * 74% of drops: 1 Rupee (Green)
+        //   * 20% of drops: 5 Rupees (Blue)
+        //   * 6% of drops: 20 Rupees (Red Jackpot!)
+        // - Re-cutting after leaving & re-entering zone: tiny 5% chance for 1 Rupee (capped at MAX_BUSH_RUPEES_CAP)
+        const alreadyCutOnce = lootedBushIds.includes(prop.id);
+        if (!alreadyCutOnce) {
+          lootedBushIds.push(prop.id);
+        }
+
+        if (bushRupeesEarned < MAX_BUSH_RUPEES_CAP) {
+          const dropChance = alreadyCutOnce ? 0.05 : 0.38;
+          if (Math.random() < dropChance) {
+            let tier: RupeeTier = "green";
+            let value = 1;
+
+            if (!alreadyCutOnce) {
+              const tierRoll = Math.random();
+              if (tierRoll >= 0.94 && bushRupeesEarned + 20 <= MAX_BUSH_RUPEES_CAP + 8) {
+                tier = "red";
+                value = 20;
+              } else if (tierRoll >= 0.74) {
+                tier = "blue";
+                value = 5;
+              }
+            }
+
+            bushRupeesEarned += value;
+            rupees.push({
+              id: `bush-drop-${prop.id}-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: prop.x,
+              z: prop.z,
+              tier,
+              value,
+              collected: false,
+              spawnBounceTimer: 0.46,
+            });
+
+            if (tier === "red") {
+              pushBanner(
+                "Lucky Bush Jackpot! (+20 Red Rupee)",
+                "A rare crimson crystal rupee leaped out of the foliage!",
+                3.6
+              );
             }
           }
         }
@@ -1699,6 +1839,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             tier: drop.tier,
             value: drop.val,
             collected: false,
+            spawnBounceTimer: 0.42,
           });
         });
       } else {
@@ -1713,6 +1854,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           tier,
           value,
           collected: false,
+          spawnBounceTimer: 0.36,
         });
       }
     };
@@ -2392,9 +2534,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 12. Rupee Magnet & Pickup
+    // 12. Rupee Magnet & Pickup (waits until initial pop-up bounce settles so player sees drops!)
     for (const rupee of rupees) {
       if (rupee.zone !== zone || rupee.collected) continue;
+      if ((rupee.spawnBounceTimer ?? 0) > 0.14) continue;
       const dx = hero.x - rupee.x;
       const dz = hero.z - rupee.z;
       const dist = Math.hypot(dx, dz);
@@ -2448,6 +2591,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       projectiles,
       hazards,
       rupees,
+      cutBushIds,
+      lootedBushIds,
+      bushRupeesEarned,
+      bushBursts,
       flags,
       stats,
       banner,
