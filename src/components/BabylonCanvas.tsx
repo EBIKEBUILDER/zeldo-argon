@@ -18,17 +18,23 @@ import {
   VertexBuffer,
   VertexData,
 } from "@babylonjs/core";
-import { useGameStore } from "@/store/gameStore";
+import {
+  EditorEntityKind,
+  sampleTerrainHeight,
+  TerrainCellData,
+  useGameStore,
+} from "@/store/gameStore";
 import {
   BOSS_CHEST_POS,
-  DUNGEON_EXIT_POS,
+  CustomModelAsset,
   DUNGEON_KEY_POS,
   EnemyKind,
   LOCKED_GATE_POS,
-  OVERWORLD_PORTAL_POS,
+  MapPortal,
+  MapPropInstance,
+  PropPrefabId,
   SHOP_INTERACT_POS,
   SHOP_STALL_POS,
-  WORLD_OBSTACLES,
   ZoneId,
 } from "@/game/worldData";
 
@@ -49,6 +55,22 @@ interface EnemyMeshRig {
   lungeShieldMesh?: Mesh;
   stunStarsRoot?: TransformNode;
   archerAimLine?: Mesh;
+}
+
+interface PropVisualRig {
+  root: TransformNode;
+  prefab: PropPrefabId;
+  customModelId?: string;
+  colorHex?: string;
+}
+
+interface PortalVisualRig {
+  root: TransformNode;
+  disc: Mesh;
+  ring: Mesh;
+  pillarL: Mesh;
+  pillarR: Mesh;
+  color: string;
 }
 
 interface ProjectileVisualRig {
@@ -128,7 +150,8 @@ function mergeGroupWithMaterial(
   name: string,
   meshes: Mesh[],
   material: StandardMaterial,
-  parent: TransformNode
+  parent: TransformNode,
+  editorMeta?: { editorKind: EditorEntityKind; editorId: string }
 ): Mesh | null {
   if (meshes.length === 0) return null;
   const merged = Mesh.MergeMeshes(meshes, true, true, undefined, false, false);
@@ -136,8 +159,99 @@ function mergeGroupWithMaterial(
     merged.name = name;
     merged.material = material;
     merged.parent = parent;
+    if (editorMeta) {
+      merged.metadata = editorMeta;
+      merged.isPickable = true;
+    }
   }
   return merged;
+}
+
+function tagHierarchyMetadata(
+  root: TransformNode,
+  editorKind: EditorEntityKind,
+  editorId: string
+) {
+  root.getChildMeshes().forEach((m) => {
+    m.metadata = { editorKind, editorId };
+    m.isPickable = true;
+  });
+}
+
+function hexToColor3(hex: string, fallback = new Color3(0.3, 0.8, 1.0)): Color3 {
+  try {
+    const clean = hex.replace("#", "");
+    if (clean.length === 6) {
+      const r = parseInt(clean.slice(0, 2), 16) / 255;
+      const g = parseInt(clean.slice(2, 4), 16) / 255;
+      const b = parseInt(clean.slice(4, 6), 16) / 255;
+      if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+        return new Color3(r, g, b);
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return fallback;
+}
+
+/**
+ * Applies sculpted vertex heights and painted vertex colors from `terrainCells` onto an updatable ground mesh.
+ */
+function applyTerrainCellsToGroundMesh(
+  ground: Mesh,
+  baseColor: Color3,
+  cells: Record<string, TerrainCellData>
+) {
+  const positions = ground.getVerticesData(VertexBuffer.PositionKind);
+  const indices = ground.getIndices();
+  const normals = ground.getVerticesData(VertexBuffer.NormalKind);
+  if (!positions || !indices || !normals) return;
+
+  const vertCount = positions.length / 3;
+  let colors = ground.getVerticesData(VertexBuffer.ColorKind);
+  if (!colors || colors.length !== vertCount * 4) {
+    colors = new Array(vertCount * 4).fill(1);
+  }
+
+  const step = 2.0;
+  for (let i = 0; i < vertCount; i++) {
+    const vx = positions[i * 3];
+    const vz = positions[i * 3 + 2];
+    const gx = Math.round(vx / step);
+    const gz = Math.round(vz / step);
+    const cell = cells[`${gx},${gz}`];
+
+    const h = cell ? cell.h : 0;
+    positions[i * 3 + 1] = h;
+
+    let r = baseColor.r;
+    let g = baseColor.g;
+    let b = baseColor.b;
+    if (cell?.c) {
+      const c3 = hexToColor3(cell.c, baseColor);
+      r = c3.r;
+      g = c3.g;
+      b = c3.b;
+    } else if (Math.abs(h) > 0.15) {
+      // Subtle elevation shading on hills/valleys
+      const tint = Math.max(-0.12, Math.min(0.16, h * 0.035));
+      r = Math.min(1, Math.max(0, r + tint));
+      g = Math.min(1, Math.max(0, g + tint));
+      b = Math.min(1, Math.max(0, b + tint * 0.7));
+    }
+
+    colors[i * 4] = r;
+    colors[i * 4 + 1] = g;
+    colors[i * 4 + 2] = b;
+    colors[i * 4 + 3] = 1.0;
+  }
+
+  VertexData.ComputeNormals(positions, indices, normals);
+  ground.updateVerticesData(VertexBuffer.PositionKind, positions);
+  ground.updateVerticesData(VertexBuffer.NormalKind, normals);
+  ground.setVerticesData(VertexBuffer.ColorKind, colors, true);
+  ground.refreshBoundingInfo();
 }
 
 export default function BabylonCanvas() {
@@ -157,7 +271,7 @@ export default function BabylonCanvas() {
     scene.clearColor = new Color4(0.08, 0.14, 0.1, 1);
     scene.blockMaterialDirtyMechanism = false;
 
-    // Overhead Zeldo-style angled camera (fixed yaw, angled pitch)
+    // Overhead Zeldo-style angled camera (fixed in Play Mode, free orbit/pan/zoom in Editor Mode!)
     const camera = new ArcRotateCamera(
       "overheadCam",
       -Math.PI / 2,
@@ -166,8 +280,8 @@ export default function BabylonCanvas() {
       new Vector3(0, 0, -32),
       scene
     );
-    camera.lowerRadiusLimit = 25;
-    camera.upperRadiusLimit = 25;
+    camera.lowerRadiusLimit = 10;
+    camera.upperRadiusLimit = 80;
 
     // Lights
     const hemiLight = new HemisphericLight("hemiLight", new Vector3(0, 1, 0), scene);
@@ -248,12 +362,49 @@ export default function BabylonCanvas() {
     );
 
     // =========================================================
-    // ZONE CONTAINERS: OVERWORLD & DUNGEON (DRAW-CALL BATCHED)
+    // ZONE CONTAINERS & UPDATABLE TERRAIN MESHES
     // =========================================================
     const overworldRoot = new TransformNode("overworldRoot", scene);
     const dungeonRoot = new TransformNode("dungeonRoot", scene);
 
-    const owGrassMat = makeMat("owGrassMat", new Color3(0.24, 0.55, 0.28), undefined, new Color3(0.06, 0.08, 0.06));
+    const owBaseColor = new Color3(0.24, 0.55, 0.28);
+    const dgBaseColor = new Color3(0.18, 0.19, 0.25);
+
+    const owGroundMat = makeMat(
+      "owGroundMat",
+      new Color3(1, 1, 1),
+      undefined,
+      new Color3(0.05, 0.07, 0.05)
+    );
+    const dgGroundMat = makeMat(
+      "dgGroundMat",
+      new Color3(1, 1, 1),
+      undefined,
+      new Color3(0.08, 0.08, 0.1)
+    );
+
+    // Subdivided updatable ground meshes for real-time Terrain Brush sculpting & painting!
+    const owGround = MeshBuilder.CreateGround(
+      "owGround",
+      { width: 84, height: 84, subdivisions: 42, updatable: true },
+      scene
+    );
+    owGround.material = owGroundMat;
+    owGround.parent = overworldRoot;
+    owGround.isPickable = true;
+    applyTerrainCellsToGroundMesh(owGround, owBaseColor, {});
+
+    const dgGround = MeshBuilder.CreateGround(
+      "dgGround",
+      { width: 84, height: 84, subdivisions: 42, updatable: true },
+      scene
+    );
+    dgGround.material = dgGroundMat;
+    dgGround.parent = dungeonRoot;
+    dgGround.isPickable = true;
+    applyTerrainCellsToGroundMesh(dgGround, dgBaseColor, {});
+
+    // Shared Prop Materials
     const pathMat = makeMat("owPathMat", new Color3(0.75, 0.65, 0.46), undefined, new Color3(0.08, 0.08, 0.06));
     const woodMat = makeMat("woodMat", new Color3(0.52, 0.34, 0.18));
     const goldKeyMat = makeMat(
@@ -276,6 +427,7 @@ export default function BabylonCanvas() {
     );
     const ruinMat = makeMat("ruinMat", new Color3(0.56, 0.55, 0.51));
     const foliageMat = makeMat("foliageMat", new Color3(0.16, 0.46, 0.22));
+    const bushMat = makeMat("bushMat", new Color3(0.22, 0.58, 0.28));
     const dgWallMat = makeMat("dgWallMat", new Color3(0.25, 0.27, 0.35));
     const dgPillarMat = makeMat("dgPillarMat", new Color3(0.37, 0.39, 0.49));
     const ironGateMat = makeMat(
@@ -305,68 +457,21 @@ export default function BabylonCanvas() {
       new Color3(0.08, 0.03, 0.15)
     );
 
-    const owPathBuckets: Mesh[] = [];
-    const owWoodBuckets: Mesh[] = [];
-    const owFoliageBuckets: Mesh[] = [];
-    const owCliffBuckets: Mesh[] = [];
-    const owCliffCapBuckets: Mesh[] = [];
-    const owRuinBuckets: Mesh[] = [];
-    const owWaterBuckets: Mesh[] = [];
-
-    const dgWallBuckets: Mesh[] = [];
-    const dgPillarBuckets: Mesh[] = [];
-    const dgGoldBuckets: Mesh[] = [];
-
-    // --- OVERWORLD STATIC GEOMETRY ---
-    const owGround = MeshBuilder.CreateGround(
-      "owGround",
-      { width: 84, height: 84, subdivisions: 2 },
-      scene
-    );
-    owGround.material = owGrassMat;
-    owGround.parent = overworldRoot;
-    owGround.freezeWorldMatrix();
-
-    const mainRoad = MeshBuilder.CreateBox("mainRoad", { width: 5.2, height: 0.06, depth: 68 }, scene);
-    mainRoad.position.set(0, 0.03, 0);
-    owPathBuckets.push(mainRoad);
-
-    const crossRoad = MeshBuilder.CreateBox("crossRoad", { width: 54, height: 0.05, depth: 4.4 }, scene);
-    crossRoad.position.set(0, 0.025, -2.5);
-    owPathBuckets.push(crossRoad);
-
-    // Path leading from South Spawn to the Merchant Shop Stall
-    const shopPath = MeshBuilder.CreateBox("shopPath", { width: 14, height: 0.05, depth: 3.6 }, scene);
-    shopPath.position.set(6, 0.026, -30.5);
-    owPathBuckets.push(shopPath);
-
-    const plazaDisc = MeshBuilder.CreateCylinder(
-      "plazaDisc",
-      { diameter: 8.5, height: 0.07, tessellation: 24 },
-      scene
-    );
-    plazaDisc.position.set(0, 0.035, -2.5);
-    owRuinBuckets.push(plazaDisc);
-
-    const westCourtyard = MeshBuilder.CreateBox(
-      "westCourtyard",
-      { width: 16, height: 0.07, depth: 28 },
-      scene
-    );
-    westCourtyard.position.set(-26, 0.035, 1);
-    owRuinBuckets.push(westCourtyard);
-
     // --- MERCHANT BAZAAR STALL IN SOUTH CLEARING (11.5, -32.2) ---
     const sx = SHOP_STALL_POS.x;
     const sz = SHOP_STALL_POS.z;
 
+    const shopNode = new TransformNode("shopStallNode", scene);
+    shopNode.parent = overworldRoot;
+
+    const shopWoodParts: Mesh[] = [];
     const shopCounter = MeshBuilder.CreateBox(
       "shopCounter",
       { width: 5.2, height: 1.15, depth: 2.2 },
       scene
     );
     shopCounter.position.set(sx, 0.58, sz + 0.3);
-    owWoodBuckets.push(shopCounter);
+    shopWoodParts.push(shopCounter);
 
     for (const px of [-2.4, 2.4]) {
       for (const pz of [-1.1, 1.1]) {
@@ -376,9 +481,10 @@ export default function BabylonCanvas() {
           scene
         );
         post.position.set(sx + px, 1.7, sz + pz);
-        owWoodBuckets.push(post);
+        shopWoodParts.push(post);
       }
     }
+    mergeGroupWithMaterial("shopWoodMerged", shopWoodParts, woodMat, shopNode);
 
     const shopAwning = MeshBuilder.CreateCylinder(
       "shopAwning",
@@ -388,10 +494,8 @@ export default function BabylonCanvas() {
     shopAwning.rotation.y = Math.PI / 4;
     shopAwning.position.set(sx, 3.85, sz);
     shopAwning.material = shopCanopyMat;
-    shopAwning.parent = overworldRoot;
-    shopAwning.freezeWorldMatrix();
+    shopAwning.parent = shopNode;
 
-    // Glowing Interactive Shop Rug in front of the counter
     const shopRug = MeshBuilder.CreateCylinder(
       "shopRug",
       { diameter: 4.4, height: 0.06, tessellation: 24 },
@@ -399,10 +503,8 @@ export default function BabylonCanvas() {
     );
     shopRug.position.set(SHOP_INTERACT_POS.x, 0.035, SHOP_INTERACT_POS.z);
     shopRug.material = goldKeyMat;
-    shopRug.parent = overworldRoot;
-    shopRug.freezeWorldMatrix();
+    shopRug.parent = shopNode;
 
-    // Merchant Bramble NPC standing behind the counter
     const merchantBody = MeshBuilder.CreateCylinder(
       "merchantBody",
       { diameterTop: 0.65, diameterBottom: 0.95, height: 1.25, tessellation: 14 },
@@ -410,7 +512,7 @@ export default function BabylonCanvas() {
     );
     merchantBody.position.set(sx, 1.1, sz - 0.65);
     merchantBody.material = merchantRobeMat;
-    merchantBody.parent = overworldRoot;
+    merchantBody.parent = shopNode;
 
     const merchantHead = MeshBuilder.CreateSphere(
       "merchantHead",
@@ -419,7 +521,7 @@ export default function BabylonCanvas() {
     );
     merchantHead.position.set(sx, 1.95, sz - 0.65);
     merchantHead.material = whiteEyeMat;
-    merchantHead.parent = overworldRoot;
+    merchantHead.parent = shopNode;
 
     const merchantHat = MeshBuilder.CreateCylinder(
       "merchantHat",
@@ -428,9 +530,8 @@ export default function BabylonCanvas() {
     );
     merchantHat.position.set(sx, 2.55, sz - 0.65);
     merchantHat.material = merchantRobeMat;
-    merchantHat.parent = overworldRoot;
+    merchantHat.parent = shopNode;
 
-    // Display Items on the Shop Counter (Boomerang, Bow, Arrows, Heart)
     const displayBoomerang = MeshBuilder.CreateTorus(
       "displayBoomerang",
       { diameter: 0.75, thickness: 0.14, tessellation: 12 },
@@ -438,7 +539,7 @@ export default function BabylonCanvas() {
     );
     displayBoomerang.position.set(sx - 1.6, 1.32, sz + 0.4);
     displayBoomerang.material = goldKeyMat;
-    displayBoomerang.parent = overworldRoot;
+    displayBoomerang.parent = shopNode;
 
     const displayBow = MeshBuilder.CreateTorus(
       "displayBow",
@@ -448,7 +549,7 @@ export default function BabylonCanvas() {
     displayBow.rotation.x = Math.PI / 2;
     displayBow.position.set(sx - 0.5, 1.38, sz + 0.4);
     displayBow.material = goldKeyMat;
-    displayBow.parent = overworldRoot;
+    displayBow.parent = shopNode;
 
     const displayHeart = MeshBuilder.CreateSphere(
       "displayHeart",
@@ -457,89 +558,18 @@ export default function BabylonCanvas() {
     );
     displayHeart.position.set(sx + 1.5, 1.38, sz + 0.4);
     displayHeart.material = glowingCrimsonMat;
-    displayHeart.parent = overworldRoot;
+    displayHeart.parent = shopNode;
 
-    // Wooden Bridge across the river at z = -20.5
-    const bridgeDeck = MeshBuilder.CreateBox(
-      "bridgeDeck",
-      { width: 7.4, height: 0.28, depth: 5.2 },
-      scene
-    );
-    bridgeDeck.position.set(0, 0.16, -20.5);
-    owWoodBuckets.push(bridgeDeck);
-
-    for (const side of [-3.4, 3.4]) {
-      for (const zOff of [-22.6, -20.5, -18.4]) {
-        const post = MeshBuilder.CreateCylinder(
-          `bridgePost-${side}-${zOff}`,
-          { diameter: 0.48, height: 1.35, tessellation: 12 },
-          scene
-        );
-        post.position.set(side, 0.65, zOff);
-        owWoodBuckets.push(post);
-      }
-      const rail = MeshBuilder.CreateBox(
-        `bridgeRail-${side}`,
-        { width: 0.22, height: 0.22, depth: 4.8 },
-        scene
-      );
-      rail.position.set(side, 1.05, -20.5);
-      owWoodBuckets.push(rail);
-    }
-
-    // Northern Sanctum Temple Facade
-    for (const tx of [-3.6, 3.6]) {
-      const archCol = MeshBuilder.CreateCylinder(
-        `templeArchCol-${tx}`,
-        { diameterTop: 2.2, diameterBottom: 2.6, height: 5.6, tessellation: 16 },
-        scene
-      );
-      archCol.position.set(tx, 2.8, 35);
-      owRuinBuckets.push(archCol);
-    }
-    const templeLintel = MeshBuilder.CreateBox(
-      "templeLintel",
-      { width: 10.6, height: 1.5, depth: 3.2 },
-      scene
-    );
-    templeLintel.position.set(0, 5.8, 35);
-    owRuinBuckets.push(templeLintel);
-
-    const templeCrest = MeshBuilder.CreateCylinder(
-      "templeCrest",
-      { diameterTop: 0.4, diameterBottom: 8.5, height: 1.8, tessellation: 4 },
-      scene
-    );
-    templeCrest.rotation.y = Math.PI / 4;
-    templeCrest.position.set(0, 7.2, 35);
-    owRuinBuckets.push(templeCrest);
-
-    const overworldPortalDisc = MeshBuilder.CreateCylinder(
-      "owPortalDisc",
-      { diameter: 4.2, height: 0.15, tessellation: 24 },
-      scene
-    );
-    overworldPortalDisc.position.set(OVERWORLD_PORTAL_POS.x, 0.1, OVERWORLD_PORTAL_POS.z);
-    overworldPortalDisc.material = makeMat(
-      "owPortalMat",
-      new Color3(0.2, 0.7, 1.0),
-      new Color3(0.15, 0.55, 0.95),
-      new Color3(0.5, 0.8, 1.0),
-      0.85
-    );
-    overworldPortalDisc.parent = overworldRoot;
-    overworldPortalDisc.freezeWorldMatrix();
-
-    // Western Ruins Key Pedestal at (-28, 11)
+    // Western Ruins Key Pedestal & Floating Golden Sanctum Key
     const keyPedestal = MeshBuilder.CreateCylinder(
       "keyPedestal",
       { diameterTop: 1.8, diameterBottom: 2.3, height: 0.7, tessellation: 12 },
       scene
     );
     keyPedestal.position.set(DUNGEON_KEY_POS.x, 0.35, DUNGEON_KEY_POS.z);
-    owRuinBuckets.push(keyPedestal);
+    keyPedestal.material = ruinMat;
+    keyPedestal.parent = overworldRoot;
 
-    // Floating 3D Golden Sanctum Key
     const keyNode = new TransformNode("sanctumKeyNode", scene);
     keyNode.parent = overworldRoot;
     keyNode.position.set(DUNGEON_KEY_POS.x, 1.6, DUNGEON_KEY_POS.z);
@@ -581,16 +611,7 @@ export default function BabylonCanvas() {
     keyBeaconRing.material = goldKeyMat;
     keyBeaconRing.parent = overworldRoot;
 
-    // --- DUNGEON STATIC ENVIRONMENT ---
-    const dgGround = MeshBuilder.CreateGround(
-      "dgGround",
-      { width: 44, height: 78, subdivisions: 2 },
-      scene
-    );
-    dgGround.material = makeMat("dgFloorMat", new Color3(0.18, 0.19, 0.25));
-    dgGround.parent = dungeonRoot;
-    dgGround.freezeWorldMatrix();
-
+    // Dungeon Carpet Runner & Boss Arena Ring
     const dgRunner = MeshBuilder.CreateBox(
       "dgRunner",
       { width: 4.5, height: 0.05, depth: 66 },
@@ -603,21 +624,7 @@ export default function BabylonCanvas() {
       new Color3(0.08, 0.02, 0.03)
     );
     dgRunner.parent = dungeonRoot;
-    dgRunner.freezeWorldMatrix();
-
-    const dgExitDisc = MeshBuilder.CreateCylinder(
-      "dgExitDisc",
-      { diameter: 3.2, height: 0.12, tessellation: 24 },
-      scene
-    );
-    dgExitDisc.position.set(DUNGEON_EXIT_POS.x, 0.08, DUNGEON_EXIT_POS.z);
-    dgExitDisc.material = makeMat(
-      "dgExitMat",
-      new Color3(0.2, 0.75, 1.0),
-      new Color3(0.12, 0.45, 0.85)
-    );
-    dgExitDisc.parent = dungeonRoot;
-    dgExitDisc.freezeWorldMatrix();
+    dgRunner.isPickable = false;
 
     const bossArenaRing = MeshBuilder.CreateTorus(
       "bossArenaRing",
@@ -631,200 +638,55 @@ export default function BabylonCanvas() {
       new Color3(0.35, 0.06, 0.08)
     );
     bossArenaRing.parent = dungeonRoot;
-    bossArenaRing.freezeWorldMatrix();
+    bossArenaRing.isPickable = false;
 
+    // Locked Iron Gate in Dungeon
     const lockedGateNode = new TransformNode("lockedGateNode", scene);
     lockedGateNode.parent = dungeonRoot;
     lockedGateNode.position.set(LOCKED_GATE_POS.x, 0, LOCKED_GATE_POS.z);
 
-    WORLD_OBSTACLES.forEach((obs) => {
-      if (obs.id === "ow-shop-stall") return; // Already custom-built above
-      const w = obs.maxX - obs.minX;
-      const d = obs.maxZ - obs.minZ;
-      const h = obs.height ?? 4.0;
-      const cx = (obs.minX + obs.maxX) / 2;
-      const cz = (obs.minZ + obs.maxZ) / 2;
-
-      if (obs.kind === "gate") {
-        const ironParts: Mesh[] = [];
-        const barCount = 9;
-        for (let b = 0; b < barCount; b++) {
-          const bx = -3.0 + (b / (barCount - 1)) * 6.0;
-          const bar = MeshBuilder.CreateCylinder(
-            `gateBar-${b}`,
-            { diameter: 0.26, height: h, tessellation: 12 },
-            scene
-          );
-          bar.position.set(bx, h / 2, 0);
-          ironParts.push(bar);
-        }
-        const crossBeamTop = MeshBuilder.CreateBox(
-          "gateBeamTop",
-          { width: w, height: 0.38, depth: 0.5 },
+    {
+      const h = 4.6;
+      const w = 7.0;
+      const ironParts: Mesh[] = [];
+      const barCount = 9;
+      for (let b = 0; b < barCount; b++) {
+        const bx = -3.0 + (b / (barCount - 1)) * 6.0;
+        const bar = MeshBuilder.CreateCylinder(
+          `gateBar-${b}`,
+          { diameter: 0.26, height: h, tessellation: 12 },
           scene
         );
-        crossBeamTop.position.set(0, h - 0.5, 0);
-        ironParts.push(crossBeamTop);
-
-        const crossBeamMid = MeshBuilder.CreateBox(
-          "gateBeamMid",
-          { width: w, height: 0.34, depth: 0.45 },
-          scene
-        );
-        crossBeamMid.position.set(0, h * 0.45, 0);
-        ironParts.push(crossBeamMid);
-
-        mergeGroupWithMaterial("mergedGateIron", ironParts, ironGateMat, lockedGateNode);
-
-        const lockPlate = MeshBuilder.CreateBox(
-          "gateLockPlate",
-          { width: 1.1, height: 1.2, depth: 0.65 },
-          scene
-        );
-        lockPlate.position.set(0, h * 0.45, 0);
-        lockPlate.material = goldKeyMat;
-        lockPlate.parent = lockedGateNode;
-        return;
+        bar.position.set(bx, h / 2, 0);
+        ironParts.push(bar);
       }
-
-      if (obs.kind === "tree") {
-        const cols = Math.max(1, Math.round(w / 2.6));
-        const rows = Math.max(1, Math.round(d / 2.6));
-        for (let r = 0; r < rows; r++) {
-          for (let c = 0; c < cols; c++) {
-            const tx = obs.minX + ((c + 0.5) / cols) * w;
-            const tz = obs.minZ + ((r + 0.5) / rows) * d;
-            const trunk = MeshBuilder.CreateCylinder(
-              `trunk-${obs.id}-${r}-${c}`,
-              { diameterTop: 0.5, diameterBottom: 0.72, height: 1.6, tessellation: 10 },
-              scene
-            );
-            trunk.position.set(tx, 0.8, tz);
-            owWoodBuckets.push(trunk);
-
-            const cone1 = MeshBuilder.CreateCylinder(
-              `cone1-${obs.id}-${r}-${c}`,
-              { diameterTop: 0.25, diameterBottom: 2.55, height: 2.3, tessellation: 12 },
-              scene
-            );
-            cone1.position.set(tx, 2.25, tz);
-            owFoliageBuckets.push(cone1);
-
-            const cone2 = MeshBuilder.CreateCylinder(
-              `cone2-${obs.id}-${r}-${c}`,
-              { diameterTop: 0.12, diameterBottom: 1.95, height: 1.95, tessellation: 12 },
-              scene
-            );
-            cone2.position.set(tx, 3.55, tz);
-            owFoliageBuckets.push(cone2);
-
-            const cone3 = MeshBuilder.CreateCylinder(
-              `cone3-${obs.id}-${r}-${c}`,
-              { diameterTop: 0.04, diameterBottom: 1.25, height: 1.35, tessellation: 12 },
-              scene
-            );
-            cone3.position.set(tx, 4.55, tz);
-            owFoliageBuckets.push(cone3);
-          }
-        }
-        return;
-      }
-
-      if (obs.kind === "pillar") {
-        const targetBucket = obs.zone === "dungeon" ? dgPillarBuckets : owRuinBuckets;
-        const basePed = MeshBuilder.CreateCylinder(
-          `pillarBase-${obs.id}`,
-          { diameterTop: w * 1.08, diameterBottom: w * 1.18, height: 0.55, tessellation: 14 },
-          scene
-        );
-        basePed.position.set(cx, 0.275, cz);
-        targetBucket.push(basePed);
-
-        const col = MeshBuilder.CreateCylinder(
-          `pillar-${obs.id}`,
-          { diameterTop: w * 0.86, diameterBottom: w * 0.96, height: h, tessellation: 16 },
-          scene
-        );
-        col.position.set(cx, h / 2, cz);
-        targetBucket.push(col);
-
-        const cap = MeshBuilder.CreateCylinder(
-          `pillarCap-${obs.id}`,
-          { diameterTop: w * 1.18, diameterBottom: w * 0.92, height: 0.5, tessellation: 14 },
-          scene
-        );
-        cap.position.set(cx, h - 0.25, cz);
-        targetBucket.push(cap);
-        return;
-      }
-
-      const box = MeshBuilder.CreateBox(
-        `obs-${obs.id}`,
-        { width: w, height: h, depth: d },
+      const crossBeamTop = MeshBuilder.CreateBox(
+        "gateBeamTop",
+        { width: w, height: 0.38, depth: 0.5 },
         scene
       );
-      box.position.set(cx, obs.kind === "water" ? 0.02 : h / 2, cz);
+      crossBeamTop.position.set(0, h - 0.5, 0);
+      ironParts.push(crossBeamTop);
 
-      if (obs.kind === "water") {
-        owWaterBuckets.push(box);
-      } else if (obs.kind === "cliff") {
-        owCliffBuckets.push(box);
-        const grassCap = MeshBuilder.CreateBox(
-          `cliffCap-${obs.id}`,
-          { width: w + 0.2, height: 0.36, depth: d + 0.2 },
-          scene
-        );
-        grassCap.position.set(cx, h + 0.1, cz);
-        owCliffCapBuckets.push(grassCap);
-      } else if (obs.kind === "ruin") {
-        owRuinBuckets.push(box);
-      } else {
-        dgWallBuckets.push(box);
-      }
-    });
-
-    const torchCoords = [
-      { x: -11.5, z: -32 },
-      { x: 11.5, z: -32 },
-      { x: -11.5, z: -16 },
-      { x: 11.5, z: -16 },
-      { x: -5.2, z: 10.2 },
-      { x: 5.2, z: 10.2 },
-      { x: -14.5, z: 16 },
-      { x: 14.5, z: 16 },
-      { x: -14.5, z: 32 },
-      { x: 14.5, z: 32 },
-    ];
-    torchCoords.forEach((tc, idx) => {
-      const stand = MeshBuilder.CreateCylinder(
-        `torchStand-${idx}`,
-        { diameterTop: 0.7, diameterBottom: 0.9, height: 1.5, tessellation: 12 },
+      const crossBeamMid = MeshBuilder.CreateBox(
+        "gateBeamMid",
+        { width: w, height: 0.34, depth: 0.45 },
         scene
       );
-      stand.position.set(tc.x, 0.75, tc.z);
-      dgPillarBuckets.push(stand);
+      crossBeamMid.position.set(0, h * 0.45, 0);
+      ironParts.push(crossBeamMid);
 
-      const flame = MeshBuilder.CreateSphere(
-        `torchFlame-${idx}`,
-        { diameter: 0.68, segments: 10 },
+      mergeGroupWithMaterial("mergedGateIron", ironParts, ironGateMat, lockedGateNode);
+
+      const lockPlate = MeshBuilder.CreateBox(
+        "gateLockPlate",
+        { width: 1.1, height: 1.2, depth: 0.65 },
         scene
       );
-      flame.scaling.set(0.85, 1.45, 0.85);
-      flame.position.set(tc.x, 1.75, tc.z);
-      dgGoldBuckets.push(flame);
-    });
-
-    mergeGroupWithMaterial("owMergedPaths", owPathBuckets, pathMat, overworldRoot)?.freezeWorldMatrix();
-    mergeGroupWithMaterial("owMergedWood", owWoodBuckets, woodMat, overworldRoot)?.freezeWorldMatrix();
-    mergeGroupWithMaterial("owMergedFoliage", owFoliageBuckets, foliageMat, overworldRoot)?.freezeWorldMatrix();
-    mergeGroupWithMaterial("owMergedCliffs", owCliffBuckets, cliffMat, overworldRoot)?.freezeWorldMatrix();
-    mergeGroupWithMaterial("owMergedCliffCaps", owCliffCapBuckets, cliffTopMat, overworldRoot)?.freezeWorldMatrix();
-    mergeGroupWithMaterial("owMergedRuins", owRuinBuckets, ruinMat, overworldRoot)?.freezeWorldMatrix();
-    mergeGroupWithMaterial("owMergedWater", owWaterBuckets, waterMat, overworldRoot)?.freezeWorldMatrix();
-
-    mergeGroupWithMaterial("dgMergedWalls", dgWallBuckets, dgWallMat, dungeonRoot)?.freezeWorldMatrix();
-    mergeGroupWithMaterial("dgMergedPillars", dgPillarBuckets, dgPillarMat, dungeonRoot)?.freezeWorldMatrix();
-    mergeGroupWithMaterial("dgMergedFlames", dgGoldBuckets, goldKeyMat, dungeonRoot)?.freezeWorldMatrix();
+      lockPlate.position.set(0, h * 0.45, 0);
+      lockPlate.material = goldKeyMat;
+      lockPlate.parent = lockedGateNode;
+    }
 
     // --- BOSS CHEST & SEAL IN DUNGEON ROOM 3 (0, 33) ---
     const chestRoot = new TransformNode("bossChestRoot", scene);
@@ -906,6 +768,483 @@ export default function BabylonCanvas() {
       crestParts.push(shard);
     });
     mergeGroupWithMaterial("mergedZeldoCrest", crestParts, goldKeyMat, zeldoCrestNode);
+
+    // =========================================================
+    // INDIVIDUAL PICKABLE 3D PROP PREFAB BUILDER (FOR MAP EDITOR!)
+    // =========================================================
+    const propRigs = new Map<string, PropVisualRig>();
+    const portalRigs = new Map<string, PortalVisualRig>();
+
+    const buildPropRig = (
+      prop: MapPropInstance,
+      customModels: CustomModelAsset[]
+    ): PropVisualRig => {
+      const root = new TransformNode(`propRoot-${prop.id}`, scene);
+      const meta = { editorKind: "prop" as const, editorId: prop.id };
+
+      if (prop.prefab === "pine_tree") {
+        const trunk = MeshBuilder.CreateCylinder(
+          `trunk-${prop.id}`,
+          { diameterTop: 0.5, diameterBottom: 0.72, height: 1.6, tessellation: 10 },
+          scene
+        );
+        trunk.position.set(0, 0.8, 0);
+        trunk.material = woodMat;
+        trunk.parent = root;
+
+        const foliageParts: Mesh[] = [];
+        const c1 = MeshBuilder.CreateCylinder(
+          `c1-${prop.id}`,
+          { diameterTop: 0.25, diameterBottom: 2.55, height: 2.3, tessellation: 12 },
+          scene
+        );
+        c1.position.set(0, 2.25, 0);
+        foliageParts.push(c1);
+
+        const c2 = MeshBuilder.CreateCylinder(
+          `c2-${prop.id}`,
+          { diameterTop: 0.12, diameterBottom: 1.95, height: 1.95, tessellation: 12 },
+          scene
+        );
+        c2.position.set(0, 3.55, 0);
+        foliageParts.push(c2);
+
+        const c3 = MeshBuilder.CreateCylinder(
+          `c3-${prop.id}`,
+          { diameterTop: 0.04, diameterBottom: 1.25, height: 1.35, tessellation: 12 },
+          scene
+        );
+        c3.position.set(0, 4.55, 0);
+        foliageParts.push(c3);
+
+        mergeGroupWithMaterial(`treeFoliage-${prop.id}`, foliageParts, foliageMat, root, meta);
+      } else if (prop.prefab === "bush") {
+        const bushParts: Mesh[] = [];
+        const bCenter = MeshBuilder.CreateSphere(
+          `bushC-${prop.id}`,
+          { diameter: 1.35, segments: 10 },
+          scene
+        );
+        bCenter.scaling.set(1.1, 0.8, 1.1);
+        bCenter.position.set(0, 0.48, 0);
+        bushParts.push(bCenter);
+
+        for (const off of [
+          { x: -0.45, z: 0.2, s: 0.85 },
+          { x: 0.45, z: 0.15, s: 0.9 },
+          { x: 0, z: -0.42, s: 0.88 },
+        ]) {
+          const lobe = MeshBuilder.CreateSphere(
+            `bushLobe-${prop.id}-${off.x}`,
+            { diameter: 1.05 * off.s, segments: 10 },
+            scene
+          );
+          lobe.position.set(off.x, 0.38, off.z);
+          bushParts.push(lobe);
+        }
+        mergeGroupWithMaterial(`bushMerged-${prop.id}`, bushParts, bushMat, root, meta);
+      } else if (prop.prefab === "flower_patch") {
+        const stemParts: Mesh[] = [];
+        const petalParts: Mesh[] = [];
+        const offsets = [
+          { x: 0, z: 0 },
+          { x: -0.42, z: 0.28 },
+          { x: 0.42, z: -0.25 },
+          { x: -0.28, z: -0.38 },
+          { x: 0.35, z: 0.38 },
+        ];
+        offsets.forEach((o, idx) => {
+          const pad = MeshBuilder.CreateCylinder(
+            `flPad-${prop.id}-${idx}`,
+            { diameter: 0.38, height: 0.08, tessellation: 8 },
+            scene
+          );
+          pad.position.set(o.x, 0.04, o.z);
+          stemParts.push(pad);
+
+          const blossom = MeshBuilder.CreateSphere(
+            `flBlossom-${prop.id}-${idx}`,
+            { diameter: 0.26, segments: 8 },
+            scene
+          );
+          blossom.position.set(o.x, 0.16, o.z);
+          petalParts.push(blossom);
+        });
+        mergeGroupWithMaterial(`flStems-${prop.id}`, stemParts, bushMat, root, meta);
+        mergeGroupWithMaterial(`flPetals-${prop.id}`, petalParts, goldKeyMat, root, meta);
+      } else if (prop.prefab === "boulder") {
+        const rocks: Mesh[] = [];
+        const mainRock = MeshBuilder.CreatePolyhedron(
+          `boulderMain-${prop.id}`,
+          { type: 2, size: 1.05 },
+          scene
+        );
+        mainRock.scaling.set(1.25, 0.9, 1.15);
+        mainRock.position.set(0, 0.72, 0);
+        rocks.push(mainRock);
+
+        const sideRock = MeshBuilder.CreatePolyhedron(
+          `boulderSide-${prop.id}`,
+          { type: 1, size: 0.65 },
+          scene
+        );
+        sideRock.position.set(0.68, 0.42, 0.35);
+        rocks.push(sideRock);
+        mergeGroupWithMaterial(`boulderMerged-${prop.id}`, rocks, ruinMat, root, meta);
+      } else if (prop.prefab === "ruin_pillar" || prop.prefab === "dungeon_pillar") {
+        const mat = prop.prefab === "dungeon_pillar" ? dgPillarMat : ruinMat;
+        const h = prop.prefab === "dungeon_pillar" ? 4.8 : 4.0;
+        const w = 2.0;
+        const parts: Mesh[] = [];
+        const basePed = MeshBuilder.CreateCylinder(
+          `pilBase-${prop.id}`,
+          { diameterTop: w * 1.08, diameterBottom: w * 1.18, height: 0.55, tessellation: 14 },
+          scene
+        );
+        basePed.position.set(0, 0.275, 0);
+        parts.push(basePed);
+
+        const col = MeshBuilder.CreateCylinder(
+          `pilCol-${prop.id}`,
+          { diameterTop: w * 0.86, diameterBottom: w * 0.96, height: h, tessellation: 16 },
+          scene
+        );
+        col.position.set(0, h / 2, 0);
+        parts.push(col);
+
+        const cap = MeshBuilder.CreateCylinder(
+          `pilCap-${prop.id}`,
+          { diameterTop: w * 1.18, diameterBottom: w * 0.92, height: 0.5, tessellation: 14 },
+          scene
+        );
+        cap.position.set(0, h - 0.25, 0);
+        parts.push(cap);
+        mergeGroupWithMaterial(`pillarMerged-${prop.id}`, parts, mat, root, meta);
+      } else if (prop.prefab === "wall_torch") {
+        const stand = MeshBuilder.CreateCylinder(
+          `torchStand-${prop.id}`,
+          { diameterTop: 0.7, diameterBottom: 0.9, height: 1.5, tessellation: 12 },
+          scene
+        );
+        stand.position.set(0, 0.75, 0);
+        stand.material = dgPillarMat;
+        stand.parent = root;
+
+        const flame = MeshBuilder.CreateSphere(
+          `torchFlame-${prop.id}`,
+          { diameter: 0.68, segments: 10 },
+          scene
+        );
+        flame.scaling.set(0.85, 1.45, 0.85);
+        flame.position.set(0, 1.75, 0);
+        flame.material = goldKeyMat;
+        flame.parent = root;
+      } else if (prop.prefab === "wooden_crate") {
+        const crate = MeshBuilder.CreateBox(
+          `crateBox-${prop.id}`,
+          { width: 1.35, height: 1.35, depth: 1.35 },
+          scene
+        );
+        crate.position.set(0, 0.675, 0);
+        crate.material = woodMat;
+        crate.parent = root;
+
+        const band = MeshBuilder.CreateBox(
+          `crateBand-${prop.id}`,
+          { width: 1.42, height: 0.22, depth: 1.42 },
+          scene
+        );
+        band.position.set(0, 0.675, 0);
+        band.material = ironGateMat;
+        band.parent = root;
+      } else if (prop.prefab === "stone_wall") {
+        const wallBox = MeshBuilder.CreateBox(
+          `wallBox-${prop.id}`,
+          { width: 1, height: 1, depth: 1 },
+          scene
+        );
+        wallBox.position.set(0, 0.5, 0);
+        wallBox.material = prop.zone === "dungeon" ? dgWallMat : ruinMat;
+        wallBox.parent = root;
+      } else if (prop.prefab === "cliff_block") {
+        const cliffBox = MeshBuilder.CreateBox(
+          `cliffBox-${prop.id}`,
+          { width: 1, height: 1, depth: 1 },
+          scene
+        );
+        cliffBox.position.set(0, 0.5, 0);
+        cliffBox.material = cliffMat;
+        cliffBox.parent = root;
+
+        const cap = MeshBuilder.CreateBox(
+          `cliffCap-${prop.id}`,
+          { width: 1.04, height: 0.09, depth: 1.04 },
+          scene
+        );
+        cap.position.set(0, 1.02, 0);
+        cap.material = cliffTopMat;
+        cap.parent = root;
+      } else if (prop.prefab === "water_tile") {
+        const waterBox = MeshBuilder.CreateBox(
+          `waterBox-${prop.id}`,
+          { width: 1, height: 0.16, depth: 1 },
+          scene
+        );
+        waterBox.position.set(0, 0.02, 0);
+        waterBox.material = waterMat;
+        waterBox.parent = root;
+      } else if (prop.prefab === "path_tile") {
+        const pathBox = MeshBuilder.CreateBox(
+          `pathBox-${prop.id}`,
+          { width: 1, height: 0.06, depth: 1 },
+          scene
+        );
+        pathBox.position.set(0, 0.03, 0);
+        pathBox.material = pathMat;
+        pathBox.parent = root;
+      } else if (prop.prefab === "wooden_bridge") {
+        const parts: Mesh[] = [];
+        const deck = MeshBuilder.CreateBox(
+          `bridgeDeck-${prop.id}`,
+          { width: 7.4, height: 0.28, depth: 5.2 },
+          scene
+        );
+        deck.position.set(0, 0.16, 0);
+        parts.push(deck);
+
+        for (const side of [-3.4, 3.4]) {
+          for (const zOff of [-2.1, 0, 2.1]) {
+            const post = MeshBuilder.CreateCylinder(
+              `bridgePost-${prop.id}-${side}-${zOff}`,
+              { diameter: 0.48, height: 1.35, tessellation: 12 },
+              scene
+            );
+            post.position.set(side, 0.65, zOff);
+            parts.push(post);
+          }
+          const rail = MeshBuilder.CreateBox(
+            `bridgeRail-${prop.id}-${side}`,
+            { width: 0.22, height: 0.22, depth: 4.8 },
+            scene
+          );
+          rail.position.set(side, 1.05, 0);
+          parts.push(rail);
+        }
+        mergeGroupWithMaterial(`bridgeMerged-${prop.id}`, parts, woodMat, root, meta);
+      } else if (prop.prefab === "temple_arch") {
+        const parts: Mesh[] = [];
+        for (const tx of [-3.6, 3.6]) {
+          const archCol = MeshBuilder.CreateCylinder(
+            `templeCol-${prop.id}-${tx}`,
+            { diameterTop: 2.2, diameterBottom: 2.6, height: 5.6, tessellation: 16 },
+            scene
+          );
+          archCol.position.set(tx, 2.8, 0);
+          parts.push(archCol);
+        }
+        const lintel = MeshBuilder.CreateBox(
+          `templeLintel-${prop.id}`,
+          { width: 10.6, height: 1.5, depth: 3.2 },
+          scene
+        );
+        lintel.position.set(0, 5.8, 0);
+        parts.push(lintel);
+
+        const crest = MeshBuilder.CreateCylinder(
+          `templeCrest-${prop.id}`,
+          { diameterTop: 0.4, diameterBottom: 8.5, height: 1.8, tessellation: 4 },
+          scene
+        );
+        crest.rotation.y = Math.PI / 4;
+        crest.position.set(0, 7.2, 0);
+        parts.push(crest);
+        mergeGroupWithMaterial(`templeArchMerged-${prop.id}`, parts, ruinMat, root, meta);
+      } else if (prop.prefab === "custom_model") {
+        const asset = customModels.find((m) => m.id === prop.customModelId);
+        const customMesh = new Mesh(`customMesh-${prop.id}`, scene);
+        if (asset && asset.positions.length >= 9 && asset.indices.length >= 3) {
+          const vData = new VertexData();
+          vData.positions = asset.positions;
+          vData.indices = asset.indices;
+          vData.normals = asset.normals;
+          vData.applyToMesh(customMesh);
+        } else {
+          // Fallback crystal polyhedron
+          const fallback = MeshBuilder.CreatePolyhedron(
+            `customFallback-${prop.id}`,
+            { type: 1, size: 1.2 },
+            scene
+          );
+          fallback.position.set(0, 1.4, 0);
+          fallback.parent = root;
+        }
+        const col = hexToColor3(prop.colorHex ?? asset?.colorHex ?? "#4fd8ff");
+        customMesh.material = makeMat(
+          `customMat-${prop.id}`,
+          col,
+          col.scale(0.25),
+          new Color3(0.8, 0.9, 1.0),
+          1.0,
+          64
+        );
+        customMesh.parent = root;
+      }
+
+      tagHierarchyMetadata(root, "prop", prop.id);
+      return {
+        root,
+        prefab: prop.prefab,
+        customModelId: prop.customModelId,
+        colorHex: prop.colorHex,
+      };
+    };
+
+    const getPortalColors = (colorName: string): { diff: Color3; em: Color3 } => {
+      switch (colorName) {
+        case "gold":
+          return { diff: new Color3(1.0, 0.82, 0.22), em: new Color3(0.85, 0.58, 0.08) };
+        case "purple":
+          return { diff: new Color3(0.75, 0.32, 1.0), em: new Color3(0.55, 0.15, 0.88) };
+        case "emerald":
+          return { diff: new Color3(0.22, 0.95, 0.52), em: new Color3(0.12, 0.68, 0.32) };
+        case "crimson":
+          return { diff: new Color3(1.0, 0.25, 0.32), em: new Color3(0.85, 0.12, 0.18) };
+        default:
+          return { diff: new Color3(0.2, 0.75, 1.0), em: new Color3(0.15, 0.55, 0.95) };
+      }
+    };
+
+    const buildPortalRig = (portal: MapPortal): PortalVisualRig => {
+      const root = new TransformNode(`portalRoot-${portal.id}`, scene);
+      const { diff, em } = getPortalColors(portal.color);
+      const portalMat = makeMat(
+        `portalMat-${portal.id}`,
+        diff,
+        em,
+        new Color3(0.8, 0.9, 1.0),
+        0.85
+      );
+
+      const disc = MeshBuilder.CreateCylinder(
+        `portalDisc-${portal.id}`,
+        { diameter: portal.radius * 2, height: 0.14, tessellation: 28 },
+        scene
+      );
+      disc.position.set(0, 0.08, 0);
+      disc.material = portalMat;
+      disc.parent = root;
+
+      const ring = MeshBuilder.CreateTorus(
+        `portalRing-${portal.id}`,
+        { diameter: portal.radius * 2.15, thickness: 0.14, tessellation: 28 },
+        scene
+      );
+      ring.position.set(0, 0.18, 0);
+      ring.material = goldKeyMat;
+      ring.parent = root;
+
+      const pillarL = MeshBuilder.CreateCylinder(
+        `portalPilL-${portal.id}`,
+        { diameterTop: 0.35, diameterBottom: 0.5, height: 2.2, tessellation: 10 },
+        scene
+      );
+      pillarL.position.set(-portal.radius * 1.05, 1.1, 0);
+      pillarL.material = ruinMat;
+      pillarL.parent = root;
+
+      const pillarR = MeshBuilder.CreateCylinder(
+        `portalPilR-${portal.id}`,
+        { diameterTop: 0.35, diameterBottom: 0.5, height: 2.2, tessellation: 10 },
+        scene
+      );
+      pillarR.position.set(portal.radius * 1.05, 1.1, 0);
+      pillarR.material = ruinMat;
+      pillarR.parent = root;
+
+      tagHierarchyMetadata(root, "portal", portal.id);
+      return { root, disc, ring, pillarL, pillarR, color: portal.color };
+    };
+
+    // =========================================================
+    // 3D MAP EDITOR SELECTION GIZMO & TERRAIN BRUSH RING
+    // =========================================================
+    const editorGizmoRoot = new TransformNode("editorGizmoRoot", scene);
+    const selRing = MeshBuilder.CreateTorus(
+      "editorSelRing",
+      { diameter: 3.2, thickness: 0.14, tessellation: 32 },
+      scene
+    );
+    selRing.position.set(0, 0.15, 0);
+    selRing.material = makeMat(
+      "editorSelRingMat",
+      new Color3(1.0, 0.9, 0.2),
+      new Color3(1.0, 0.8, 0.1)
+    );
+    selRing.isPickable = false;
+    selRing.parent = editorGizmoRoot;
+
+    // Red X-Axis Arrow & Blue Z-Axis Arrow (Unity Transform Gizmo feel!)
+    const xAxisMat = makeMat("xAxisMat", new Color3(1.0, 0.22, 0.22), new Color3(0.9, 0.15, 0.15));
+    const zAxisMat = makeMat("zAxisMat", new Color3(0.22, 0.58, 1.0), new Color3(0.15, 0.45, 0.95));
+
+    const xAxisShaft = MeshBuilder.CreateCylinder(
+      "xAxisShaft",
+      { diameter: 0.12, height: 2.4, tessellation: 10 },
+      scene
+    );
+    xAxisShaft.rotation.z = -Math.PI / 2;
+    xAxisShaft.position.set(1.2, 0.45, 0);
+    xAxisShaft.material = xAxisMat;
+    xAxisShaft.isPickable = false;
+    xAxisShaft.parent = editorGizmoRoot;
+
+    const xAxisTip = MeshBuilder.CreateCylinder(
+      "xAxisTip",
+      { diameterTop: 0.02, diameterBottom: 0.36, height: 0.55, tessellation: 10 },
+      scene
+    );
+    xAxisTip.rotation.z = -Math.PI / 2;
+    xAxisTip.position.set(2.5, 0.45, 0);
+    xAxisTip.material = xAxisMat;
+    xAxisTip.isPickable = false;
+    xAxisTip.parent = editorGizmoRoot;
+
+    const zAxisShaft = MeshBuilder.CreateCylinder(
+      "zAxisShaft",
+      { diameter: 0.12, height: 2.4, tessellation: 10 },
+      scene
+    );
+    zAxisShaft.rotation.x = Math.PI / 2;
+    zAxisShaft.position.set(0, 0.45, 1.2);
+    zAxisShaft.material = zAxisMat;
+    zAxisShaft.isPickable = false;
+    zAxisShaft.parent = editorGizmoRoot;
+
+    const zAxisTip = MeshBuilder.CreateCylinder(
+      "zAxisTip",
+      { diameterTop: 0.02, diameterBottom: 0.36, height: 0.55, tessellation: 10 },
+      scene
+    );
+    zAxisTip.rotation.x = Math.PI / 2;
+    zAxisTip.position.set(0, 0.45, 2.5);
+    zAxisTip.material = zAxisMat;
+    zAxisTip.isPickable = false;
+    zAxisTip.parent = editorGizmoRoot;
+    editorGizmoRoot.setEnabled(false);
+
+    // Terrain Brush Ring Preview
+    const terrainBrushRing = MeshBuilder.CreateTorus(
+      "terrainBrushRing",
+      { diameter: 2.0, thickness: 0.08, tessellation: 36 },
+      scene
+    );
+    terrainBrushRing.material = makeMat(
+      "terrainBrushRingMat",
+      new Color3(0.3, 1.0, 0.65),
+      new Color3(0.2, 0.85, 0.5)
+    );
+    terrainBrushRing.isPickable = false;
+    terrainBrushRing.setEnabled(false);
 
     // =========================================================
     // UPGRADED HERO 3D CHARACTER RIG + SHIELD BLOCK WARD
@@ -1011,7 +1350,7 @@ export default function BabylonCanvas() {
     heroGoldParts.push(beltBuckle);
     mergeGroupWithMaterial("heroGoldMerged", heroGoldParts, goldKeyMat, heroRoot);
 
-    // Articulated Kite Shield Pivot (swings to front when Right-Click Blocking!)
+    // Articulated Kite Shield Pivot
     const heroShieldPivot = new TransformNode("heroShieldPivot", scene);
     heroShieldPivot.position.set(-0.56, 0.9, 0.24);
     heroShieldPivot.parent = heroRoot;
@@ -1034,7 +1373,6 @@ export default function BabylonCanvas() {
     shieldCrest.material = goldKeyMat;
     shieldCrest.parent = heroShieldPivot;
 
-    // Glowing Azure Guard Ward when Right-Click Blocking
     const heroBlockWard = MeshBuilder.CreateSphere(
       "heroBlockWard",
       { diameterX: 1.85, diameterY: 1.85, diameterZ: 0.85, segments: 14 },
@@ -1051,7 +1389,6 @@ export default function BabylonCanvas() {
     heroBlockWard.parent = heroRoot;
     heroBlockWard.setEnabled(false);
 
-    // Sword Pivot on Right Side
     const swordPivot = new TransformNode("swordPivot", scene);
     swordPivot.position.set(0.45, 0.92, 0.1);
     swordPivot.parent = heroRoot;
@@ -1208,7 +1545,6 @@ export default function BabylonCanvas() {
       let archerAimLine: Mesh | undefined;
 
       if (kind === "slime") {
-        // PORING-INSPIRED BLOBBY JELLY CREATURE WITH BIG GOOFY EYES
         const isDungeon = zone === "dungeon";
         const poringJellyMat = registerMat(
           `poringMat-${id}`,
@@ -1329,7 +1665,6 @@ export default function BabylonCanvas() {
         }
         mergeGroupWithMaterial(`poringBlush-${id}`, blushParts, blushMat, body);
       } else if (kind === "goblin" || kind === "archer") {
-        // SCULPTED GOBLIN RAIDER OR GOBLIN BOWMAN ARCHER
         const isArcher = kind === "archer";
         const gobSkinMat = registerMat(
           `gobSkinMat-${id}`,
@@ -1413,7 +1748,6 @@ export default function BabylonCanvas() {
           armorParts.push(boot);
         }
         if (isArcher) {
-          // Archer Quiver on back
           const quiver = MeshBuilder.CreateCylinder(
             `gobQuiver-${id}`,
             { diameter: 0.34, height: 0.85, tessellation: 10 },
@@ -1434,7 +1768,6 @@ export default function BabylonCanvas() {
         mergeGroupWithMaterial(`gobEyesMerged-${id}`, eyeParts, glowingYellowEyeMat, body);
 
         if (isArcher) {
-          // Curved Hunting Bow + Nocked Arrow on Weapon Node
           const bowArc = MeshBuilder.CreateTorus(
             `gobBow-${id}`,
             { diameter: 1.15, thickness: 0.1, tessellation: 18 },
@@ -1455,7 +1788,6 @@ export default function BabylonCanvas() {
           nockedArrow.material = glowingCrimsonMat;
           nockedArrow.parent = weapon;
 
-          // Red laser-sight aim telegraph line on ground during windup
           archerAimLine = MeshBuilder.CreateBox(
             `archerAim-${id}`,
             { width: 0.1, height: 0.04, depth: 9.5 },
@@ -1466,7 +1798,6 @@ export default function BabylonCanvas() {
           archerAimLine.parent = root;
           archerAimLine.setEnabled(false);
         } else {
-          // Spiked Wooden Club
           const clubShaft = MeshBuilder.CreateCylinder(
             `gobClub-${id}`,
             { diameterTop: 0.38, diameterBottom: 0.16, height: 1.25, tessellation: 12 },
@@ -1493,7 +1824,6 @@ export default function BabylonCanvas() {
           mergeGroupWithMaterial(`gobSpikes-${id}`, spikeParts, bladeMat, weapon);
         }
       } else if (kind === "knight") {
-        // GOTHIC PLATE-ARMORED SENTINEL KNIGHT
         const armorMat = registerMat(
           `knightMat-${id}`,
           zone === "dungeon" ? new Color3(0.32, 0.38, 0.52) : new Color3(0.62, 0.22, 0.24),
@@ -1610,7 +1940,6 @@ export default function BabylonCanvas() {
 
         mergeGroupWithMaterial(`knightHalberd-${id}`, halberdParts, bladeMat, weapon);
       } else if (kind === "minion") {
-        // HOODED ECLIPSE WRAITH MINION WITH ORBITING SHARDS
         const minionMat = registerMat(
           `minionMat-${id}`,
           new Color3(0.58, 0.16, 0.76),
@@ -1654,7 +1983,6 @@ export default function BabylonCanvas() {
         }
         mergeGroupWithMaterial(`minionEyes-${id}`, eyeParts, glowingYellowEyeMat, body);
       } else {
-        // CUSTOM SCULPTED BOSS MODEL: MALAKOR, WARDEN OF THE ECLIPSE
         const bossArmorMat = registerMat(
           `bossMat-${id}`,
           new Color3(0.72, 0.12, 0.18),
@@ -1956,6 +2284,8 @@ export default function BabylonCanvas() {
       );
       hpBarFill.parent = hpBarHolder;
 
+      tagHierarchyMetadata(root, "enemy", id);
+
       return {
         root,
         body,
@@ -2099,16 +2429,78 @@ export default function BabylonCanvas() {
     };
 
     // =========================================================
-    // KEYBOARD & POINTER INPUT LISTENERS (Incl. Right-Click Shield Block)
+    // KEYBOARD & POINTER INPUT + MAP EDITOR 3D RAYCAST INTERACTION
     // =========================================================
     const pressedKeys = new Set<string>();
     let attackTriggeredOnce = false;
     let boomerangTriggeredOnce = false;
     let bowTriggeredOnce = false;
     let rightMouseHeld = false;
+    let leftMouseHeldInEditor = false;
+    let isDraggingEntityInEditor = false;
+    let lastPointerX = 0;
+    let lastPointerY = 0;
+    let cursorGroundPos: { x: number; z: number } | null = null;
+
+    const pickGroundPoint = (): { x: number; z: number } | null => {
+      const snap = useGameStore.getState();
+      const targetGround = snap.zone === "overworld" ? owGround : dgGround;
+      const pick = scene.pick(
+        scene.pointerX,
+        scene.pointerY,
+        (m) => m === targetGround
+      );
+      if (pick?.hit && pick.pickedPoint) {
+        return {
+          x: Math.max(-40, Math.min(40, pick.pickedPoint.x)),
+          z: Math.max(-40, Math.min(40, pick.pickedPoint.z)),
+        };
+      }
+      return null;
+    };
+
+    const pickEditorEntity = (): { kind: EditorEntityKind; id: string } | null => {
+      const pick = scene.pick(
+        scene.pointerX,
+        scene.pointerY,
+        (m) => m.isEnabled() && Boolean(m.metadata?.editorKind && m.metadata?.editorId)
+      );
+      if (pick?.hit && pick.pickedMesh?.metadata) {
+        return {
+          kind: pick.pickedMesh.metadata.editorKind as EditorEntityKind,
+          id: pick.pickedMesh.metadata.editorId as string,
+        };
+      }
+      return null;
+    };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      // Do not intercept keys if user is typing in an Editor Inspector input
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+
       const code = e.code;
+      const store = useGameStore.getState();
+
+      // F2 or Tab toggles Unity-Style Play / Map Editor Mode!
+      if (code === "F2" || code === "Tab") {
+        e.preventDefault();
+        store.setEditorMode(!store.editorMode);
+        return;
+      }
+
+      if (store.editorMode) {
+        if (code === "Delete" || code === "Backspace") {
+          e.preventDefault();
+          store.deleteSelectedEntity();
+        } else if (code === "KeyD" && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          store.duplicateSelectedEntity();
+        }
+        pressedKeys.add(code);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -2141,6 +2533,47 @@ export default function BabylonCanvas() {
     };
 
     const onPointerDown = (e: PointerEvent) => {
+      lastPointerX = e.clientX;
+      lastPointerY = e.clientY;
+      const store = useGameStore.getState();
+
+      if (store.editorMode) {
+        if (e.button === 2 || e.button === 1) {
+          rightMouseHeld = true;
+          return;
+        }
+        if (e.button === 0) {
+          leftMouseHeldInEditor = true;
+          const tool = store.editorTool;
+          if (tool === "select") {
+            const hitEntity = pickEditorEntity();
+            if (hitEntity) {
+              store.setEditorSelected(hitEntity);
+              isDraggingEntityInEditor = true;
+            } else {
+              store.setEditorSelected(null);
+              isDraggingEntityInEditor = false;
+            }
+          } else if (tool === "place") {
+            const pt = pickGroundPoint();
+            if (pt) {
+              store.placeEntityAt(pt.x, pt.z);
+            }
+          } else if (tool === "delete") {
+            const hitEntity = pickEditorEntity();
+            if (hitEntity) {
+              store.deleteEntity(hitEntity.kind, hitEntity.id);
+            }
+          } else if (tool === "terrain") {
+            const pt = pickGroundPoint();
+            if (pt) {
+              store.applyTerrainStroke(pt.x, pt.z, 0.05);
+            }
+          }
+        }
+        return;
+      }
+
       if (e.button === 0) {
         attackTriggeredOnce = true;
       } else if (e.button === 2) {
@@ -2148,10 +2581,49 @@ export default function BabylonCanvas() {
       }
     };
 
+    const onPointerMove = (e: PointerEvent) => {
+      const store = useGameStore.getState();
+      const dx = e.clientX - lastPointerX;
+      const dy = e.clientY - lastPointerY;
+      lastPointerX = e.clientX;
+      lastPointerY = e.clientY;
+
+      if (!store.editorMode) return;
+
+      // Right-click drag orbits camera in Editor Mode
+      if (rightMouseHeld) {
+        camera.alpha -= dx * 0.0065;
+        camera.beta = Math.max(0.25, Math.min(1.38, camera.beta - dy * 0.0055));
+        return;
+      }
+
+      const pt = pickGroundPoint();
+      cursorGroundPos = pt;
+
+      if (leftMouseHeldInEditor && pt) {
+        if (store.editorTool === "select" && isDraggingEntityInEditor && store.editorSelected) {
+          store.moveSelectedEntityTo(pt.x, pt.z);
+        } else if (store.editorTool === "terrain") {
+          store.applyTerrainStroke(pt.x, pt.z, 0.035);
+        }
+      }
+    };
+
     const onPointerUp = (e: PointerEvent) => {
-      if (e.button === 2) {
+      if (e.button === 2 || e.button === 1) {
         rightMouseHeld = false;
       }
+      if (e.button === 0) {
+        leftMouseHeldInEditor = false;
+        isDraggingEntityInEditor = false;
+      }
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      const store = useGameStore.getState();
+      if (!store.editorMode) return;
+      e.preventDefault();
+      camera.radius = Math.max(10, Math.min(78, camera.radius + e.deltaY * 0.025));
     };
 
     const onContextMenu = (e: MouseEvent) => {
@@ -2162,6 +2634,8 @@ export default function BabylonCanvas() {
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("contextmenu", onContextMenu);
 
     // =========================================================
@@ -2169,6 +2643,7 @@ export default function BabylonCanvas() {
     // =========================================================
     let lastTime = performance.now();
     let fpsUpdateAccumulator = 0;
+    let syncedTerrainRevision = -1;
 
     engine.runRenderLoop(() => {
       const now = performance.now();
@@ -2189,36 +2664,67 @@ export default function BabylonCanvas() {
       if (pressedKeys.has("KeyD") || pressedKeys.has("ArrowRight")) moveX += 1;
       if (pressedKeys.has("KeyA") || pressedKeys.has("ArrowLeft")) moveX -= 1;
 
-      const attackPressed =
-        attackTriggeredOnce ||
-        pressedKeys.has("Space") ||
-        pressedKeys.has("KeyJ") ||
-        pressedKeys.has("KeyZ");
-      const blockHeld =
-        rightMouseHeld ||
-        pressedKeys.has("ShiftLeft") ||
-        pressedKeys.has("ShiftRight");
-      const boomerangPressed = boomerangTriggeredOnce;
-      const bowPressed = bowTriggeredOnce;
-
-      attackTriggeredOnce = false;
-      boomerangTriggeredOnce = false;
-      bowTriggeredOnce = false;
-
       const store = useGameStore.getState();
-      if (store.phase === "playing") {
-        store.tick(dt, {
-          moveX,
-          moveZ,
-          attackPressed,
-          blockHeld,
-          boomerangPressed,
-          bowPressed,
-        });
+
+      if (store.editorMode) {
+        // Editor Mode Free Pan with WASD / Arrow Keys (relative to camera yaw!)
+        if (moveX !== 0 || moveZ !== 0) {
+          const panSpeed = 24.0 * dt;
+          const forwardX = -Math.cos(camera.alpha);
+          const forwardZ = -Math.sin(camera.alpha);
+          const rightX = Math.sin(camera.alpha);
+          const rightZ = -Math.cos(camera.alpha);
+          camera.target.x = Math.max(
+            -42,
+            Math.min(42, camera.target.x + (forwardX * moveZ + rightX * moveX) * panSpeed)
+          );
+          camera.target.z = Math.max(
+            -42,
+            Math.min(42, camera.target.z + (forwardZ * moveZ + rightZ * moveX) * panSpeed)
+          );
+        }
+        attackTriggeredOnce = false;
+        boomerangTriggeredOnce = false;
+        bowTriggeredOnce = false;
+      } else {
+        const attackPressed =
+          attackTriggeredOnce ||
+          pressedKeys.has("Space") ||
+          pressedKeys.has("KeyJ") ||
+          pressedKeys.has("KeyZ");
+        const blockHeld =
+          rightMouseHeld ||
+          pressedKeys.has("ShiftLeft") ||
+          pressedKeys.has("ShiftRight");
+        const boomerangPressed = boomerangTriggeredOnce;
+        const bowPressed = bowTriggeredOnce;
+
+        attackTriggeredOnce = false;
+        boomerangTriggeredOnce = false;
+        bowTriggeredOnce = false;
+
+        if (store.phase === "playing") {
+          store.tick(dt, {
+            moveX,
+            moveZ,
+            attackPressed,
+            blockHeld,
+            boomerangPressed,
+            bowPressed,
+          });
+        }
       }
 
       const snap = useGameStore.getState();
       const t = now * 0.001;
+      const activeCells = snap.terrainCells[snap.zone];
+
+      // 0. Sync Sculpted & Painted Terrain Vertex Buffers when modified
+      if (snap.terrainRevision !== syncedTerrainRevision) {
+        syncedTerrainRevision = snap.terrainRevision;
+        applyTerrainCellsToGroundMesh(owGround, owBaseColor, snap.terrainCells.overworld);
+        applyTerrainCellsToGroundMesh(dgGround, dgBaseColor, snap.terrainCells.dungeon);
+      }
 
       // 1. Zone visibility & lighting atmosphere
       const isOverworld = snap.zone === "overworld";
@@ -2237,19 +2743,83 @@ export default function BabylonCanvas() {
         sanctumPointLight.intensity = snap.flags.bossDefeated ? 1.35 : 0.72;
       }
 
-      // 2. Sync Hero 3D Model, Shield Block Posture & Sword Swing
+      // 2. Sync Individual 3D Environment Props (`snap.mapProps`)
+      const activePropIds = new Set<string>();
+      for (const prop of snap.mapProps) {
+        activePropIds.add(prop.id);
+        let pRig = propRigs.get(prop.id);
+        if (
+          !pRig ||
+          pRig.prefab !== prop.prefab ||
+          pRig.customModelId !== prop.customModelId ||
+          pRig.colorHex !== prop.colorHex
+        ) {
+          if (pRig) pRig.root.dispose();
+          pRig = buildPropRig(prop, snap.customModels);
+          propRigs.set(prop.id, pRig);
+        }
+        const showProp = prop.zone === snap.zone;
+        pRig.root.setEnabled(showProp);
+        if (showProp) {
+          const groundY = sampleTerrainHeight(activeCells, prop.x, prop.z);
+          pRig.root.position.set(prop.x, groundY + prop.y, prop.z);
+          pRig.root.rotation.y = prop.rotY;
+          pRig.root.scaling.set(prop.scaleX, prop.scaleY, prop.scaleZ);
+        }
+      }
+      propRigs.forEach((pRig, id) => {
+        if (!activePropIds.has(id)) {
+          pRig.root.dispose();
+          propRigs.delete(id);
+        }
+      });
+
+      // 3. Sync Portals (`snap.portals`)
+      const activePortalIds = new Set<string>();
+      for (const portal of snap.portals) {
+        activePortalIds.add(portal.id);
+        let ptRig = portalRigs.get(portal.id);
+        if (!ptRig || ptRig.color !== portal.color) {
+          if (ptRig) ptRig.root.dispose();
+          ptRig = buildPortalRig(portal);
+          portalRigs.set(portal.id, ptRig);
+        }
+        const showPortal = portal.zone === snap.zone;
+        ptRig.root.setEnabled(showPortal);
+        if (showPortal) {
+          const groundY = sampleTerrainHeight(activeCells, portal.x, portal.z);
+          ptRig.root.position.set(portal.x, groundY, portal.z);
+          ptRig.ring.rotation.y = t * 1.8;
+          const rScale = portal.radius / 2.0;
+          ptRig.disc.scaling.set(rScale, 1, rScale);
+          ptRig.ring.scaling.set(rScale, 1, rScale);
+        }
+      }
+      portalRigs.forEach((ptRig, id) => {
+        if (!activePortalIds.has(id)) {
+          ptRig.root.dispose();
+          portalRigs.delete(id);
+        }
+      });
+
+      // 4. Sync Hero 3D Model, Shield Block Posture & Sword Swing
       const stride = Math.sin(snap.hero.walkCycle);
-      heroRoot.position.set(snap.hero.x, Math.abs(stride) * 0.11, snap.hero.z);
+      const heroGroundY = sampleTerrainHeight(activeCells, snap.hero.x, snap.hero.z);
+      heroRoot.position.set(
+        snap.hero.x,
+        heroGroundY + Math.abs(stride) * 0.11,
+        snap.hero.z
+      );
       heroRoot.rotation.y = snap.hero.facing;
       heroLeftBoot.position.z = stride * 0.22;
       heroRightBoot.position.z = -stride * 0.22;
 
       const heroBlinkHide =
+        !snap.editorMode &&
         snap.hero.invulnerableTimer > 0 &&
         Math.floor(snap.hero.invulnerableTimer * 18) % 2 === 0;
       heroRoot.setEnabled(!heroBlinkHide);
 
-      // Shield Block Animation (Right-Click raises shield front-and-center with glowing ward)
       if (snap.hero.isBlocking) {
         heroShieldPivot.position.set(0, 0.96, 0.56);
         heroShieldPivot.rotation.y = Math.PI / 2;
@@ -2301,19 +2871,25 @@ export default function BabylonCanvas() {
         }
       });
 
-      // 3. Smooth Camera Follow
-      if (snap.phase === "title") {
-        camera.target.set(
-          Math.sin(t * 0.25) * 6,
-          0,
-          -14 + Math.cos(t * 0.2) * 5
-        );
-      } else {
-        camera.target.x += (snap.hero.x - camera.target.x) * Math.min(1, dt * 8);
-        camera.target.z += (snap.hero.z - camera.target.z) * Math.min(1, dt * 8);
+      // 5. Camera Follow in Play Mode vs Free Orbit in Editor Mode
+      if (!snap.editorMode) {
+        camera.alpha += (-Math.PI / 2 - camera.alpha) * Math.min(1, dt * 8);
+        camera.beta += (0.72 - camera.beta) * Math.min(1, dt * 8);
+        camera.radius += (25 - camera.radius) * Math.min(1, dt * 8);
+
+        if (snap.phase === "title") {
+          camera.target.set(
+            Math.sin(t * 0.25) * 6,
+            0,
+            -14 + Math.cos(t * 0.2) * 5
+          );
+        } else {
+          camera.target.x += (snap.hero.x - camera.target.x) * Math.min(1, dt * 8);
+          camera.target.z += (snap.hero.z - camera.target.z) * Math.min(1, dt * 8);
+        }
       }
 
-      // 4. Sync Sanctum Key & Portals
+      // 6. Sync Sanctum Key, Gate & Boss Chest
       keyNode.setEnabled(isOverworld && !snap.flags.keyPickedUp);
       keyBeaconRing.setEnabled(isOverworld && !snap.flags.keyPickedUp);
       if (!snap.flags.keyPickedUp) {
@@ -2321,12 +2897,10 @@ export default function BabylonCanvas() {
         keyNode.position.y = 1.6 + Math.sin(t * 3.2) * 0.2;
       }
 
-      // 5. Sync Locked Gate in Dungeon
       const targetGateY = snap.flags.gateUnlocked ? -4.8 : 0;
       lockedGateNode.position.y +=
         (targetGateY - lockedGateNode.position.y) * Math.min(1, dt * 6);
 
-      // 6. Sync Boss Chest & Zeldo Crest
       chestSealRing.setEnabled(!snap.flags.bossDefeated);
       chestSealRing.rotation.y = t * 1.8;
       chestUnsealedRing.setEnabled(snap.flags.bossDefeated);
@@ -2363,20 +2937,27 @@ export default function BabylonCanvas() {
         }
 
         let bob = 0;
-        if (enemy.kind === "slime") {
-          const hopWave = Math.sin(t * 6.2 + eIdx * 1.3);
-          bob = Math.max(0, hopWave) * 0.34;
-          const stretchY = 1.0 + hopWave * 0.15;
-          const squashXZ = 1.0 - hopWave * 0.09;
-          rig.body.scaling.set(squashXZ, stretchY, squashXZ);
-        } else if (enemy.kind === "minion") {
-          bob = Math.sin(t * 4.5 + eIdx) * 0.22;
+        if (!snap.editorMode) {
+          if (enemy.kind === "slime") {
+            const hopWave = Math.sin(t * 6.2 + eIdx * 1.3);
+            bob = Math.max(0, hopWave) * 0.34;
+            const stretchY = 1.0 + hopWave * 0.15;
+            const squashXZ = 1.0 - hopWave * 0.09;
+            rig.body.scaling.set(squashXZ, stretchY, squashXZ);
+          } else if (enemy.kind === "minion") {
+            bob = Math.sin(t * 4.5 + eIdx) * 0.22;
+          }
+        } else {
+          rig.body.scaling.setAll(1);
         }
 
-        rig.root.position.set(enemy.x, bob, enemy.z);
+        const enemyGroundY = sampleTerrainHeight(activeCells, enemy.x, enemy.z);
+        rig.root.position.set(enemy.x, enemyGroundY + bob, enemy.z);
         rig.root.rotation.y = enemy.facing;
 
-        rig.hpBarHolder.position.set(enemy.x, rig.barY + bob, enemy.z);
+        rig.hpBarHolder.position.set(enemy.x, enemyGroundY + rig.barY + bob, enemy.z);
+        // Always face camera even when orbiting in Editor Mode!
+        rig.hpBarHolder.rotation.set(-camera.beta, -camera.alpha - Math.PI / 2, 0);
         const hpRatio = Math.max(0, enemy.hp / enemy.maxHp);
         rig.hpBarFill.scaling.x = Math.max(0.001, hpRatio);
         rig.hpBarFill.position.x = -rig.barWidth * (1 - hpRatio) * 0.5;
@@ -2385,14 +2966,13 @@ export default function BabylonCanvas() {
           rig.archerAimLine.setEnabled(enemy.state === "windup");
         }
 
-        // Boss-specific telegraph & state visuals
         if (enemy.kind === "boss") {
           const showCorridor =
             enemy.state === "charge_aim" || enemy.state === "charge_lock";
           if (rig.chargeCorridorRoot && rig.chargeCorridorMat) {
             rig.chargeCorridorRoot.setEnabled(showCorridor);
             if (showCorridor) {
-              rig.chargeCorridorRoot.position.set(enemy.x, 0, enemy.z);
+              rig.chargeCorridorRoot.position.set(enemy.x, enemyGroundY, enemy.z);
               rig.chargeCorridorRoot.rotation.y = enemy.chargeAngle;
               rig.chargeCorridorRoot.scaling.z = Math.max(1, enemy.chargePathLength);
 
@@ -2551,8 +3131,10 @@ export default function BabylonCanvas() {
         }
       });
 
-      // 10. Sync Rupees
+      // 10. Sync Rupees (pickable in Editor Mode!)
+      const activeRupeeIds = new Set<string>();
       for (const rupee of snap.rupees) {
+        activeRupeeIds.add(rupee.id);
         let mesh = rupeeMeshes.get(rupee.id);
         if (!mesh) {
           mesh = MeshBuilder.CreatePolyhedron(
@@ -2561,25 +3143,72 @@ export default function BabylonCanvas() {
             scene
           );
           mesh.scaling.set(0.75, 1.35, 0.55);
-          mesh.material =
-            rupee.tier === "red"
-              ? redRupeeMat
-              : rupee.tier === "blue"
-              ? blueRupeeMat
-              : greenRupeeMat;
+          mesh.metadata = { editorKind: "rupee", editorId: rupee.id };
+          mesh.isPickable = true;
           rupeeMeshes.set(rupee.id, mesh);
         }
+        mesh.material =
+          rupee.tier === "red"
+            ? redRupeeMat
+            : rupee.tier === "blue"
+            ? blueRupeeMat
+            : greenRupeeMat;
 
-        const showRupee = rupee.zone === snap.zone && !rupee.collected;
+        const showRupee = rupee.zone === snap.zone && (!rupee.collected || snap.editorMode);
         mesh.setEnabled(showRupee);
         if (showRupee) {
+          const rGroundY = sampleTerrainHeight(activeCells, rupee.x, rupee.z);
           mesh.position.set(
             rupee.x,
-            0.65 + Math.sin(t * 4.2 + rupee.x) * 0.14,
+            rGroundY + 0.65 + (snap.editorMode ? 0 : Math.sin(t * 4.2 + rupee.x) * 0.14),
             rupee.z
           );
-          mesh.rotation.y = t * 3.0 + rupee.z;
+          mesh.rotation.y = snap.editorMode ? 0 : t * 3.0 + rupee.z;
         }
+      }
+      rupeeMeshes.forEach((mesh, id) => {
+        if (!activeRupeeIds.has(id)) {
+          mesh.dispose();
+          rupeeMeshes.delete(id);
+        }
+      });
+
+      // 11. Sync Editor Selection Gizmo & Terrain Brush Ring
+      if (snap.editorMode && snap.editorSelected) {
+        let selPos: { x: number; z: number } | null = null;
+        if (snap.editorSelected.kind === "prop") {
+          const p = snap.mapProps.find((it) => it.id === snap.editorSelected?.id);
+          if (p && p.zone === snap.zone) selPos = { x: p.x, z: p.z };
+        } else if (snap.editorSelected.kind === "enemy") {
+          const e = snap.enemies.find((it) => it.id === snap.editorSelected?.id);
+          if (e && e.zone === snap.zone) selPos = { x: e.x, z: e.z };
+        } else if (snap.editorSelected.kind === "rupee") {
+          const r = snap.rupees.find((it) => it.id === snap.editorSelected?.id);
+          if (r && r.zone === snap.zone) selPos = { x: r.x, z: r.z };
+        } else if (snap.editorSelected.kind === "portal") {
+          const pt = snap.portals.find((it) => it.id === snap.editorSelected?.id);
+          if (pt && pt.zone === snap.zone) selPos = { x: pt.x, z: pt.z };
+        }
+
+        if (selPos) {
+          editorGizmoRoot.setEnabled(true);
+          const gy = sampleTerrainHeight(activeCells, selPos.x, selPos.z);
+          editorGizmoRoot.position.set(selPos.x, gy, selPos.z);
+          selRing.rotation.y = t * 2.0;
+        } else {
+          editorGizmoRoot.setEnabled(false);
+        }
+      } else {
+        editorGizmoRoot.setEnabled(false);
+      }
+
+      if (snap.editorMode && snap.editorTool === "terrain" && cursorGroundPos) {
+        terrainBrushRing.setEnabled(true);
+        const gy = sampleTerrainHeight(activeCells, cursorGroundPos.x, cursorGroundPos.z);
+        terrainBrushRing.position.set(cursorGroundPos.x, gy + 0.14, cursorGroundPos.z);
+        terrainBrushRing.scaling.setAll(snap.terrainBrushRadius);
+      } else {
+        terrainBrushRing.setEnabled(false);
       }
 
       scene.render();
@@ -2596,6 +3225,8 @@ export default function BabylonCanvas() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("pointerup", onPointerUp);
       canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("contextmenu", onContextMenu);
       scene.dispose();
       engine.dispose();
