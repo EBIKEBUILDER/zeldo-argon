@@ -80,6 +80,30 @@ class SoundEngine {
     osc.stop(now + 0.14);
   }
 
+  public playArmorDeflect(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Metallic ricochet clang when striking the boss's un-stunned armor
+    [1180, 1760].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      const t = now + i * 0.025;
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.72, t + 0.11);
+
+      gain.gain.setValueAtTime(0.16, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.13);
+    });
+  }
+
   public playEnemyHit(isBoss = false): void {
     const ctx = this.getContext();
     if (!ctx) return;
@@ -88,10 +112,10 @@ class SoundEngine {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = isBoss ? "sawtooth" : "square";
-    osc.frequency.setValueAtTime(isBoss ? 190 : 280, now);
-    osc.frequency.exponentialRampToValueAtTime(isBoss ? 55 : 75, now + 0.14);
+    osc.frequency.setValueAtTime(isBoss ? 220 : 280, now);
+    osc.frequency.exponentialRampToValueAtTime(isBoss ? 65 : 75, now + 0.14);
 
-    gain.gain.setValueAtTime(0.22, now);
+    gain.gain.setValueAtTime(0.24, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
 
     osc.connect(gain);
@@ -103,7 +127,7 @@ class SoundEngine {
     const ping = ctx.createOscillator();
     const pingGain = ctx.createGain();
     ping.type = "triangle";
-    ping.frequency.setValueAtTime(isBoss ? 680 : 920, now);
+    ping.frequency.setValueAtTime(isBoss ? 780 : 920, now);
     ping.frequency.exponentialRampToValueAtTime(220, now + 0.06);
     pingGain.gain.setValueAtTime(0.18, now);
     pingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
@@ -305,6 +329,26 @@ class SoundEngine {
     });
   }
 
+  public playBossChargeAim(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(95, now);
+    osc.frequency.exponentialRampToValueAtTime(340, now + 0.45);
+
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.5);
+  }
+
   public playBossAttack(): void {
     const ctx = this.getContext();
     if (!ctx) return;
@@ -313,16 +357,125 @@ class SoundEngine {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = "sawtooth";
-    osc.frequency.setValueAtTime(150, now);
-    osc.frequency.exponentialRampToValueAtTime(42, now + 0.28);
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(48, now + 0.35);
 
-    gain.gain.setValueAtTime(0.24, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.32);
+    osc.stop(now + 0.4);
+  }
+
+  public playBossWallCrash(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Heavy stone slam + dizzy stun arpeggio
+    const bufferSize = Math.floor(ctx.sampleRate * 0.32);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 1.8);
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(420, now);
+    filter.frequency.exponentialRampToValueAtTime(80, now + 0.3);
+
+    const nGain = ctx.createGain();
+    nGain.gain.setValueAtTime(0.34, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.31);
+
+    noise.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(ctx.destination);
+    noise.start(now);
+
+    // Dizzy stun bells
+    [587.33, 783.99, 659.25, 880].forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const t = now + 0.08 + idx * 0.06;
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.16, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.17);
+    });
+  }
+
+  public playBossLob(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(160, now);
+    osc.frequency.exponentialRampToValueAtTime(540, now + 0.24);
+
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.28);
+  }
+
+  public playBombExplode(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Explosive noise burst + sub thump
+    const bufferSize = Math.floor(ctx.sampleRate * 0.28);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 1.5);
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(650, now);
+    filter.frequency.exponentialRampToValueAtTime(95, now + 0.26);
+
+    const nGain = ctx.createGain();
+    nGain.gain.setValueAtTime(0.28, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.27);
+
+    noise.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(ctx.destination);
+    noise.start(now);
+
+    const boom = ctx.createOscillator();
+    const boomGain = ctx.createGain();
+    boom.type = "triangle";
+    boom.frequency.setValueAtTime(135, now);
+    boom.frequency.exponentialRampToValueAtTime(38, now + 0.25);
+    boomGain.gain.setValueAtTime(0.26, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+    boom.connect(boomGain);
+    boomGain.connect(ctx.destination);
+    boom.start(now);
+    boom.stop(now + 0.27);
   }
 
   public playBossDefeat(): void {
