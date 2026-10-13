@@ -5,6 +5,7 @@ import {
   buildInitialMapProps,
   buildObstaclesFromMapProps,
   computeBossChargePathLength,
+  computePathfindingMoveDir,
   CustomModelAsset,
   DUNGEON_KEY_POS,
   DungeonRoomId,
@@ -18,6 +19,7 @@ import {
   MapPortal,
   MapPropInstance,
   PropPrefabId,
+  resolveArrowCollisions,
   resolveWorldCollisions,
   RupeeTier,
   SHOP_INTERACT_POS,
@@ -71,6 +73,7 @@ export interface HeroState {
   shieldAbsorbToggle: boolean;
   attackTimer: number;
   attackCooldown: number;
+  boomerangCooldown: number;
   bowCooldown: number;
   portalCooldown: number;
   swingId: number;
@@ -91,7 +94,7 @@ export interface EnemyState {
   facing: number;
   hp: number;
   maxHp: number;
-  weight: number; // Controls sword knockback (0.5 = light, 2.0 = medium, 6.5 = heavy, 100 = immovable)
+  weight: number; // Controls sword knockback (0.5 = light, 2.0 = medium, 12.0 = heavy, 100 = immovable)
   state: EnemyAIState;
   stateTimer: number;
   hitFlashTimer: number;
@@ -104,7 +107,8 @@ export interface EnemyState {
   speed: number;
   damage: number;
   rupeeDrop: RupeeTier | "boss";
-  // Boss-specific serializable combat state
+  provoked?: boolean;
+  // Boss & Goblin Lunge combat state
   chargeAngle: number;
   chargePathLength: number;
   chargeDistanceTraveled: number;
@@ -134,6 +138,8 @@ export interface ArrowProjectileState {
   speed: number;
   damage: number;
   lifeTimer: number;
+  stuck?: boolean;
+  stuckTimer?: number;
 }
 
 export interface BossProjectileState {
@@ -535,6 +541,7 @@ function createInitialState(
       shieldAbsorbToggle: false,
       attackTimer: 0,
       attackCooldown: 0,
+      boomerangCooldown: 0,
       bowCooldown: 0,
       portalCooldown: 0,
       swingId: 0,
@@ -1147,6 +1154,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           stunTimer: 0,
           knockbackVx: 0,
           knockbackVz: 0,
+          provoked: false,
           actionCounter: 0,
           actionCooldown: 1.0,
         })),
@@ -1171,6 +1179,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero: {
         ...state.hero,
         hp: state.hero.maxHp,
+        boomerangCooldown: 0,
         invulnerableTimer: 0,
         knockbackVx: 0,
         knockbackVz: 0,
@@ -1373,6 +1382,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // 1. Update Hero Timers, Sword Attack, Shield Block, Boomerang & Bow
     hero.attackTimer = Math.max(0, hero.attackTimer - dt);
     hero.attackCooldown = Math.max(0, hero.attackCooldown - dt);
+    hero.boomerangCooldown = Math.max(0, (hero.boomerangCooldown ?? 0) - dt);
     hero.bowCooldown = Math.max(0, hero.bowCooldown - dt);
     hero.portalCooldown = Math.max(0, hero.portalCooldown - dt);
     hero.invulnerableTimer = Math.max(0, hero.invulnerableTimer - dt);
@@ -1391,12 +1401,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       soundEngine.playSwordSwing();
     }
 
-    // Trigger Boomerang Throw (Q or 1)
+    // Trigger Boomerang Throw (Q or 1) — 2.0 second cooldown prevents close-range spam!
     let boomerang: BoomerangState | null = state.boomerang
       ? { ...state.boomerang, hitEnemyIds: [...state.boomerang.hitEnemyIds] }
       : null;
 
-    if (input.boomerangPressed && hero.hasBoomerang && !boomerang && !state.shopOpen) {
+    if (
+      input.boomerangPressed &&
+      hero.hasBoomerang &&
+      !boomerang &&
+      hero.boomerangCooldown <= 0 &&
+      !state.shopOpen
+    ) {
+      hero.boomerangCooldown = 2.0;
       soundEngine.playBoomerangThrow();
       boomerang = {
         zone,
@@ -1859,42 +1876,69 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     };
 
-    // 9. Update Arrows (both Hero Arrows & Goblin Archer Arrows)
+    // 9. Update Arrows (both Hero Arrows & Goblin Archer Arrows — stick into walls on impact!)
     const remainingArrows: ArrowProjectileState[] = [];
     for (const arrow of arrows) {
       if (arrow.zone !== zone) continue;
+
+      if (arrow.stuck) {
+        arrow.stuckTimer = (arrow.stuckTimer ?? 0) - dt;
+        if ((arrow.stuckTimer ?? 0) > 0) {
+          remainingArrows.push(arrow);
+        }
+        continue;
+      }
+
       arrow.lifeTimer -= dt;
       if (arrow.lifeTimer <= 0) continue;
 
       const nextAx = arrow.x + Math.sin(arrow.angle) * arrow.speed * dt;
       const nextAz = arrow.z + Math.cos(arrow.angle) * arrow.speed * dt;
-      const resA = resolveWorldCollisions(
+      const resA = resolveArrowCollisions(
         nextAx,
         nextAz,
-        0.25,
+        0.22,
         zone,
         flags.gateUnlocked,
         dynamicObstacles
       );
-      if (resA.hitObstacle) continue;
+      if (resA.hitObstacle) {
+        arrow.stuck = true;
+        arrow.stuckTimer = 2.4;
+        arrow.x = nextAx - Math.sin(arrow.angle) * 0.14;
+        arrow.z = nextAz - Math.cos(arrow.angle) * 0.14;
+        soundEngine.playArrowStick();
+        remainingArrows.push(arrow);
+        continue;
+      }
 
       arrow.x = nextAx;
       arrow.z = nextAz;
 
       let arrowConsumed = false;
       if (arrow.fromHero) {
-        // Hero arrow hits enemies
+        // Hero arrow hits enemies -> immediately provokes & aggroes them to fight back!
         for (const enemy of enemies) {
           if (enemy.zone !== zone || enemy.state === "dead") continue;
           const eRad = enemy.kind === "boss" ? 1.45 : 0.85;
           if (Math.hypot(enemy.x - arrow.x, enemy.z - arrow.z) <= eRad) {
             arrowConsumed = true;
+            enemy.provoked = true;
             if (enemy.kind === "boss" && enemy.state !== "stunned") {
+              if (!flags.bossAwakened) {
+                flags.bossAwakened = true;
+                enemy.state = "aggro";
+              }
               soundEngine.playArmorDeflect();
             } else {
               enemy.hp -= arrow.damage;
               enemy.hitFlashTimer = 0.22;
-              if (enemy.state === "idle") enemy.state = "aggro";
+              if (enemy.kind !== "boss") {
+                if (enemy.state === "idle" || enemy.state === "recover") {
+                  enemy.state = "aggro";
+                }
+                enemy.actionCooldown = Math.min(enemy.actionCooldown, 0.15);
+              }
               if (enemy.hp <= 0) {
                 handleEnemyDeath(enemy);
               } else {
@@ -1923,7 +1967,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     arrows = remainingArrows;
 
-    // 10. Update Enemies & Weight-Balanced Combat Knockback
+    // 10. Update Enemies, Pathfinding & Weight-Balanced Combat Knockback
     for (let i = 0; i < enemies.length; i++) {
       const enemy = enemies[i];
       if (enemy.zone !== zone || enemy.state === "dead") continue;
@@ -1932,22 +1976,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
       enemy.stateTimer = Math.max(0, enemy.stateTimer - dt);
       enemy.knockbackImmunityTimer = Math.max(0, enemy.knockbackImmunityTimer - dt);
       enemy.stunTimer = Math.max(0, enemy.stunTimer - dt);
+      enemy.actionCooldown = Math.max(0, enemy.actionCooldown - dt);
 
       const enemyRadius =
         enemy.kind === "boss" ? 1.35 : enemy.kind === "knight" ? 0.85 : 0.7;
 
-      // Check if Boomerang hits this enemy
+      // Check if Boomerang hits this enemy -> provokes & aggroes them to fight back!
       if (boomerang && !boomerang.hitEnemyIds.includes(enemy.id)) {
         if (Math.hypot(enemy.x - boomerang.x, enemy.z - boomerang.z) <= enemyRadius + 0.65) {
           boomerang.hitEnemyIds.push(enemy.id);
           boomerang.returning = true;
+          enemy.provoked = true;
           if (enemy.kind === "boss") {
+            if (!flags.bossAwakened) {
+              flags.bossAwakened = true;
+              enemy.state = "aggro";
+            }
             soundEngine.playArmorDeflect();
           } else {
             enemy.hp -= 1;
             enemy.hitFlashTimer = 0.22;
-            enemy.stunTimer = 1.9;
-            if (enemy.state === "idle") enemy.state = "aggro";
+            // Short stagger on ranged/heavy enemies so Goblin Archers & Knights immediately fight back!
+            enemy.stunTimer =
+              enemy.kind === "archer" ? 0.35 : enemy.kind === "knight" ? 0.2 : 0.75;
+            enemy.state = "aggro";
+            enemy.actionCooldown = Math.min(enemy.actionCooldown, 0.12);
             if (enemy.hp <= 0) {
               handleEnemyDeath(enemy);
               continue;
@@ -1974,6 +2027,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const angleDiff = Math.abs(normalizeAngleDiff(angleToEnemy, hero.facing));
           if (angleDiff <= 1.35 || dist <= 1.35) {
             enemy.lastHitSwingId = hero.swingId;
+            enemy.provoked = true;
 
             if (enemy.kind === "boss") {
               // Boss has weight 100 (immovable) — zero knockback ever!
@@ -2006,8 +2060,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
               //   Knocked back strongly (~15-17 impulse), no poise immunity, and windup is interrupted so sword spam keeps knocking them back!
               // - Medium weight (0.85 < weight < 4.0: Goblin Fighters 2.0 & Minions 2.2):
               //   Moderate knockback (~4.2 impulse, reduced to ~1.5 during poise/windup).
-              // - Heavy weight (weight >= 4.0: Knights 6.5):
-              //   Barely knocked back at all (~0.45 impulse, 0 during windup/attack).
+              // - Heavy weight (weight >= 4.0: Knights 12.0):
+              //   Armored juggernaut — virtually zero knockback, and hitting him triggers his counter-cleave!
               enemy.hp -= 1;
               enemy.hitFlashTimer = 0.22;
 
@@ -2017,29 +2071,34 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
               let kbImpulse = 0;
               if (w >= 50) {
-                // Immovable
                 kbImpulse = 0;
               } else if (w <= 0.85) {
                 // Lightweight (Slimes & Goblin Archers): easily knocked back repeatedly!
-                kbImpulse = 8.6 / w; // ~17.2 for slime (0.5), ~14.3 for archer (0.6)
+                kbImpulse = 8.6 / w;
                 enemy.knockbackImmunityTimer = 0;
                 if (enemy.state === "windup") {
                   enemy.state = "aggro";
                   enemy.stateTimer = 0.2;
                   enemy.actionCooldown = 0.45;
                 }
-              } else if (w >= 4.0) {
-                // Heavy (Knights): barely knocked back at all
+              } else if (w >= 4.0 || enemy.kind === "knight") {
+                // Heavy Iron Sentinel Knights: shrug off knockback and immediately counter-advance!
                 const inAttack = enemy.state === "windup" || enemy.state === "attack";
-                kbImpulse = inAttack ? 0 : 2.8 / w; // ~0.43 tiny flinch
-                enemy.knockbackImmunityTimer = 1.0;
+                kbImpulse = inAttack ? 0 : 0.18;
+                enemy.knockbackImmunityTimer = 1.2;
+                if (enemy.state === "idle" || enemy.state === "aggro" || enemy.state === "recover") {
+                  enemy.state = "windup";
+                  enemy.stateTimer = 0.44;
+                  enemy.chargeAngle = Math.atan2(hero.x - enemy.x, hero.z - enemy.z);
+                  enemy.facing = enemy.chargeAngle;
+                }
               } else {
                 // Medium (Goblin Fighters & Minions): moderate knockback
                 const hasPoise =
                   enemy.state === "windup" ||
                   enemy.state === "attack" ||
                   enemy.knockbackImmunityTimer > 0;
-                kbImpulse = hasPoise ? 2.4 / w : 8.4 / w; // ~4.2 normal, ~1.2 with poise
+                kbImpulse = hasPoise ? 2.4 / w : 8.4 / w;
                 enemy.knockbackImmunityTimer = 0.65;
               }
 
@@ -2104,6 +2163,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             speed: 5.7,
             damage: 2,
             rupeeDrop: "blue",
+            provoked: true,
             chargeAngle: Math.PI,
             chargePathLength: 0,
             chargeDistanceTraveled: 0,
@@ -2119,20 +2179,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const isSanctumEnemy = enemy.zone === "dungeon" && enemy.spawnZ > 13;
 
       // =====================================================
-      // DEDICATED BOSS AI STATE MACHINE
+      // DEDICATED BOSS AI STATE MACHINE (WITH A* + STEERING PATHFINDING)
       // =====================================================
       if (enemy.kind === "boss") {
         if (enemy.state === "idle") {
-          if (flags.bossAwakened) {
+          if (flags.bossAwakened || enemy.provoked) {
             enemy.state = "aggro";
             enemy.actionCooldown = 1.0;
           }
         } else if (enemy.state === "aggro") {
-          if (distToHero > 0.05) {
+          let stalkVx = 0;
+          let stalkVz = 0;
+          if (distToHero > 2.2) {
+            const nav = computePathfindingMoveDir(
+              enemy.x,
+              enemy.z,
+              hero.x,
+              hero.z,
+              enemyRadius,
+              zone,
+              flags.gateUnlocked,
+              dynamicObstacles
+            );
+            stalkVx = nav.dirX * enemy.speed;
+            stalkVz = nav.dirZ * enemy.speed;
+            enemy.facing = nav.angle;
+          } else if (distToHero > 0.05) {
             enemy.facing = Math.atan2(toHeroX, toHeroZ);
           }
-          const stalkVx = distToHero > 2.5 ? (toHeroX / distToHero) * enemy.speed : 0;
-          const stalkVz = distToHero > 2.5 ? (toHeroZ / distToHero) * enemy.speed : 0;
+
           const nextBx = enemy.x + stalkVx * dt;
           const nextBz = Math.max(14.5, enemy.z + stalkVz * dt);
           const resolvedB = resolveWorldCollisions(
@@ -2152,7 +2227,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
             damageHero(1, pushX, pushZ, false);
           }
 
-          enemy.actionCooldown -= dt;
           if (enemy.actionCooldown <= 0) {
             if (enemy.actionCounter % 2 === 0) {
               enemy.state = "lob_windup";
@@ -2314,7 +2388,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         continue;
       }
 
-      // If stunned by Hero's Boomerang, hold position
+      // If stunned by Hero's Boomerang, hold position briefly then resume aggro
       if (enemy.stunTimer > 0) {
         const nextEx = enemy.x + enemy.knockbackVx * dt;
         const nextEz = enemy.z + enemy.knockbackVz * dt;
@@ -2342,24 +2416,45 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
         if (enemy.state === "idle") {
           const canAggro = !isSanctumEnemy || flags.bossAwakened;
-          if (canAggro && distToHero <= enemy.aggroRadius) {
+          if (enemy.provoked || (canAggro && distToHero <= enemy.aggroRadius)) {
             enemy.state = "aggro";
-            enemy.actionCooldown = 0.7;
+            enemy.actionCooldown = 0.25;
           }
         } else if (enemy.state === "aggro") {
           if (distToHero > 0.05) {
             enemy.facing = Math.atan2(toHeroX, toHeroZ);
           }
           if (distToHero < 4.5 && distToHero > 0.05) {
-            moveVx = -(toHeroX / distToHero) * (enemy.speed * 0.85);
-            moveVz = -(toHeroZ / distToHero) * (enemy.speed * 0.85);
+            const kiteTargetX = enemy.x - (toHeroX / distToHero) * 4.0;
+            const kiteTargetZ = enemy.z - (toHeroZ / distToHero) * 4.0;
+            const nav = computePathfindingMoveDir(
+              enemy.x,
+              enemy.z,
+              kiteTargetX,
+              kiteTargetZ,
+              enemyRadius,
+              zone,
+              flags.gateUnlocked,
+              dynamicObstacles
+            );
+            moveVx = nav.dirX * (enemy.speed * 0.85);
+            moveVz = nav.dirZ * (enemy.speed * 0.85);
           } else if (distToHero > 8.2) {
-            moveVx = (toHeroX / distToHero) * enemy.speed;
-            moveVz = (toHeroZ / distToHero) * enemy.speed;
+            const nav = computePathfindingMoveDir(
+              enemy.x,
+              enemy.z,
+              hero.x,
+              hero.z,
+              enemyRadius,
+              zone,
+              flags.gateUnlocked,
+              dynamicObstacles
+            );
+            moveVx = nav.dirX * enemy.speed;
+            moveVz = nav.dirZ * enemy.speed;
           }
 
-          enemy.actionCooldown -= dt;
-          if (enemy.actionCooldown <= 0 && distToHero <= 12.5) {
+          if (enemy.actionCooldown <= 0 && (distToHero <= 16.5 || enemy.provoked)) {
             enemy.state = "windup";
             enemy.stateTimer = 0.55;
             enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
@@ -2381,11 +2476,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
               angle: enemy.facing,
               speed: 14.0,
               damage: enemy.damage,
-              lifeTimer: 1.6,
+              lifeTimer: 1.8,
             });
             enemy.state = "recover";
-            enemy.stateTimer = 0.5;
-            enemy.actionCooldown = 1.45;
+            enemy.stateTimer = 0.45;
+            enemy.actionCooldown = 1.35;
           }
         } else if (enemy.state === "recover") {
           if (enemy.stateTimer <= 0) {
@@ -2430,54 +2525,119 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
 
         const canAggro = !isSanctumEnemy || flags.bossAwakened;
-        if (canAggro && distToHero <= enemy.aggroRadius) {
+        if (enemy.provoked || (canAggro && distToHero <= enemy.aggroRadius)) {
           enemy.state = "aggro";
+          enemy.actionCooldown = 0.15;
         }
       } else if (enemy.state === "aggro") {
-        if (!isSanctumEnemy && distToHero > enemy.aggroRadius * 2.2) {
+        if (!enemy.provoked && !isSanctumEnemy && distToHero > enemy.aggroRadius * 2.5) {
           enemy.state = "idle";
         } else {
           if (distToHero > 0.05) {
-            enemy.facing = Math.atan2(toHeroX, toHeroZ);
-            moveVx = (toHeroX / distToHero) * enemy.speed;
-            moveVz = (toHeroZ / distToHero) * enemy.speed;
+            const nav = computePathfindingMoveDir(
+              enemy.x,
+              enemy.z,
+              hero.x,
+              hero.z,
+              enemyRadius,
+              zone,
+              flags.gateUnlocked,
+              dynamicObstacles
+            );
+            enemy.facing = nav.angle;
+            moveVx = nav.dirX * enemy.speed;
+            moveVz = nav.dirZ * enemy.speed;
           }
 
-          if (distToHero <= 1.28) {
+          if (distToHero <= (enemy.kind === "knight" ? 1.55 : 1.28)) {
             const pushDirX = distToHero > 0.01 ? toHeroX / distToHero : Math.sin(enemy.facing);
             const pushDirZ = distToHero > 0.01 ? toHeroZ / distToHero : Math.cos(enemy.facing);
             damageHero(enemy.damage, pushDirX * 10, pushDirZ * 10, false);
           }
 
-          const triggerAttackDist = enemy.kind === "knight" ? 2.3 : 1.95;
-          if (distToHero <= triggerAttackDist) {
+          const triggerAttackDist =
+            enemy.kind === "knight" ? 3.1 : enemy.kind === "goblin" ? 2.85 : 1.95;
+          if (distToHero <= triggerAttackDist && enemy.actionCooldown <= 0) {
             enemy.state = "windup";
-            enemy.stateTimer = 0.26;
+            if (enemy.kind === "goblin") {
+              // Goblin Fighter: longer 0.78s telegraphed lunge windup so player can see the path and dodge!
+              enemy.stateTimer = 0.78;
+              enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+              enemy.facing = enemy.chargeAngle;
+              enemy.chargePathLength = 4.0;
+            } else if (enemy.kind === "knight") {
+              enemy.stateTimer = 0.44;
+              enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+              enemy.facing = enemy.chargeAngle;
+            } else {
+              enemy.stateTimer = 0.34;
+              enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+              enemy.facing = enemy.chargeAngle;
+            }
           }
         }
       } else if (enemy.state === "windup") {
-        if (distToHero > 0.05) {
-          enemy.facing = Math.atan2(toHeroX, toHeroZ);
+        if (enemy.kind === "goblin") {
+          // Track player briefly for the first 0.22s, then lock the ground telegraph corridor for 0.56s!
+          if (enemy.stateTimer > 0.56 && distToHero > 0.05) {
+            enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+            enemy.facing = enemy.chargeAngle;
+          } else {
+            enemy.facing = enemy.chargeAngle;
+          }
+        } else if (enemy.kind === "knight") {
+          // Big Red Knight marches steadily forward with shield raised during windup!
+          if (distToHero > 0.05) {
+            const nav = computePathfindingMoveDir(
+              enemy.x,
+              enemy.z,
+              hero.x,
+              hero.z,
+              enemyRadius,
+              zone,
+              flags.gateUnlocked,
+              dynamicObstacles
+            );
+            enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+            enemy.facing = enemy.chargeAngle;
+            moveVx = nav.dirX * (enemy.speed * 0.55);
+            moveVz = nav.dirZ * (enemy.speed * 0.55);
+          }
+        } else if (distToHero > 0.05) {
+          enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+          enemy.facing = enemy.chargeAngle;
         }
+
         if (enemy.stateTimer <= 0) {
           enemy.state = "attack";
-          enemy.stateTimer = 0.25;
+          enemy.stateTimer = enemy.kind === "knight" ? 0.3 : 0.27;
         }
       } else if (enemy.state === "attack") {
-        const lungeSpeed = enemy.speed * 2.45;
-        moveVx = Math.sin(enemy.facing) * lungeSpeed;
-        moveVz = Math.cos(enemy.facing) * lungeSpeed;
+        const lungeAngle =
+          enemy.kind === "goblin" || enemy.kind === "knight"
+            ? enemy.chargeAngle
+            : enemy.facing;
+        const lungeSpeed =
+          enemy.kind === "knight"
+            ? enemy.speed * 2.55
+            : enemy.kind === "goblin"
+            ? enemy.speed * 2.35
+            : enemy.speed * 2.4;
+        moveVx = Math.sin(lungeAngle) * lungeSpeed;
+        moveVz = Math.cos(lungeAngle) * lungeSpeed;
 
-        const hitDist = 1.55;
+        // Big Red Knight's greatsword cleave has 2.55 reach so sword spammers must dodge or shield-block!
+        const hitDist = enemy.kind === "knight" ? 2.55 : 1.6;
         if (distToHero <= hitDist) {
-          const pushDirX = distToHero > 0.01 ? toHeroX / distToHero : Math.sin(enemy.facing);
-          const pushDirZ = distToHero > 0.01 ? toHeroZ / distToHero : Math.cos(enemy.facing);
+          const pushDirX = distToHero > 0.01 ? toHeroX / distToHero : Math.sin(lungeAngle);
+          const pushDirZ = distToHero > 0.01 ? toHeroZ / distToHero : Math.cos(lungeAngle);
           damageHero(enemy.damage, pushDirX * 11.5, pushDirZ * 11.5, false);
         }
 
         if (enemy.stateTimer <= 0) {
           enemy.state = "recover";
-          enemy.stateTimer = 0.32;
+          enemy.stateTimer = enemy.kind === "goblin" ? 0.45 : 0.32;
+          enemy.actionCooldown = enemy.kind === "goblin" ? 0.85 : 0.35;
         }
       } else if (enemy.state === "recover") {
         if (enemy.stateTimer <= 0) {

@@ -142,6 +142,37 @@ class SoundEngine {
     osc.stop(now + 0.12);
   }
 
+  public playArrowStick(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Solid woody/stone thud + vibrating arrow shaft twang
+    const thud = ctx.createOscillator();
+    const thudGain = ctx.createGain();
+    thud.type = "triangle";
+    thud.frequency.setValueAtTime(195, now);
+    thud.frequency.exponentialRampToValueAtTime(62, now + 0.085);
+    thudGain.gain.setValueAtTime(0.18, now);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+    thud.connect(thudGain);
+    thudGain.connect(ctx.destination);
+    thud.start(now);
+    thud.stop(now + 0.095);
+
+    const twang = ctx.createOscillator();
+    const twangGain = ctx.createGain();
+    twang.type = "sine";
+    twang.frequency.setValueAtTime(510, now + 0.01);
+    twang.frequency.exponentialRampToValueAtTime(340, now + 0.13);
+    twangGain.gain.setValueAtTime(0.09, now + 0.01);
+    twangGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    twang.connect(twangGain);
+    twangGain.connect(ctx.destination);
+    twang.start(now + 0.01);
+    twang.stop(now + 0.145);
+  }
+
   public playShopPurchase(): void {
     const ctx = this.getContext();
     if (!ctx) return;
