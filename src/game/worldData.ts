@@ -8,6 +8,12 @@ export type PropPrefabId =
   | "bush"
   | "flower_patch"
   | "dirt_patch"
+  | "clay_pot"
+  | "light_rock"
+  | "push_block"
+  | "crystal_switch"
+  | "crystal_barrier"
+  | "cracked_rock"
   | "boulder"
   | "ruin_pillar"
   | "dungeon_pillar"
@@ -33,6 +39,16 @@ export type BuriedRewardKind =
   | "blue_mail"
   | "red_mail"
   | "swift_boots";
+
+export type PotRewardKind =
+  | "none"
+  | "random"
+  | "small_key"
+  | "green_rupee"
+  | "blue_rupee"
+  | "red_rupee"
+  | "heart"
+  | "bombs_5";
 
 export interface CustomModelAsset {
   id: string;
@@ -65,6 +81,22 @@ export interface MapPropInstance {
   puzzleTarget?: "lit" | "unlit";
   dug?: boolean;
   buriedReward?: BuriedRewardKind;
+  // Liftable Pots, Light Rocks & Explodable Cracked Rocks
+  smashed?: boolean;
+  potReward?: PotRewardKind;
+  // Pushable Blocks (1.0s walk-against slide + block puzzle target)
+  puzzleTargetX?: number;
+  puzzleTargetZ?: number;
+  pushedSolved?: boolean;
+  slideStartX?: number;
+  slideStartZ?: number;
+  slideTargetX?: number;
+  slideTargetZ?: number;
+  slideTimer?: number;
+  // Crystal Orb Switches & Retractable Crystal Barriers
+  switchState?: "blue" | "orange";
+  switchTarget?: "blue" | "orange";
+  hitCooldown?: number;
 }
 
 export interface MapPortal {
@@ -263,6 +295,34 @@ export const INITIAL_PORTALS: MapPortal[] = [
     label: "The Sunken Sanctum",
     sublabel: "Returned to Room III: Dread Sanctum.",
     color: "emerald",
+  },
+  {
+    id: "portal-ow-secret-cave",
+    zone: "overworld",
+    x: -23.0,
+    z: 33.8,
+    radius: 1.8,
+    targetZone: "frontier",
+    targetX: -26.0,
+    targetZ: 27.0,
+    targetFacing: 0,
+    label: "Secret Echo Grotto",
+    sublabel: "You discovered the hidden cavern behind the blasted cliff rock!",
+    color: "gold",
+  },
+  {
+    id: "portal-fr-secret-cave-return",
+    zone: "frontier",
+    x: -26.0,
+    z: 22.8,
+    radius: 1.8,
+    targetZone: "overworld",
+    targetX: -23.0,
+    targetZ: 29.5,
+    targetFacing: Math.PI,
+    label: "Whispering Vale Cliffside",
+    sublabel: "Emerged from the Secret Echo Grotto.",
+    color: "gold",
   },
 ];
 
@@ -1659,6 +1719,480 @@ export function buildInitialMapProps(): MapPropInstance[] {
     });
   });
 
+  // =========================================================
+  // 9. LIFTABLE CLAY POTS & LIGHT ROCKS (F / K TO LIFT & THROW — SMASHES ON IMPACT!)
+  // =========================================================
+  const potSpawns: Array<{
+    id: string;
+    name: string;
+    zone: ZoneId;
+    x: number;
+    z: number;
+    reward: PotRewardKind;
+  }> = [
+    // Overworld South Clearing Pots (right near hero spawn for immediate testing!)
+    {
+      id: "prop-ow-pot-1",
+      name: "Village Clay Pot (Blue Rupee)",
+      zone: "overworld",
+      x: -3.6,
+      z: -28.5,
+      reward: "blue_rupee",
+    },
+    {
+      id: "prop-ow-pot-2",
+      name: "Village Clay Pot (Bomb Bundle +5)",
+      zone: "overworld",
+      x: -3.6,
+      z: -26.8,
+      reward: "bombs_5",
+    },
+    {
+      id: "prop-ow-pot-3",
+      name: "Bazaar Stall Pot (Recovery Heart)",
+      zone: "overworld",
+      x: 15.2,
+      z: -30.5,
+      reward: "heart",
+    },
+    // Dungeon Antechamber Pots — INCLUDING THE HIDDEN SANCTUM SMALL KEY POT!
+    {
+      id: "prop-dg-pot-key",
+      name: "Ancient Sealed Pot (Hides Sanctum Small Key!)",
+      zone: "dungeon",
+      x: 9.8,
+      z: -27.5,
+      reward: "small_key",
+    },
+    {
+      id: "prop-dg-pot-2",
+      name: "Antechamber Pot (Recovery Heart)",
+      zone: "dungeon",
+      x: 9.8,
+      z: -25.6,
+      reward: "heart",
+    },
+    {
+      id: "prop-dg-pot-3",
+      name: "Antechamber Pot (Bomb Bundle +5)",
+      zone: "dungeon",
+      x: -9.8,
+      z: -27.5,
+      reward: "bombs_5",
+    },
+    {
+      id: "prop-dg-pot-4",
+      name: "Hall of Pillars Pot (Blue Rupee)",
+      zone: "dungeon",
+      x: -14.5,
+      z: -7.5,
+      reward: "blue_rupee",
+    },
+    {
+      id: "prop-dg-pot-5",
+      name: "Hall of Pillars Pot (Recovery Heart)",
+      zone: "dungeon",
+      x: 14.5,
+      z: -7.5,
+      reward: "heart",
+    },
+    // Secret Echo Grotto Pots (inside Frontier NW grotto)
+    {
+      id: "prop-fr-grotto-pot-1",
+      name: "Echo Grotto Pot (Red Rupee +20)",
+      zone: "frontier",
+      x: -29.0,
+      z: 31.0,
+      reward: "red_rupee",
+    },
+    {
+      id: "prop-fr-grotto-pot-2",
+      name: "Echo Grotto Pot (Red Rupee +20)",
+      zone: "frontier",
+      x: -23.0,
+      z: 31.0,
+      reward: "red_rupee",
+    },
+  ];
+  potSpawns.forEach((ps) => {
+    props.push({
+      id: ps.id,
+      prefab: "clay_pot",
+      name: ps.name,
+      zone: ps.zone,
+      x: ps.x,
+      y: 0,
+      z: ps.z,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.15,
+      colliderDepth: 1.15,
+      colliderKind: "ruin",
+      smashed: false,
+      potReward: ps.reward,
+    });
+  });
+
+  const lightRockSpawns: Array<{
+    id: string;
+    name: string;
+    zone: ZoneId;
+    x: number;
+    z: number;
+    reward: PotRewardKind;
+  }> = [
+    {
+      id: "prop-ow-light-rock-1",
+      name: "Liftable Field Stone (Green Rupee)",
+      zone: "overworld",
+      x: 3.6,
+      z: -27.5,
+      reward: "green_rupee",
+    },
+    {
+      id: "prop-ow-light-rock-2",
+      name: "Riverbank Liftable Stone (Blue Rupee)",
+      zone: "overworld",
+      x: -7.5,
+      z: -16.5,
+      reward: "blue_rupee",
+    },
+    {
+      id: "prop-ow-light-rock-3",
+      name: "Ruins Courtyard Liftable Stone (Bombs +5)",
+      zone: "overworld",
+      x: -21.0,
+      z: 3.5,
+      reward: "bombs_5",
+    },
+  ];
+  lightRockSpawns.forEach((lr) => {
+    props.push({
+      id: lr.id,
+      prefab: "light_rock",
+      name: lr.name,
+      zone: lr.zone,
+      x: lr.x,
+      y: 0,
+      z: lr.z,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.25,
+      colliderDepth: 1.25,
+      colliderKind: "ruin",
+      smashed: false,
+      potReward: lr.reward,
+    });
+  });
+
+  // =========================================================
+  // 10. PUSHABLE STONE BLOCKS (WALK AGAINST FOR 1 SECOND TO SLIDE!)
+  // =========================================================
+  // Overworld Push Block Puzzle (South-West Clearing / Ruins Approach)
+  props.push(
+    {
+      id: "prop-ow-push-target-1",
+      prefab: "path_tile",
+      name: "Overworld Block Socket Rune",
+      zone: "overworld",
+      x: -9.5,
+      y: 0.03,
+      z: -21.0,
+      rotY: 0,
+      scaleX: 2.1,
+      scaleY: 1,
+      scaleZ: 2.1,
+      hasCollider: false,
+      colliderWidth: 2.1,
+      colliderDepth: 2.1,
+      colliderKind: "ruin",
+      colorHex: "#4fd8ff",
+    },
+    {
+      id: "prop-ow-push-block-1",
+      prefab: "push_block",
+      name: "Runed Pushable Block (Push North onto Socket!)",
+      zone: "overworld",
+      x: -9.5,
+      y: 0,
+      z: -23.5,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.9,
+      colliderDepth: 1.9,
+      colliderKind: "wall",
+      puzzleTargetX: -9.5,
+      puzzleTargetZ: -21.0,
+      pushedSolved: false,
+    },
+    // Dungeon Push Block Puzzle (Antechamber North-West)
+    {
+      id: "prop-dg-push-target-1",
+      prefab: "path_tile",
+      name: "Sanctum Block Socket Rune",
+      zone: "dungeon",
+      x: -6.5,
+      y: 0.03,
+      z: -16.5,
+      rotY: 0,
+      scaleX: 2.1,
+      scaleY: 1,
+      scaleZ: 2.1,
+      hasCollider: false,
+      colliderWidth: 2.1,
+      colliderDepth: 2.1,
+      colliderKind: "ruin",
+      colorHex: "#4fd8ff",
+    },
+    {
+      id: "prop-dg-push-block-1",
+      prefab: "push_block",
+      name: "Sanctum Runed Push Block (Push North onto Socket!)",
+      zone: "dungeon",
+      x: -6.5,
+      y: 0,
+      z: -19.0,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.9,
+      colliderDepth: 1.9,
+      colliderKind: "wall",
+      puzzleTargetX: -6.5,
+      puzzleTargetZ: -16.5,
+      pushedSolved: false,
+    }
+  );
+
+  // =========================================================
+  // 11. CRYSTAL ORB SWITCHES & RETRACTABLE CRYSTAL BARRIERS
+  // (Hit with Sword, Boomerang, or Bow to toggle Blue <-> Orange!)
+  // =========================================================
+  props.push(
+    {
+      id: "prop-ow-crystal-switch-1",
+      prefab: "crystal_switch",
+      name: "Vale Crystal Orb Switch (Strike to Toggle!)",
+      zone: "overworld",
+      x: 16.5,
+      y: 0,
+      z: -24.5,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.3,
+      colliderDepth: 1.3,
+      colliderKind: "pillar",
+      switchState: "blue",
+      switchTarget: "orange",
+    },
+    {
+      id: "prop-ow-crystal-barrier-1",
+      prefab: "crystal_barrier",
+      name: "Vale Retractable Crystal Barrier",
+      zone: "overworld",
+      x: 20.5,
+      y: 0,
+      z: -24.5,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 2.2,
+      colliderDepth: 2.2,
+      colliderKind: "wall",
+      switchState: "blue",
+    },
+    // Dungeon Crystal Orb Switches & Barrier in Hall of Pillars
+    {
+      id: "prop-dg-crystal-switch-1",
+      prefab: "crystal_switch",
+      name: "Sanctum West Crystal Orb Switch",
+      zone: "dungeon",
+      x: -9.5,
+      y: 0,
+      z: -1.5,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.3,
+      colliderDepth: 1.3,
+      colliderKind: "pillar",
+      switchState: "blue",
+      switchTarget: "orange",
+    },
+    {
+      id: "prop-dg-crystal-switch-2",
+      prefab: "crystal_switch",
+      name: "Sanctum East Crystal Orb Switch",
+      zone: "dungeon",
+      x: 9.5,
+      y: 0,
+      z: -1.5,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.3,
+      colliderDepth: 1.3,
+      colliderKind: "pillar",
+      switchState: "blue",
+      switchTarget: "orange",
+    },
+    {
+      id: "prop-dg-crystal-barrier-1",
+      prefab: "crystal_barrier",
+      name: "Sanctum Hall Crystal Barrier",
+      zone: "dungeon",
+      x: 0,
+      y: 0,
+      z: -1.5,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 2.4,
+      colliderDepth: 2.4,
+      colliderKind: "wall",
+      switchState: "blue",
+    }
+  );
+
+  // =========================================================
+  // 12. EXPLODABLE CRACKED ROCKS & SECRET CAVE ENTRANCE (BLOW UP WITH BOMBS — KEY B!)
+  // =========================================================
+  props.push(
+    // Framing arch & cliffs around the Secret Echo Cave Entrance in Overworld North-West (x=-23, z=33.8)
+    {
+      id: "prop-ow-secret-cave-arch",
+      prefab: "temple_arch",
+      name: "Secret Echo Cave Entrance Arch",
+      zone: "overworld",
+      x: -23.0,
+      y: 0,
+      z: 34.2,
+      rotY: 0,
+      scaleX: 0.72,
+      scaleY: 0.78,
+      scaleZ: 0.85,
+      hasCollider: false,
+      colliderWidth: 7.2,
+      colliderDepth: 2.6,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-ow-secret-cave-wall-l",
+      prefab: "boulder",
+      name: "Secret Cave Frame Boulder W",
+      zone: "overworld",
+      x: -25.4,
+      y: 0,
+      z: 32.0,
+      rotY: 0.4,
+      scaleX: 1.3,
+      scaleY: 1.4,
+      scaleZ: 1.3,
+      hasCollider: true,
+      colliderWidth: 2.4,
+      colliderDepth: 2.4,
+      colliderKind: "cliff",
+    },
+    {
+      id: "prop-ow-secret-cave-wall-r",
+      prefab: "boulder",
+      name: "Secret Cave Frame Boulder E",
+      zone: "overworld",
+      x: -20.6,
+      y: 0,
+      z: 32.0,
+      rotY: -0.4,
+      scaleX: 1.3,
+      scaleY: 1.4,
+      scaleZ: 1.3,
+      hasCollider: true,
+      colliderWidth: 2.4,
+      colliderDepth: 2.4,
+      colliderKind: "cliff",
+    },
+    {
+      id: "prop-ow-cracked-cave-rock",
+      prefab: "cracked_rock",
+      name: "Explodable Cave Entrance Rock (Use Bomb [B]!)",
+      zone: "overworld",
+      x: -23.0,
+      y: 0,
+      z: 31.4,
+      rotY: 0,
+      scaleX: 1.35,
+      scaleY: 1.35,
+      scaleZ: 1.35,
+      hasCollider: true,
+      colliderWidth: 3.1,
+      colliderDepth: 2.8,
+      colliderKind: "cliff",
+      smashed: false,
+      potReward: "red_rupee",
+    },
+    // Second Explodable Cracked Rock in South Clearing so player can test Bombs immediately!
+    {
+      id: "prop-ow-cracked-south-rock",
+      prefab: "cracked_rock",
+      name: "Cracked Fissure Boulder (Use Bomb [B]!)",
+      zone: "overworld",
+      x: -12.5,
+      y: 0,
+      z: -30.5,
+      rotY: 0.3,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 2.4,
+      colliderDepth: 2.4,
+      colliderKind: "ruin",
+      smashed: false,
+      potReward: "red_rupee",
+    },
+    // Dungeon Explodable Cracked Rock
+    {
+      id: "prop-dg-cracked-rock-1",
+      prefab: "cracked_rock",
+      name: "Sanctum Cracked Wall Boulder (Use Bomb [B]!)",
+      zone: "dungeon",
+      x: -11.5,
+      y: 0,
+      z: -21.0,
+      rotY: 0,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 2.4,
+      colliderDepth: 2.4,
+      colliderKind: "wall",
+      smashed: false,
+      potReward: "heart",
+    }
+  );
+
   return props;
 }
 
@@ -1703,7 +2237,7 @@ export function buildObstaclesFromMapProps(mapProps: MapPropInstance[]): RectObs
   ];
 
   for (const prop of mapProps) {
-    if (!prop.hasCollider) continue;
+    if (!prop.hasCollider || prop.smashed) continue;
     const isScaledBox =
       prop.prefab === "stone_wall" ||
       prop.prefab === "cliff_block" ||

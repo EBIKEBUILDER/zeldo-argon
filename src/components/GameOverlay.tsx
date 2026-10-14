@@ -14,6 +14,7 @@ import {
 import {
   BuriedRewardKind,
   EnemyKind,
+  PotRewardKind,
   PropPrefabId,
   RupeeTier,
   ZoneId,
@@ -121,10 +122,17 @@ function formatTime(seconds: number): string {
 }
 
 const PROP_PALETTE: Array<{ id: PropPrefabId; label: string; tag: string }> = [
+  { id: "clay_pot", label: "Clay Pot (Lift & Throw)", tag: "Interact" },
+  { id: "light_rock", label: "Light Rock (Lift & Throw)", tag: "Interact" },
+  { id: "push_block", label: "Pushable Puzzle Block", tag: "Puzzle" },
+  { id: "crystal_switch", label: "Crystal Orb Switch", tag: "Puzzle" },
+  { id: "crystal_barrier", label: "Crystal Barrier Pillar", tag: "Puzzle" },
+  { id: "cracked_rock", label: "Cracked Boulder (Bomb)", tag: "Secret" },
+  { id: "wall_torch", label: "Flame Brazier / Torch", tag: "Puzzle" },
+  { id: "dirt_patch", label: "Soft Dirt Patch (Dig)", tag: "Secret" },
   { id: "pine_tree", label: "Pine Tree", tag: "Nature" },
   { id: "bush", label: "Meadow Bush", tag: "Nature" },
   { id: "flower_patch", label: "Wildflowers", tag: "Nature" },
-  { id: "dirt_patch", label: "Soft Dirt Patch (Dig)", tag: "Secret" },
   { id: "boulder", label: "Mossy Boulder", tag: "Nature" },
   { id: "water_tile", label: "Water Stream", tag: "Terrain" },
   { id: "path_tile", label: "Cobblestone Path", tag: "Terrain" },
@@ -134,7 +142,6 @@ const PROP_PALETTE: Array<{ id: PropPrefabId; label: string; tag: string }> = [
   { id: "wooden_bridge", label: "Wooden Bridge", tag: "Structure" },
   { id: "temple_arch", label: "Temple Archway", tag: "Structure" },
   { id: "dungeon_pillar", label: "Sanctum Pillar", tag: "Dungeon" },
-  { id: "wall_torch", label: "Flame Brazier / Torch", tag: "Puzzle" },
   { id: "wooden_crate", label: "Supply Crate", tag: "Dungeon" },
 ];
 
@@ -521,13 +528,53 @@ export default function GameOverlay() {
 
             <div
               className={`gear-slot ${
+                hero.heldObject
+                  ? "gear-slot-active"
+                  : hero.interactPrompt
+                  ? "gear-slot-owned"
+                  : "gear-slot-owned"
+              }`}
+              title="Stand next to a Clay Pot, Light Rock, or placed Bomb and press F (or K / X) to Lift overhead, then press F or Attack to Throw!"
+            >
+              <span className="gear-key">F</span>
+              <span className="gear-name">
+                {hero.heldObject
+                  ? `Throw ${
+                      hero.heldObject.kind === "clay_pot"
+                        ? "Pot"
+                        : hero.heldObject.kind === "light_rock"
+                        ? "Rock"
+                        : "Bomb"
+                    }!`
+                  : "Lift / Throw"}
+              </span>
+            </div>
+
+            <div
+              className={`gear-slot ${
+                hero.heldObject?.kind === "bomb"
+                  ? "gear-slot-active"
+                  : (hero.bombs ?? 0) > 0
+                  ? "gear-slot-owned"
+                  : "gear-slot-warn"
+              }`}
+              title="Press B or 6 to place a Bomb at your feet (or lift/throw a Bomb!). Blows up Cracked Boulders blocking secret caves!"
+            >
+              <span className="gear-key">B</span>
+              <span className="gear-name">
+                Bombs ({hero.bombs ?? 0}/{hero.maxBombs ?? 20})
+              </span>
+            </div>
+
+            <div
+              className={`gear-slot ${
                 hero.hasBow && hero.arrows > 0
                   ? "gear-slot-owned"
                   : hero.hasBow
                   ? "gear-slot-warn"
                   : "gear-slot-locked"
               }`}
-              title="Press E, F, or 2 to fire an Arrow (requires Bow + Arrows)"
+              title="Press E or 2 to fire an Arrow (requires Bow + Arrows)"
             >
               <span className="gear-key">E</span>
               <span className="gear-name">
@@ -551,7 +598,7 @@ export default function GameOverlay() {
           </div>
         </div>
 
-        {/* Center: Unity-Style Play / Map Editor Toolbar + Boss Health Bar */}
+        {/* Center: Unity-Style Play / Map Editor Toolbar + Contextual Prompt + Boss Health Bar */}
         <div className="hud-center-stack">
           <div className="unity-mode-bar">
             <button
@@ -582,6 +629,25 @@ export default function GameOverlay() {
               ↺ Reset Sim
             </button>
           </div>
+
+          {!editorMode && phase === "playing" && hero.interactPrompt && (
+            <div
+              className="hud-panel"
+              style={{
+                padding: "6px 14px",
+                borderRadius: "999px",
+                border: "1px solid rgba(255, 212, 121, 0.55)",
+                background: "rgba(18, 22, 34, 0.9)",
+                color: "#ffe49e",
+                fontSize: "0.82rem",
+                fontWeight: 700,
+                letterSpacing: "0.03em",
+                boxShadow: "0 6px 18px rgba(0,0,0,0.45)",
+              }}
+            >
+              {hero.interactPrompt}
+            </div>
+          )}
 
           {!editorMode &&
             phase === "playing" &&
@@ -1301,6 +1367,127 @@ export default function GameOverlay() {
                       </select>
                     </label>
                   </>
+                )}
+
+                {(selectedProp.prefab === "clay_pot" ||
+                  selectedProp.prefab === "light_rock") && (
+                  <>
+                    <label className="inspector-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedProp.smashed)}
+                        onChange={(e) =>
+                          updatePropInstance(selectedProp.id, {
+                            smashed: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Currently Smashed</span>
+                    </label>
+                    <label className="inspector-field">
+                      <span>Hidden Smash Reward (Lift &amp; Throw with F)</span>
+                      <select
+                        value={selectedProp.potReward ?? "random"}
+                        onChange={(e) =>
+                          updatePropInstance(selectedProp.id, {
+                            potReward: e.target.value as PotRewardKind,
+                          })
+                        }
+                      >
+                        <option value="random">Random Drop (Rupee / Heart / Bombs)</option>
+                        <option value="small_key">Small Key (Unlocks Sanctum Gate!)</option>
+                        <option value="heart">Recovery Heart (+1 Heart)</option>
+                        <option value="green_rupee">Green Rupee (+1)</option>
+                        <option value="blue_rupee">Blue Rupee (+5)</option>
+                        <option value="red_rupee">Red Rupee (+20)</option>
+                        <option value="bombs">Bomb Bundle (+3 Bombs)</option>
+                        <option value="none">Empty (No Drop)</option>
+                      </select>
+                    </label>
+                  </>
+                )}
+
+                {selectedProp.prefab === "push_block" && (
+                  <div className="inspector-xyz-grid">
+                    <label className="inspector-field">
+                      <span>Target Socket X</span>
+                      <input
+                        type="number"
+                        step={0.5}
+                        placeholder="Optional"
+                        value={selectedProp.puzzleTargetX ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          updatePropInstance(selectedProp.id, {
+                            puzzleTargetX: v === "" ? undefined : parseFloat(v) || 0,
+                          });
+                        }}
+                      />
+                    </label>
+                    <label className="inspector-field">
+                      <span>Target Socket Z</span>
+                      <input
+                        type="number"
+                        step={0.5}
+                        placeholder="Optional"
+                        value={selectedProp.puzzleTargetZ ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          updatePropInstance(selectedProp.id, {
+                            puzzleTargetZ: v === "" ? undefined : parseFloat(v) || 0,
+                          });
+                        }}
+                      />
+                    </label>
+                  </div>
+                )}
+
+                {selectedProp.prefab === "crystal_switch" && (
+                  <>
+                    <label className="inspector-field">
+                      <span>Current Crystal Orb Color</span>
+                      <select
+                        value={selectedProp.switchState ?? "blue"}
+                        onChange={(e) =>
+                          updatePropInstance(selectedProp.id, {
+                            switchState: e.target.value as "blue" | "orange",
+                          })
+                        }
+                      >
+                        <option value="blue">Blue Orb (Barriers Raised)</option>
+                        <option value="orange">Orange Orb (Barriers Lowered)</option>
+                      </select>
+                    </label>
+                    <label className="inspector-field">
+                      <span>Puzzle Target Color</span>
+                      <select
+                        value={selectedProp.switchTarget ?? "orange"}
+                        onChange={(e) =>
+                          updatePropInstance(selectedProp.id, {
+                            switchTarget: e.target.value as "blue" | "orange",
+                          })
+                        }
+                      >
+                        <option value="orange">Must Be ORANGE to Solve</option>
+                        <option value="blue">Must Be BLUE to Solve</option>
+                      </select>
+                    </label>
+                  </>
+                )}
+
+                {selectedProp.prefab === "cracked_rock" && (
+                  <label className="inspector-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedProp.smashed)}
+                      onChange={(e) =>
+                        updatePropInstance(selectedProp.id, {
+                          smashed: e.target.checked,
+                        })
+                      }
+                    />
+                    <span>Already Blown Up (Explode with Bomb B)</span>
+                  </label>
                 )}
 
                 <div className="inspector-actions-row">
@@ -2171,6 +2358,33 @@ export default function GameOverlay() {
 
               <div className="shop-item-card">
                 <div className="shop-item-top">
+                  <span className="shop-item-name">Bundle of 5 Bombs</span>
+                  <span className="shop-item-hotkey">
+                    Bag: {hero.bombs ?? 0}/{hero.maxBombs ?? 20} (Key: B)
+                  </span>
+                </div>
+                <p className="shop-item-desc">
+                  Restocks 5 heavy iron Bombs. Place or throw (B / F) to blast enemies,
+                  toggle Crystal Switches, and blow open Cracked Boulders!
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    (hero.bombs ?? 0) >= (hero.maxBombs ?? 20) || hero.rupees < 10
+                  }
+                  onClick={() => buyShopItem("bombs")}
+                  className="shop-buy-btn"
+                >
+                  {(hero.bombs ?? 0) >= (hero.maxBombs ?? 20)
+                    ? "Bomb Bag Full"
+                    : hero.rupees >= 10
+                    ? "Buy +5 — 10 Rupees"
+                    : "Need 10 Rupees"}
+                </button>
+              </div>
+
+              <div className="shop-item-card">
+                <div className="shop-item-top">
                   <span className="shop-item-name">Empty Glass Bottle</span>
                   <span className="shop-item-hotkey">
                     Belt: {(hero.bottles ?? []).length}/6
@@ -2299,27 +2513,31 @@ export default function GameOverlay() {
           ) : (
             <>
               <span>
-                <strong>WASD</strong> Move
+                <strong>WASD</strong> Move / Push Blocks (1s)
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>Tap/Hold Space/LMB</strong> Slash / 2x Spin Attack
+                <strong>Space/LMB</strong> Slash / Spin
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>Tap/Hold R</strong> Flame Rod
+                <strong>F</strong> Lift &amp; Throw Pots/Rocks
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>G</strong> Dig Shovel
+                <strong>B</strong> Bombs
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>V</strong> Use Bottle
+                <strong>R</strong> Flame Rod
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>C / I</strong> Gear &amp; Bottles
+                <strong>G</strong> Shovel
+              </span>
+              <span className="dot-sep">•</span>
+              <span>
+                <strong>C</strong> Gear &amp; Bottles
               </span>
               <span className="dot-sep">•</span>
               <span>
@@ -2344,10 +2562,10 @@ export default function GameOverlay() {
             <p className="story-blurb">
               Darkness stirs beneath the northern cliffs. Dread Warden Malakor has stolen
               the radiant <strong>Zeldo Crest</strong> and sealed it within the Sunken
-              Sanctum. Wield your <strong>Charged Spin Attack</strong>, light combination
-              torches with the <strong>Flame Rod (R)</strong>, unearth buried treasures
-              with the <strong>Shovel (G)</strong>, and customize your Tunics, Boots &amp;
-              Glass Bottles in the <strong>Character Sheet (C)</strong>!
+              Sanctum. Lift &amp; throw <strong>Clay Pots &amp; Rocks (F)</strong>, slide{" "}
+              <strong>Pushable Blocks</strong>, strike <strong>Crystal Switches</strong>,
+              blast open secret caves with <strong>Bombs (B)</strong>, and customize your
+              loadout in the <strong>Character Sheet (C)</strong>!
             </p>
 
             <div className="controls-grid">
@@ -2356,16 +2574,16 @@ export default function GameOverlay() {
                 <span className="control-desc">Sword Slash / 2x Spin Attack</span>
               </div>
               <div className="control-box">
-                <span className="control-key">Tap / Hold R (or 3)</span>
-                <span className="control-desc">Flame Rod &amp; Explosive Fireball</span>
+                <span className="control-key">F (Lift / Throw) • B (Bombs)</span>
+                <span className="control-desc">Smash Pots/Rocks &amp; Blast Caves</span>
               </div>
               <div className="control-box">
-                <span className="control-key">G (Shovel) • V (Bottle)</span>
-                <span className="control-desc">Dig Dirt Patches &amp; Drink Potions</span>
+                <span className="control-key">R (Flame Rod) • G (Shovel)</span>
+                <span className="control-desc">Light Torches &amp; Dig Dirt Patches</span>
               </div>
               <div className="control-box">
-                <span className="control-key">C / I (Character) • RMB (Block)</span>
-                <span className="control-desc">Equip Tunics, Boots &amp; Shield</span>
+                <span className="control-key">C (Gear &amp; Bottles) • RMB (Block)</span>
+                <span className="control-desc">Equip Tunics, Boots &amp; Potions</span>
               </div>
             </div>
 

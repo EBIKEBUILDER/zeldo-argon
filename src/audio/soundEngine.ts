@@ -1020,6 +1020,207 @@ class SoundEngine {
     osc.stop(now + 0.19);
   }
 
+  public playLift(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(190, now);
+    osc.frequency.exponentialRampToValueAtTime(420, now + 0.16);
+    gain.gain.setValueAtTime(0.22, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.19);
+  }
+
+  public playThrow(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(460, now);
+    osc.frequency.exponentialRampToValueAtTime(160, now + 0.18);
+    gain.gain.setValueAtTime(0.24, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.19);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.2);
+  }
+
+  public playPotSmash(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Ceramic clatter + high-frequency shard noise
+    const bufferSize = Math.floor(ctx.sampleRate * 0.22);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 1.5);
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(1450, now);
+    filter.frequency.exponentialRampToValueAtTime(520, now + 0.2);
+
+    const nGain = ctx.createGain();
+    nGain.gain.setValueAtTime(0.32, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    noise.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(ctx.destination);
+    noise.start(now);
+
+    [880, 620, 440].forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const t = now + idx * 0.032;
+      osc.type = "square";
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.55, t + 0.07);
+      gain.gain.setValueAtTime(0.14, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.09);
+    });
+  }
+
+  public playBlockSlide(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Heavy stone scraping rumble
+    const bufferSize = Math.floor(ctx.sampleRate * 0.42);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * 0.85;
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(220, now);
+    filter.frequency.linearRampToValueAtTime(140, now + 0.4);
+
+    const nGain = ctx.createGain();
+    nGain.gain.setValueAtTime(0.28, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+    noise.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(ctx.destination);
+    noise.start(now);
+
+    const sub = ctx.createOscillator();
+    const sGain = ctx.createGain();
+    sub.type = "sawtooth";
+    sub.frequency.setValueAtTime(78, now);
+    sub.frequency.linearRampToValueAtTime(62, now + 0.38);
+    sGain.gain.setValueAtTime(0.18, now);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    sub.connect(sGain);
+    sGain.connect(ctx.destination);
+    sub.start(now);
+    sub.stop(now + 0.42);
+  }
+
+  public playCrystalSwitch(isOrange: boolean): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const freqs = isOrange ? [659.25, 987.77, 1318.51] : [587.33, 880.0, 1174.66];
+    freqs.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const t = now + idx * 0.04;
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.22, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.24);
+    });
+  }
+
+  public playBombPlace(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(280, now);
+    osc.frequency.exponentialRampToValueAtTime(140, now + 0.12);
+    gain.gain.setValueAtTime(0.22, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.15);
+  }
+
+  public playBombExplosion(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Deep concussive boom + debris crackle
+    const bufferSize = Math.floor(ctx.sampleRate * 0.48);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 1.35);
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(620, now);
+    filter.frequency.exponentialRampToValueAtTime(95, now + 0.46);
+
+    const nGain = ctx.createGain();
+    nGain.gain.setValueAtTime(0.42, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+    noise.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(ctx.destination);
+    noise.start(now);
+
+    const sub = ctx.createOscillator();
+    const sGain = ctx.createGain();
+    sub.type = "sawtooth";
+    sub.frequency.setValueAtTime(125, now);
+    sub.frequency.exponentialRampToValueAtTime(34, now + 0.44);
+    sGain.gain.setValueAtTime(0.36, now);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.46);
+    sub.connect(sGain);
+    sGain.connect(ctx.destination);
+    sub.start(now);
+    sub.stop(now + 0.48);
+  }
+
   public playGameOver(): void {
     const ctx = this.getContext();
     if (!ctx) return;

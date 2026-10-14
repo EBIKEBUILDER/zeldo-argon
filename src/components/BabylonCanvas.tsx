@@ -115,6 +115,11 @@ interface PropVisualRig {
   torchFlame?: Mesh;
   dirtMound?: TransformNode;
   dirtHole?: TransformNode;
+  crystalOrbMat?: StandardMaterial;
+  crystalOrbMesh?: Mesh;
+  crystalHaloRing?: Mesh;
+  crystalBarrierBody?: TransformNode;
+  pushTargetSocket?: Mesh;
 }
 
 interface BushLeafParticle {
@@ -931,6 +936,49 @@ export default function BabylonCanvas() {
       new Color3(0.02, 0.01, 0.01),
       new Color3(0.05, 0.04, 0.03)
     );
+    const clayPotMat = makeMat(
+      "clayPotMat",
+      new Color3(0.84, 0.44, 0.24),
+      new Color3(0.11, 0.04, 0.02),
+      new Color3(0.32, 0.18, 0.1)
+    );
+    const clayRimMat = makeMat(
+      "clayRimMat",
+      new Color3(0.54, 0.24, 0.13),
+      new Color3(0.06, 0.02, 0.01),
+      new Color3(0.2, 0.12, 0.08)
+    );
+    const lightRockMat = makeMat(
+      "lightRockMat",
+      new Color3(0.68, 0.67, 0.63),
+      new Color3(0.08, 0.08, 0.07),
+      new Color3(0.25, 0.25, 0.24)
+    );
+    const pushBlockMat = makeMat(
+      "pushBlockMat",
+      new Color3(0.44, 0.51, 0.63),
+      new Color3(0.06, 0.08, 0.12),
+      new Color3(0.3, 0.34, 0.4)
+    );
+    const crackedRockMat = makeMat(
+      "crackedRockMat",
+      new Color3(0.32, 0.28, 0.25),
+      new Color3(0.05, 0.04, 0.03),
+      new Color3(0.18, 0.16, 0.14)
+    );
+    const crackedFissureMat = makeMat(
+      "crackedFissureMat",
+      new Color3(1.0, 0.52, 0.14),
+      new Color3(0.92, 0.38, 0.08)
+    );
+    const crystalBarrierMat = makeMat(
+      "crystalBarrierMat",
+      new Color3(0.22, 0.78, 1.0),
+      new Color3(0.12, 0.48, 0.85),
+      new Color3(0.9, 0.96, 1.0),
+      0.86,
+      72
+    );
 
     const buildPropRig = (
       prop: MapPropInstance,
@@ -944,6 +992,11 @@ export default function BabylonCanvas() {
       let torchFlame: Mesh | undefined;
       let dirtMound: TransformNode | undefined;
       let dirtHole: TransformNode | undefined;
+      let crystalOrbMat: StandardMaterial | undefined;
+      let crystalOrbMesh: Mesh | undefined;
+      let crystalHaloRing: Mesh | undefined;
+      let crystalBarrierBody: TransformNode | undefined;
+      let pushTargetSocket: Mesh | undefined;
 
       if (prop.prefab === "pine_tree") {
         const trunk = MeshBuilder.CreateCylinder(
@@ -1341,6 +1394,326 @@ export default function BabylonCanvas() {
         crest.position.set(0, 7.2, 0);
         parts.push(crest);
         mergeGroupWithMaterial(`templeArchMerged-${prop.id}`, parts, ruinMat, root, meta);
+      } else if (prop.prefab === "clay_pot") {
+        const potParts: Mesh[] = [];
+        const belly = MeshBuilder.CreateSphere(
+          `potBelly-${prop.id}`,
+          { diameter: 1.04, segments: 14 },
+          scene
+        );
+        belly.scaling.set(1.06, 0.94, 1.06);
+        belly.position.set(0, 0.48, 0);
+        potParts.push(belly);
+
+        const neck = MeshBuilder.CreateCylinder(
+          `potNeck-${prop.id}`,
+          { diameterTop: 0.56, diameterBottom: 0.72, height: 0.3, tessellation: 14 },
+          scene
+        );
+        neck.position.set(0, 0.88, 0);
+        potParts.push(neck);
+
+        for (const hx of [-0.46, 0.46]) {
+          const handle = MeshBuilder.CreateTorus(
+            `potHandle-${prop.id}-${hx}`,
+            { diameter: 0.34, thickness: 0.068, tessellation: 12 },
+            scene
+          );
+          handle.rotation.z = Math.PI / 2;
+          handle.position.set(hx, 0.68, 0);
+          potParts.push(handle);
+        }
+        mergeGroupWithMaterial(`potBodyMerged-${prop.id}`, potParts, clayPotMat, root, meta);
+
+        const trimParts: Mesh[] = [];
+        const rim = MeshBuilder.CreateTorus(
+          `potRim-${prop.id}`,
+          { diameter: 0.66, thickness: 0.14, tessellation: 16 },
+          scene
+        );
+        rim.position.set(0, 1.02, 0);
+        trimParts.push(rim);
+
+        const band = MeshBuilder.CreateTorus(
+          `potBand-${prop.id}`,
+          { diameter: 1.04, thickness: 0.075, tessellation: 16 },
+          scene
+        );
+        band.position.set(0, 0.54, 0);
+        trimParts.push(band);
+        mergeGroupWithMaterial(`potTrimMerged-${prop.id}`, trimParts, clayRimMat, root, meta);
+
+        if (prop.potReward === "small_key") {
+          const keyGlint = MeshBuilder.CreateTorus(
+            `potKeyGlint-${prop.id}`,
+            { diameter: 0.78, thickness: 0.065, tessellation: 16 },
+            scene
+          );
+          keyGlint.position.set(0, 0.86, 0);
+          keyGlint.material = goldKeyMat;
+          keyGlint.parent = root;
+        }
+      } else if (prop.prefab === "light_rock") {
+        const rockParts: Mesh[] = [];
+        const mainStone = MeshBuilder.CreatePolyhedron(
+          `lightRockMain-${prop.id}`,
+          { type: 2, size: 0.56 },
+          scene
+        );
+        mainStone.scaling.set(1.22, 0.86, 1.15);
+        mainStone.position.set(0, 0.44, 0);
+        rockParts.push(mainStone);
+
+        const sideStone = MeshBuilder.CreatePolyhedron(
+          `lightRockSide-${prop.id}`,
+          { type: 1, size: 0.34 },
+          scene
+        );
+        sideStone.position.set(0.36, 0.28, 0.22);
+        rockParts.push(sideStone);
+        mergeGroupWithMaterial(`lightRockMerged-${prop.id}`, rockParts, lightRockMat, root, meta);
+
+        const mossCap = MeshBuilder.CreateSphere(
+          `lightRockMoss-${prop.id}`,
+          { diameter: 0.62, segments: 10 },
+          scene
+        );
+        mossCap.scaling.set(1.1, 0.28, 0.95);
+        mossCap.position.set(-0.06, 0.82, -0.04);
+        mossCap.material = bushMat;
+        mossCap.parent = root;
+      } else if (prop.prefab === "push_block") {
+        const blockCore = MeshBuilder.CreateBox(
+          `pushBlockCore-${prop.id}`,
+          { width: 1.86, height: 1.68, depth: 1.86 },
+          scene
+        );
+        blockCore.position.set(0, 0.88, 0);
+        blockCore.material = pushBlockMat;
+        blockCore.parent = root;
+
+        const trimParts: Mesh[] = [];
+        const baseSlab = MeshBuilder.CreateBox(
+          `pushBlockBase-${prop.id}`,
+          { width: 2.02, height: 0.24, depth: 2.02 },
+          scene
+        );
+        baseSlab.position.set(0, 0.12, 0);
+        trimParts.push(baseSlab);
+
+        const capSlab = MeshBuilder.CreateBox(
+          `pushBlockCap-${prop.id}`,
+          { width: 1.98, height: 0.22, depth: 1.98 },
+          scene
+        );
+        capSlab.position.set(0, 1.76, 0);
+        trimParts.push(capSlab);
+        mergeGroupWithMaterial(`pushBlockTrim-${prop.id}`, trimParts, ruinMat, root, meta);
+
+        const runeParts: Mesh[] = [];
+        const topRing = MeshBuilder.CreateTorus(
+          `pushBlockTopRing-${prop.id}`,
+          { diameter: 1.18, thickness: 0.09, tessellation: 18 },
+          scene
+        );
+        topRing.position.set(0, 1.88, 0);
+        runeParts.push(topRing);
+
+        for (const side of [
+          { x: 0, z: 0.95, w: 0.68, d: 0.08 },
+          { x: 0, z: -0.95, w: 0.68, d: 0.08 },
+          { x: 0.95, z: 0, w: 0.08, d: 0.68 },
+          { x: -0.95, z: 0, w: 0.08, d: 0.68 },
+        ]) {
+          const plaque = MeshBuilder.CreateBox(
+            `pushRune-${prop.id}-${side.x}-${side.z}`,
+            { width: side.w, height: 0.68, depth: side.d },
+            scene
+          );
+          plaque.position.set(side.x, 0.92, side.z);
+          runeParts.push(plaque);
+        }
+        mergeGroupWithMaterial(`pushBlockRunes-${prop.id}`, runeParts, goldKeyMat, root, meta);
+
+        // Floor Target Socket visual marker in world space when puzzleTargetX/Z are configured!
+        if (prop.puzzleTargetX !== undefined && prop.puzzleTargetZ !== undefined) {
+          const socketRing = MeshBuilder.CreateTorus(
+            `pushTargetSocket-${prop.id}`,
+            { diameter: 2.15, thickness: 0.14, tessellation: 24 },
+            scene
+          );
+          socketRing.material = goldKeyMat;
+          socketRing.isPickable = false;
+          pushTargetSocket = socketRing;
+        }
+      } else if (prop.prefab === "crystal_switch") {
+        const pedParts: Mesh[] = [];
+        const pedBase = MeshBuilder.CreateCylinder(
+          `crystPedBase-${prop.id}`,
+          { diameterTop: 0.96, diameterBottom: 1.24, height: 0.68, tessellation: 10 },
+          scene
+        );
+        pedBase.position.set(0, 0.34, 0);
+        pedParts.push(pedBase);
+
+        const pedCollar = MeshBuilder.CreateCylinder(
+          `crystPedCollar-${prop.id}`,
+          { diameterTop: 1.08, diameterBottom: 0.88, height: 0.18, tessellation: 10 },
+          scene
+        );
+        pedCollar.position.set(0, 0.72, 0);
+        pedParts.push(pedCollar);
+        mergeGroupWithMaterial(`crystPedMerged-${prop.id}`, pedParts, dgPillarMat, root, meta);
+
+        const cradle = MeshBuilder.CreateTorus(
+          `crystCradle-${prop.id}`,
+          { diameter: 0.86, thickness: 0.11, tessellation: 16 },
+          scene
+        );
+        cradle.position.set(0, 0.84, 0);
+        cradle.material = goldKeyMat;
+        cradle.parent = root;
+
+        const isOrange = prop.switchState === "orange";
+        crystalOrbMat = makeMat(
+          `crystalOrbMat-${prop.id}`,
+          isOrange ? new Color3(1.0, 0.56, 0.16) : new Color3(0.22, 0.78, 1.0),
+          isOrange ? new Color3(0.88, 0.38, 0.08) : new Color3(0.12, 0.48, 0.88),
+          new Color3(1, 1, 1),
+          0.95,
+          80
+        );
+
+        const orb = MeshBuilder.CreatePolyhedron(
+          `crystalOrb-${prop.id}`,
+          { type: 1, size: 0.48 },
+          scene
+        );
+        orb.position.set(0, 1.32, 0);
+        orb.material = crystalOrbMat;
+        orb.parent = root;
+        crystalOrbMesh = orb;
+
+        const halo = MeshBuilder.CreateTorus(
+          `crystalHalo-${prop.id}`,
+          { diameter: 1.22, thickness: 0.075, tessellation: 20 },
+          scene
+        );
+        halo.position.set(0, 1.32, 0);
+        halo.rotation.x = 0.45;
+        halo.material = crystalOrbMat;
+        halo.parent = root;
+        crystalHaloRing = halo;
+      } else if (prop.prefab === "crystal_barrier") {
+        const socket = MeshBuilder.CreateCylinder(
+          `crystBarrierSocket-${prop.id}`,
+          { diameterTop: 1.82, diameterBottom: 1.98, height: 0.2, tessellation: 12 },
+          scene
+        );
+        socket.position.set(0, 0.1, 0);
+        socket.material = dgPillarMat;
+        socket.parent = root;
+
+        const socketTrim = MeshBuilder.CreateTorus(
+          `crystBarrierTrim-${prop.id}`,
+          { diameter: 1.72, thickness: 0.11, tessellation: 16 },
+          scene
+        );
+        socketTrim.position.set(0, 0.2, 0);
+        socketTrim.material = goldKeyMat;
+        socketTrim.parent = root;
+
+        const bodyNode = new TransformNode(`crystBarrierBody-${prop.id}`, scene);
+        bodyNode.parent = root;
+        crystalBarrierBody = bodyNode;
+
+        const obeliskParts: Mesh[] = [];
+        const obelisk = MeshBuilder.CreateCylinder(
+          `crystBarrierCol-${prop.id}`,
+          { diameterTop: 0.92, diameterBottom: 1.32, height: 2.25, tessellation: 6 },
+          scene
+        );
+        obelisk.position.set(0, 1.15, 0);
+        obeliskParts.push(obelisk);
+
+        const crown = MeshBuilder.CreatePolyhedron(
+          `crystBarrierCrown-${prop.id}`,
+          { type: 1, size: 0.48 },
+          scene
+        );
+        crown.position.set(0, 2.38, 0);
+        obeliskParts.push(crown);
+        mergeGroupWithMaterial(
+          `crystBarrierMerged-${prop.id}`,
+          obeliskParts,
+          crystalBarrierMat,
+          bodyNode,
+          meta
+        );
+      } else if (prop.prefab === "cracked_rock") {
+        const rockParts: Mesh[] = [];
+        const mainBoulder = MeshBuilder.CreatePolyhedron(
+          `crackedMain-${prop.id}`,
+          { type: 2, size: 1.12 },
+          scene
+        );
+        mainBoulder.scaling.set(1.28, 0.98, 1.18);
+        mainBoulder.position.set(0, 0.82, 0);
+        rockParts.push(mainBoulder);
+
+        const sideCrag = MeshBuilder.CreatePolyhedron(
+          `crackedSide-${prop.id}`,
+          { type: 1, size: 0.72 },
+          scene
+        );
+        sideCrag.position.set(-0.62, 0.52, 0.34);
+        rockParts.push(sideCrag);
+
+        const rightCrag = MeshBuilder.CreatePolyhedron(
+          `crackedRight-${prop.id}`,
+          { type: 2, size: 0.64 },
+          scene
+        );
+        rightCrag.position.set(0.66, 0.48, -0.28);
+        rockParts.push(rightCrag);
+        mergeGroupWithMaterial(`crackedRockMerged-${prop.id}`, rockParts, crackedRockMat, root, meta);
+
+        // Glowing amber/orange explosive fissure seams across the boulder!
+        const seamParts: Mesh[] = [];
+        const coreGlow = MeshBuilder.CreatePolyhedron(
+          `crackedCore-${prop.id}`,
+          { type: 1, size: 0.92 },
+          scene
+        );
+        coreGlow.scaling.set(1.36, 0.22, 1.24);
+        coreGlow.position.set(0, 0.84, 0);
+        coreGlow.rotation.z = 0.28;
+        seamParts.push(coreGlow);
+
+        const crossSeam = MeshBuilder.CreateBox(
+          `crackedSeamA-${prop.id}`,
+          { width: 2.35, height: 1.45, depth: 0.16 },
+          scene
+        );
+        crossSeam.position.set(0, 0.82, 0);
+        crossSeam.rotation.y = 0.45;
+        seamParts.push(crossSeam);
+
+        const crossSeamB = MeshBuilder.CreateBox(
+          `crackedSeamB-${prop.id}`,
+          { width: 0.16, height: 1.48, depth: 2.15 },
+          scene
+        );
+        crossSeamB.position.set(0, 0.82, 0);
+        crossSeamB.rotation.y = -0.35;
+        seamParts.push(crossSeamB);
+        mergeGroupWithMaterial(
+          `crackedSeamsMerged-${prop.id}`,
+          seamParts,
+          crackedFissureMat,
+          root,
+          meta
+        );
       } else if (prop.prefab === "custom_model") {
         const asset = customModels.find((m) => m.id === prop.customModelId);
         const customMesh = new Mesh(`customMesh-${prop.id}`, scene);
@@ -1383,6 +1756,11 @@ export default function BabylonCanvas() {
         torchFlame,
         dirtMound,
         dirtHole,
+        crystalOrbMat,
+        crystalOrbMesh,
+        crystalHaloRing,
+        crystalBarrierBody,
+        pushTargetSocket,
       };
     };
 
@@ -1827,6 +2205,103 @@ export default function BabylonCanvas() {
     heroBowString.material = whiteEyeMat;
     heroBowString.parent = heroBowNode;
     heroBowNode.setEnabled(false);
+
+    // --- 3D OVERHEAD HELD OBJECT ON HERO (CLAY POT, LIGHT ROCK, OR LIT BOMB) ---
+    const heroHeldNode = new TransformNode("heroHeldNode", scene);
+    heroHeldNode.position.set(0, 2.32, 0.08);
+    heroHeldNode.parent = heroRoot;
+
+    // 1. Overhead Held Clay Pot
+    const heldPotNode = new TransformNode("heldPotNode", scene);
+    heldPotNode.parent = heroHeldNode;
+    const heldPotBelly = MeshBuilder.CreateSphere(
+      "heldPotBelly",
+      { diameter: 0.92, segments: 12 },
+      scene
+    );
+    heldPotBelly.scaling.set(1.06, 0.94, 1.06);
+    heldPotBelly.position.set(0, 0.36, 0);
+    heldPotBelly.material = clayPotMat;
+    heldPotBelly.isPickable = false;
+    heldPotBelly.parent = heldPotNode;
+
+    const heldPotRim = MeshBuilder.CreateTorus(
+      "heldPotRim",
+      { diameter: 0.58, thickness: 0.12, tessellation: 14 },
+      scene
+    );
+    heldPotRim.position.set(0, 0.78, 0);
+    heldPotRim.material = clayRimMat;
+    heldPotRim.isPickable = false;
+    heldPotRim.parent = heldPotNode;
+
+    // 2. Overhead Held Light Rock
+    const heldRockNode = new TransformNode("heldRockNode", scene);
+    heldRockNode.parent = heroHeldNode;
+    const heldRockMesh = MeshBuilder.CreatePolyhedron(
+      "heldRockMesh",
+      { type: 2, size: 0.52 },
+      scene
+    );
+    heldRockMesh.scaling.set(1.22, 0.86, 1.15);
+    heldRockMesh.position.set(0, 0.36, 0);
+    heldRockMesh.material = lightRockMat;
+    heldRockMesh.isPickable = false;
+    heldRockMesh.parent = heldRockNode;
+
+    const heldRockMoss = MeshBuilder.CreateSphere(
+      "heldRockMoss",
+      { diameter: 0.54, segments: 8 },
+      scene
+    );
+    heldRockMoss.scaling.set(1.1, 0.28, 0.95);
+    heldRockMoss.position.set(0, 0.68, 0);
+    heldRockMoss.material = bushMat;
+    heldRockMoss.isPickable = false;
+    heldRockMoss.parent = heldRockNode;
+
+    // 3. Overhead Held Bomb
+    const heldBombNode = new TransformNode("heldBombNode", scene);
+    heldBombNode.parent = heroHeldNode;
+    const heldBombBodyMat = makeMat(
+      "heldBombBodyMat",
+      new Color3(0.16, 0.22, 0.36),
+      new Color3(0.04, 0.06, 0.12),
+      new Color3(0.75, 0.82, 0.95),
+      1.0,
+      64
+    );
+    const heldBombSphere = MeshBuilder.CreateSphere(
+      "heldBombSphere",
+      { diameter: 0.78, segments: 14 },
+      scene
+    );
+    heldBombSphere.position.set(0, 0.38, 0);
+    heldBombSphere.material = heldBombBodyMat;
+    heldBombSphere.isPickable = false;
+    heldBombSphere.parent = heldBombNode;
+
+    const heldBombCap = MeshBuilder.CreateCylinder(
+      "heldBombCap",
+      { diameterTop: 0.22, diameterBottom: 0.28, height: 0.14, tessellation: 10 },
+      scene
+    );
+    heldBombCap.position.set(0, 0.78, 0);
+    heldBombCap.material = goldKeyMat;
+    heldBombCap.isPickable = false;
+    heldBombCap.parent = heldBombNode;
+
+    const heldBombSpark = MeshBuilder.CreatePolyhedron(
+      "heldBombSpark",
+      { type: 1, size: 0.14 },
+      scene
+    );
+    heldBombSpark.position.set(0, 0.94, 0);
+    heldBombSpark.material = goldKeyMat;
+    heldBombSpark.isPickable = false;
+    heldBombSpark.parent = heldBombNode;
+
+    heroHeldNode.setEnabled(false);
 
     // --- 3D SPINNING BOOMERANG PROJECTILE ---
     const boomerangNode = new TransformNode("boomerangNode", scene);
@@ -3761,7 +4236,142 @@ export default function BabylonCanvas() {
     };
 
     // =========================================================
-    // 3D BUSH CHOP LEAF & SHOVEL DIRT CLOD PARTICLE BURST BUILDER
+    // 3D THROWN POTS/ROCKS & TICKING BOMBS / EXPLOSION SHOCKWAVES
+    // =========================================================
+    const thrownObjectRigs = new Map<string, TransformNode>();
+    const bombRigs = new Map<
+      string,
+      {
+        root: TransformNode;
+        bodyNode: TransformNode;
+        bodyMat: StandardMaterial;
+        spark: Mesh;
+        blastSphere: Mesh;
+        blastRing: Mesh;
+      }
+    >();
+
+    const buildThrownObjectRig = (
+      id: string,
+      kind: "clay_pot" | "light_rock"
+    ): TransformNode => {
+      const root = new TransformNode(`thrownObj-${id}`, scene);
+      if (kind === "clay_pot") {
+        const belly = MeshBuilder.CreateSphere(
+          `thrownPotBelly-${id}`,
+          { diameter: 0.96, segments: 12 },
+          scene
+        );
+        belly.scaling.set(1.06, 0.94, 1.06);
+        belly.material = clayPotMat;
+        belly.isPickable = false;
+        belly.parent = root;
+
+        const rim = MeshBuilder.CreateTorus(
+          `thrownPotRim-${id}`,
+          { diameter: 0.62, thickness: 0.13, tessellation: 14 },
+          scene
+        );
+        rim.position.set(0, 0.42, 0);
+        rim.material = clayRimMat;
+        rim.isPickable = false;
+        rim.parent = root;
+      } else {
+        const stone = MeshBuilder.CreatePolyhedron(
+          `thrownRock-${id}`,
+          { type: 2, size: 0.54 },
+          scene
+        );
+        stone.scaling.set(1.22, 0.86, 1.15);
+        stone.material = lightRockMat;
+        stone.isPickable = false;
+        stone.parent = root;
+      }
+      return root;
+    };
+
+    const buildBombRig = (id: string) => {
+      const root = new TransformNode(`bombRoot-${id}`, scene);
+      const bodyNode = new TransformNode(`bombBodyNode-${id}`, scene);
+      bodyNode.parent = root;
+
+      const bodyMat = makeMat(
+        `bombBodyMat-${id}`,
+        new Color3(0.16, 0.22, 0.36),
+        new Color3(0.04, 0.06, 0.12),
+        new Color3(0.75, 0.82, 0.95),
+        1.0,
+        64
+      );
+
+      const sphere = MeshBuilder.CreateSphere(
+        `bombSphere-${id}`,
+        { diameter: 0.84, segments: 14 },
+        scene
+      );
+      sphere.position.set(0, 0.42, 0);
+      sphere.material = bodyMat;
+      sphere.isPickable = false;
+      sphere.parent = bodyNode;
+
+      const cap = MeshBuilder.CreateCylinder(
+        `bombCap-${id}`,
+        { diameterTop: 0.24, diameterBottom: 0.3, height: 0.15, tessellation: 10 },
+        scene
+      );
+      cap.position.set(0, 0.84, 0);
+      cap.material = goldKeyMat;
+      cap.isPickable = false;
+      cap.parent = bodyNode;
+
+      const fuseCord = MeshBuilder.CreateCylinder(
+        `bombFuse-${id}`,
+        { diameter: 0.06, height: 0.22, tessellation: 8 },
+        scene
+      );
+      fuseCord.position.set(0, 0.98, 0);
+      fuseCord.rotation.z = 0.25;
+      fuseCord.material = woodMat;
+      fuseCord.isPickable = false;
+      fuseCord.parent = bodyNode;
+
+      const spark = MeshBuilder.CreatePolyhedron(
+        `bombSpark-${id}`,
+        { type: 1, size: 0.16 },
+        scene
+      );
+      spark.position.set(0.04, 1.1, 0);
+      spark.material = fireballCoreMat;
+      spark.isPickable = false;
+      spark.parent = bodyNode;
+
+      const blastSphere = MeshBuilder.CreateSphere(
+        `bombBlastSphere-${id}`,
+        { diameter: 1.0, segments: 16 },
+        scene
+      );
+      blastSphere.position.set(0, 0.8, 0);
+      blastSphere.material = fireballCoronaMat;
+      blastSphere.isPickable = false;
+      blastSphere.parent = root;
+      blastSphere.setEnabled(false);
+
+      const blastRing = MeshBuilder.CreateTorus(
+        `bombBlastRing-${id}`,
+        { diameter: 1.0, thickness: 0.12, tessellation: 28 },
+        scene
+      );
+      blastRing.position.set(0, 0.14, 0);
+      blastRing.material = fireballCoreMat;
+      blastRing.isPickable = false;
+      blastRing.parent = root;
+      blastRing.setEnabled(false);
+
+      return { root, bodyNode, bodyMat, spark, blastSphere, blastRing };
+    };
+
+    // =========================================================
+    // 3D BUSH CHOP LEAF, SHOVEL DIRT, CERAMIC POT & ROCK SHARD BURSTS
     // =========================================================
     const bushBurstRigs = new Map<string, BushBurstVisualRig>();
     const leafBrightMat = makeMat(
@@ -3791,7 +4401,9 @@ export default function BabylonCanvas() {
     const buildBushBurstRig = (
       id: string,
       seed: number,
-      isDirt = false
+      isDirt = false,
+      isCeramic = false,
+      isRock = false
     ): BushBurstVisualRig => {
       const root = new TransformNode(`bushBurstRoot-${id}`, scene);
       const particles: BushLeafParticle[] = [];
@@ -3802,8 +4414,10 @@ export default function BabylonCanvas() {
         return x - Math.floor(x);
       };
 
+      const isShard = isDirt || isCeramic || isRock;
+
       for (let i = 0; i < count; i++) {
-        const isGrassBlade = !isDirt && i % 3 === 0;
+        const isGrassBlade = !isShard && i % 3 === 0;
         let mesh: Mesh;
         let baseScale: Vector3;
 
@@ -3821,16 +4435,30 @@ export default function BabylonCanvas() {
         } else {
           mesh = MeshBuilder.CreatePolyhedron(
             `leafPart-${id}-${i}`,
-            { type: isDirt ? 2 : 1, size: isDirt ? 0.18 : 0.22 },
+            { type: isShard ? 2 : 1, size: isShard ? 0.2 : 0.22 },
             scene
           );
           const s = 0.8 + pseudoRand(i * 7 + 1) * 0.55;
-          baseScale = isDirt
+          baseScale = isCeramic
+            ? new Vector3(1.15 * s, 0.35 * s, 0.85 * s)
+            : isRock
+            ? new Vector3(1.1 * s, 0.9 * s, 1.0 * s)
+            : isDirt
             ? new Vector3(0.95 * s, 0.78 * s, 0.9 * s)
             : new Vector3(1.25 * s, 0.22 * s, 0.72 * s);
         }
 
-        mesh.material = isDirt
+        mesh.material = isCeramic
+          ? i % 3 === 0
+            ? clayRimMat
+            : clayPotMat
+          : isRock
+          ? i % 4 === 0
+            ? crackedFissureMat
+            : i % 2 === 0
+            ? lightRockMat
+            : crackedRockMat
+          : isDirt
           ? i % 3 === 0
             ? dirtPitMat
             : dirtSoilMat
@@ -3872,11 +4500,13 @@ export default function BabylonCanvas() {
     // =========================================================
     const pressedKeys = new Set<string>();
     let attackTriggeredOnce = false;
+    let interactTriggeredOnce = false;
     let boomerangTriggeredOnce = false;
     let bowTriggeredOnce = false;
     let fireRodTriggeredOnce = false;
     let shovelTriggeredOnce = false;
     let bottleTriggeredOnce = false;
+    let bombTriggeredOnce = false;
     let leftMouseHeldInPlay = false;
     let rightMouseHeld = false;
     let leftMouseHeldInEditor = false;
@@ -3971,13 +4601,16 @@ export default function BabylonCanvas() {
       ) {
         attackTriggeredOnce = true;
       }
+      if (
+        (code === "KeyF" || code === "KeyK" || code === "KeyX") &&
+        !pressedKeys.has(code)
+      ) {
+        interactTriggeredOnce = true;
+      }
       if ((code === "KeyQ" || code === "Digit1") && !pressedKeys.has(code)) {
         boomerangTriggeredOnce = true;
       }
-      if (
-        (code === "KeyE" || code === "KeyF" || code === "Digit2") &&
-        !pressedKeys.has(code)
-      ) {
+      if ((code === "KeyE" || code === "Digit2") && !pressedKeys.has(code)) {
         bowTriggeredOnce = true;
       }
       if ((code === "KeyR" || code === "Digit3") && !pressedKeys.has(code)) {
@@ -3988,6 +4621,9 @@ export default function BabylonCanvas() {
       }
       if ((code === "KeyV" || code === "Digit5") && !pressedKeys.has(code)) {
         bottleTriggeredOnce = true;
+      }
+      if ((code === "KeyB" || code === "Digit6") && !pressedKeys.has(code)) {
+        bombTriggeredOnce = true;
       }
       pressedKeys.add(code);
     };
@@ -4150,11 +4786,13 @@ export default function BabylonCanvas() {
           );
         }
         attackTriggeredOnce = false;
+        interactTriggeredOnce = false;
         boomerangTriggeredOnce = false;
         bowTriggeredOnce = false;
         fireRodTriggeredOnce = false;
         shovelTriggeredOnce = false;
         bottleTriggeredOnce = false;
+        bombTriggeredOnce = false;
       } else {
         const attackPressed = attackTriggeredOnce;
         const attackHeld =
@@ -4167,6 +4805,7 @@ export default function BabylonCanvas() {
           rightMouseHeld ||
           pressedKeys.has("ShiftLeft") ||
           pressedKeys.has("ShiftRight");
+        const interactPressed = interactTriggeredOnce;
         const boomerangPressed = boomerangTriggeredOnce;
         const bowPressed = bowTriggeredOnce;
         const fireRodPressed = fireRodTriggeredOnce;
@@ -4174,13 +4813,16 @@ export default function BabylonCanvas() {
           pressedKeys.has("KeyR") || pressedKeys.has("Digit3");
         const shovelPressed = shovelTriggeredOnce;
         const bottlePressed = bottleTriggeredOnce;
+        const bombPressed = bombTriggeredOnce;
 
         attackTriggeredOnce = false;
+        interactTriggeredOnce = false;
         boomerangTriggeredOnce = false;
         bowTriggeredOnce = false;
         fireRodTriggeredOnce = false;
         shovelTriggeredOnce = false;
         bottleTriggeredOnce = false;
+        bombTriggeredOnce = false;
 
         if (store.phase === "playing") {
           store.tick(dt, {
@@ -4189,12 +4831,14 @@ export default function BabylonCanvas() {
             attackPressed,
             attackHeld,
             blockHeld,
+            interactPressed,
             boomerangPressed,
             bowPressed,
             fireRodPressed,
             fireRodHeld,
             shovelPressed,
             bottlePressed,
+            bombPressed,
           });
         }
       }
@@ -4247,15 +4891,54 @@ export default function BabylonCanvas() {
           pRig.customModelId !== prop.customModelId ||
           pRig.colorHex !== prop.colorHex
         ) {
-          if (pRig) pRig.root.dispose();
+          if (pRig) {
+            if (pRig.pushTargetSocket) pRig.pushTargetSocket.dispose();
+            pRig.root.dispose();
+          }
           pRig = buildPropRig(prop, snap.customModels);
           propRigs.set(prop.id, pRig);
         }
-        const showProp = prop.zone === snap.zone;
+        const isSmashedHidden =
+          !snap.editorMode &&
+          Boolean(prop.smashed) &&
+          (prop.prefab === "clay_pot" ||
+            prop.prefab === "light_rock" ||
+            prop.prefab === "cracked_rock");
+        const showProp = prop.zone === snap.zone && !isSmashedHidden;
         pRig.root.setEnabled(showProp);
+        if (pRig.pushTargetSocket) {
+          const showSocket =
+            prop.zone === snap.zone &&
+            prop.puzzleTargetX !== undefined &&
+            prop.puzzleTargetZ !== undefined;
+          pRig.pushTargetSocket.setEnabled(showSocket);
+          if (showSocket && prop.puzzleTargetX !== undefined && prop.puzzleTargetZ !== undefined) {
+            const sockY = sampleTerrainHeight(
+              activeCells,
+              prop.puzzleTargetX,
+              prop.puzzleTargetZ
+            );
+            pRig.pushTargetSocket.position.set(
+              prop.puzzleTargetX,
+              sockY + 0.05,
+              prop.puzzleTargetZ
+            );
+            pRig.pushTargetSocket.rotation.y = t * 1.4;
+          }
+        }
         if (showProp) {
           const groundY = sampleTerrainHeight(activeCells, prop.x, prop.z);
-          pRig.root.position.set(prop.x, groundY + prop.y, prop.z);
+          if (prop.prefab === "crystal_barrier") {
+            pRig.root.position.set(prop.x, groundY, prop.z);
+            if (pRig.crystalBarrierBody) {
+              const targetBarY = snap.editorMode ? 0 : prop.y;
+              pRig.crystalBarrierBody.position.y +=
+                (targetBarY - pRig.crystalBarrierBody.position.y) *
+                Math.min(1, dt * 10);
+            }
+          } else {
+            pRig.root.position.set(prop.x, groundY + prop.y, prop.z);
+          }
           pRig.root.rotation.y = prop.rotY;
           pRig.root.scaling.set(prop.scaleX, prop.scaleY, prop.scaleZ);
 
@@ -4276,11 +4959,31 @@ export default function BabylonCanvas() {
             const isDug = Boolean(prop.dug) && !snap.editorMode;
             if (pRig.dirtMound) pRig.dirtMound.setEnabled(!isDug);
             if (pRig.dirtHole) pRig.dirtHole.setEnabled(isDug);
+          } else if (prop.prefab === "crystal_switch") {
+            const isOrange = prop.switchState === "orange";
+            if (pRig.crystalOrbMat) {
+              if (isOrange) {
+                pRig.crystalOrbMat.diffuseColor.set(1.0, 0.56, 0.16);
+                pRig.crystalOrbMat.emissiveColor.set(0.88, 0.38, 0.08);
+              } else {
+                pRig.crystalOrbMat.diffuseColor.set(0.22, 0.78, 1.0);
+                pRig.crystalOrbMat.emissiveColor.set(0.12, 0.48, 0.88);
+              }
+            }
+            if (pRig.crystalOrbMesh) {
+              pRig.crystalOrbMesh.rotation.y = t * 1.9;
+              pRig.crystalOrbMesh.position.y = 1.32 + Math.sin(t * 3.5 + prop.x) * 0.08;
+            }
+            if (pRig.crystalHaloRing) {
+              pRig.crystalHaloRing.rotation.y = -t * 2.4;
+              pRig.crystalHaloRing.position.y = 1.32 + Math.sin(t * 3.5 + prop.x) * 0.08;
+            }
           }
         }
       }
       propRigs.forEach((pRig, id) => {
         if (!activePropIds.has(id)) {
+          if (pRig.pushTargetSocket) pRig.pushTargetSocket.dispose();
           pRig.root.dispose();
           propRigs.delete(id);
         }
@@ -4389,6 +5092,7 @@ export default function BabylonCanvas() {
       const isFireRodPose =
         (snap.hero.fireRodCooldown ?? 0) > 0.12 || (snap.hero.fireRodChargeTimer ?? 0) > 0;
       const isShovelPose = (snap.hero.digAnimTimer ?? 0) > 0;
+      const heldObj = snap.hero.heldObject;
 
       heroBowNode.setEnabled(isBowPose);
       heroFireRodNode.setEnabled(isFireRodPose);
@@ -4398,7 +5102,33 @@ export default function BabylonCanvas() {
         heroShovelNode.rotation.x = 0.35 + Math.sin(digProg * Math.PI) * 0.85;
       }
 
-      const showSword = !isBowPose && !isThrowPose && !isFireRodPose && !isShovelPose;
+      heroHeldNode.setEnabled(Boolean(heldObj));
+      if (heldObj) {
+        heldPotNode.setEnabled(heldObj.kind === "clay_pot");
+        heldRockNode.setEnabled(heldObj.kind === "light_rock");
+        heldBombNode.setEnabled(heldObj.kind === "bomb");
+        if (heldObj.kind === "bomb") {
+          const ft = heldObj.fuseTimer ?? 2.4;
+          const flashFreq = ft < 0.8 ? 22 : 10;
+          const flashRed = Math.floor(t * flashFreq) % 2 === 0;
+          if (flashRed) {
+            heldBombBodyMat.diffuseColor.set(1.0, 0.22, 0.2);
+            heldBombBodyMat.emissiveColor.set(0.85, 0.14, 0.1);
+          } else {
+            heldBombBodyMat.diffuseColor.set(0.16, 0.22, 0.36);
+            heldBombBodyMat.emissiveColor.set(0.04, 0.06, 0.12);
+          }
+          heldBombSpark.rotation.y = t * 18;
+          heldBombSpark.scaling.setAll(1 + Math.sin(t * 28) * 0.35);
+        }
+      }
+
+      const showSword =
+        !isBowPose &&
+        !isThrowPose &&
+        !isFireRodPose &&
+        !isShovelPose &&
+        !heldObj;
       swordPivot.setEnabled(showSword);
 
       // Sync Charged Spin Attack Aura & Whirlwind Ring
@@ -4893,6 +5623,81 @@ export default function BabylonCanvas() {
         }
       });
 
+      // 7f. Sync Thrown Pots & Light Rocks (`snap.thrownObjects`)
+      const activeThrownIds = new Set<string>();
+      for (const obj of snap.thrownObjects) {
+        activeThrownIds.add(obj.id);
+        let tRig = thrownObjectRigs.get(obj.id);
+        if (!tRig) {
+          tRig = buildThrownObjectRig(obj.id, obj.kind);
+          thrownObjectRigs.set(obj.id, tRig);
+        }
+        const showThrown = obj.zone === snap.zone;
+        tRig.setEnabled(showThrown);
+        if (showThrown) {
+          const tGroundY = sampleTerrainHeight(activeCells, obj.x, obj.z);
+          tRig.position.set(obj.x, tGroundY + obj.y, obj.z);
+          tRig.rotation.x = obj.flightTime * 9.5;
+          tRig.rotation.z = obj.flightTime * 6.5;
+        }
+      }
+      thrownObjectRigs.forEach((tRig, id) => {
+        if (!activeThrownIds.has(id)) {
+          tRig.dispose();
+          thrownObjectRigs.delete(id);
+        }
+      });
+
+      // 7g. Sync Placed / Thrown Bombs & Explosion Shockwaves (`snap.activeBombs`)
+      const activeBombIds = new Set<string>();
+      for (const bomb of snap.activeBombs) {
+        activeBombIds.add(bomb.id);
+        let bmRig = bombRigs.get(bomb.id);
+        if (!bmRig) {
+          bmRig = buildBombRig(bomb.id);
+          bombRigs.set(bomb.id, bmRig);
+        }
+        const showBomb = bomb.zone === snap.zone;
+        bmRig.root.setEnabled(showBomb);
+        if (!showBomb) continue;
+
+        const bmGroundY = sampleTerrainHeight(activeCells, bomb.x, bomb.z);
+        bmRig.root.position.set(bomb.x, bmGroundY + bomb.y, bomb.z);
+
+        if (bomb.exploded) {
+          bmRig.bodyNode.setEnabled(false);
+          bmRig.blastSphere.setEnabled(true);
+          bmRig.blastRing.setEnabled(true);
+          const prog = 1 - Math.max(0, bomb.explosionTimer ?? 0) / 0.36;
+          const blastDiam = (0.4 + prog * 0.72) * 3.5 * 2;
+          bmRig.blastSphere.scaling.setAll(blastDiam);
+          bmRig.blastRing.scaling.setAll(blastDiam * 1.08);
+        } else {
+          bmRig.bodyNode.setEnabled(true);
+          bmRig.blastSphere.setEnabled(false);
+          bmRig.blastRing.setEnabled(false);
+          const flashFreq = bomb.fuseTimer < 0.8 ? 22 : 10;
+          const flashRed = Math.floor(t * flashFreq) % 2 === 0;
+          if (flashRed) {
+            bmRig.bodyMat.diffuseColor.set(1.0, 0.22, 0.2);
+            bmRig.bodyMat.emissiveColor.set(0.85, 0.14, 0.1);
+          } else {
+            bmRig.bodyMat.diffuseColor.set(0.16, 0.22, 0.36);
+            bmRig.bodyMat.emissiveColor.set(0.04, 0.06, 0.12);
+          }
+          bmRig.spark.rotation.y = t * 18;
+          bmRig.spark.scaling.setAll(1 + Math.sin(t * 28) * 0.35);
+          const pulse = 1 + (bomb.fuseTimer < 0.8 ? Math.sin(t * 26) * 0.08 : 0);
+          bmRig.bodyNode.scaling.setAll(pulse);
+        }
+      }
+      bombRigs.forEach((bmRig, id) => {
+        if (!activeBombIds.has(id)) {
+          bmRig.root.dispose();
+          bombRigs.delete(id);
+        }
+      });
+
       // 8. Sync Boss Arcing Projectiles & Landing AOE Telegraphs
       const activeProjIds = new Set<string>();
       for (const proj of snap.projectiles) {
@@ -4972,13 +5777,19 @@ export default function BabylonCanvas() {
         }
       });
 
-      // 9b. Sync 3D Bush Chop Leaf & Shovel Dirt Clod Particle Bursts
+      // 9b. Sync 3D Bush Chop Leaf, Shovel Dirt, Ceramic & Rock Shard Bursts
       const activeBurstIds = new Set<string>();
       for (const burst of snap.bushBursts) {
         activeBurstIds.add(burst.id);
         let bRig = bushBurstRigs.get(burst.id);
         if (!bRig) {
-          bRig = buildBushBurstRig(burst.id, burst.seed, Boolean(burst.isDirt));
+          bRig = buildBushBurstRig(
+            burst.id,
+            burst.seed,
+            Boolean(burst.isDirt),
+            Boolean(burst.isCeramic),
+            Boolean(burst.isRock)
+          );
           bushBurstRigs.set(burst.id, bRig);
         }
 

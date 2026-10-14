@@ -21,6 +21,7 @@ import {
   LOCKED_GATE_POS,
   MapPortal,
   MapPropInstance,
+  PotRewardKind,
   PropPrefabId,
   resolveArrowCollisions,
   resolveWorldCollisions,
@@ -35,6 +36,7 @@ export type ShopItemId =
   | "boomerang"
   | "bow"
   | "arrows"
+  | "bombs"
   | "heart"
   | "red_potion"
   | "green_potion"
@@ -56,6 +58,45 @@ export type BottleContentId =
   | "blue_potion"
   | "fairy"
   | "bee";
+
+export interface HeldObjectState {
+  kind: "clay_pot" | "light_rock" | "bomb";
+  propId?: string;
+  potReward?: PotRewardKind;
+  fuseTimer?: number;
+  maxFuseTimer?: number;
+}
+
+export interface ThrownObjectState {
+  id: string;
+  kind: "clay_pot" | "light_rock";
+  zone: ZoneId;
+  startX: number;
+  startZ: number;
+  targetX: number;
+  targetZ: number;
+  x: number;
+  z: number;
+  y: number;
+  flightTime: number;
+  totalFlightTime: number;
+  potReward?: PotRewardKind;
+}
+
+export interface BombProjectileState {
+  id: string;
+  zone: ZoneId;
+  x: number;
+  z: number;
+  y: number;
+  vx: number;
+  vz: number;
+  vy: number;
+  fuseTimer: number;
+  maxFuseTimer: number;
+  exploded?: boolean;
+  explosionTimer?: number;
+}
 
 export interface EditorSelection {
   kind: EditorEntityKind;
@@ -96,6 +137,12 @@ export interface HeroState {
   hasFireRod: boolean;
   hasShovel: boolean;
   arrows: number;
+  bombs: number;
+  maxBombs: number;
+  heldObject: HeldObjectState | null;
+  pushTimer: number;
+  pushTargetPropId: string | null;
+  interactPrompt: string | null;
   // Character Sheet Equipment Slots
   equippedPrimary: PrimaryHandId;
   equippedOffhand: OffhandId;
@@ -279,6 +326,8 @@ export interface BushBurstState {
   maxTimer: number;
   seed: number;
   isDirt?: boolean;
+  isCeramic?: boolean;
+  isRock?: boolean;
 }
 
 export interface GameFlags {
@@ -290,6 +339,9 @@ export interface GameFlags {
   chestUnlocked: boolean;
   overworldTorchPuzzleSolved?: boolean;
   dungeonTorchPuzzleSolved?: boolean;
+  overworldCrystalPuzzleSolved?: boolean;
+  dungeonCrystalPuzzleSolved?: boolean;
+  frontierCrystalPuzzleSolved?: boolean;
 }
 
 export interface GameStats {
@@ -317,6 +369,8 @@ export interface FrameInput {
   fireRodHeld?: boolean;
   shovelPressed?: boolean;
   bottlePressed?: boolean;
+  interactPressed?: boolean;
+  bombPressed?: boolean;
 }
 
 export interface SerializableGameState {
@@ -330,6 +384,8 @@ export interface SerializableGameState {
   fireballs: FireballProjectileState[];
   fireZones: FireZoneState[];
   friendlyBees: FriendlyBeeState[];
+  thrownObjects: ThrownObjectState[];
+  activeBombs: BombProjectileState[];
   projectiles: BossProjectileState[];
   hazards: HazardZoneState[];
   rupees: RupeeItemState[];
@@ -658,6 +714,12 @@ function createInitialState(
       hasFireRod: true,
       hasShovel: true,
       arrows: 0,
+      bombs: 10,
+      maxBombs: 30,
+      heldObject: null,
+      pushTimer: 0,
+      pushTargetPropId: null,
+      interactPrompt: null,
       equippedPrimary: "traveler_blade",
       equippedOffhand: "wooden_buckler",
       equippedTunic: "green_tunic",
@@ -700,6 +762,8 @@ function createInitialState(
     fireballs: [],
     fireZones: [],
     friendlyBees: [],
+    thrownObjects: [],
+    activeBombs: [],
     projectiles: [],
     hazards: [],
     rupees: createInitialRupees(),
@@ -725,6 +789,9 @@ function createInitialState(
       chestUnlocked: false,
       overworldTorchPuzzleSolved: false,
       dungeonTorchPuzzleSolved: false,
+      overworldCrystalPuzzleSolved: false,
+      dungeonCrystalPuzzleSolved: false,
+      frontierCrystalPuzzleSolved: false,
     },
     stats: {
       enemiesDefeated: 0,
@@ -737,8 +804,8 @@ function createInitialState(
             id: 1,
             text: "Whispering Vale",
             subtext:
-              "Hold Attack for Spin Slash • Press R/3 for Flame Rod • Press G/4 to Dig • Press C for Character Gear!",
-            timer: 5.8,
+              "Press F to Lift & Throw Pots/Rocks • Press B for Bombs • Walk into Blocks for 1s to Push • Strike Crystal Orbs!",
+            timer: 6.2,
           }
         : null,
     nearShop: false,
@@ -762,7 +829,29 @@ function createInitialState(
   };
 }
 
-const MAP_STORAGE_KEY = "zeldo-authored-map-v2";
+const MAP_STORAGE_KEY = "zeldo-authored-map-v3";
+
+function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
+  if (p.prefab === "dirt_patch") {
+    return { ...p, dug: false };
+  }
+  if (p.prefab === "clay_pot" || p.prefab === "light_rock" || p.prefab === "cracked_rock") {
+    return { ...p, smashed: false, hasCollider: true };
+  }
+  if (p.prefab === "crystal_switch") {
+    return { ...p, switchState: "blue", hitCooldown: 0 };
+  }
+  if (p.prefab === "crystal_barrier") {
+    return { ...p, hasCollider: true, y: 0 };
+  }
+  if (p.prefab === "push_block") {
+    return { ...p, slideTimer: 0 };
+  }
+  if (p.puzzleTarget) {
+    return { ...p, lit: false };
+  }
+  return p;
+}
 
 function persistAuthoredMapToStorage(state: {
   mapProps: MapPropInstance[];
@@ -797,8 +886,8 @@ function persistAuthoredMapToStorage(state: {
       .map((r) => ({ ...r, collected: false, spawnBounceTimer: 0 }));
 
     const payload = {
-      version: 2,
-      mapProps: state.mapProps,
+      version: 3,
+      mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: cleanEnemies,
       rupees: cleanRupees,
       portals: state.portals,
@@ -840,6 +929,12 @@ const DEFAULT_PROP_META: Record<
   bush: { label: "Meadow Bush", hasCollider: false, w: 1.4, d: 1.4, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "tree" },
   flower_patch: { label: "Wildflower Patch", hasCollider: false, w: 1.2, d: 1.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "tree" },
   dirt_patch: { label: "Soft Dirt Patch", hasCollider: false, w: 1.5, d: 1.5, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
+  clay_pot: { label: "Liftable Clay Pot", hasCollider: true, w: 1.15, d: 1.15, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
+  light_rock: { label: "Liftable Light Rock", hasCollider: true, w: 1.25, d: 1.25, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
+  push_block: { label: "Pushable Stone Block", hasCollider: true, w: 1.9, d: 1.9, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
+  crystal_switch: { label: "Crystal Switch Orb", hasCollider: true, w: 1.2, d: 1.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
+  crystal_barrier: { label: "Crystal Barrier Pillar", hasCollider: true, w: 1.8, d: 1.8, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
+  cracked_rock: { label: "Explodable Cracked Rock", hasCollider: true, w: 2.3, d: 2.3, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
   boulder: { label: "Mossy Boulder", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
   ruin_pillar: { label: "Watchtower Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   dungeon_pillar: { label: "Sanctum Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
@@ -863,13 +958,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set((state) => ({
       ...createInitialState("playing", state.muted, state.fps),
       // Preserve all authored map edits (props, enemies, rupees, portals, custom models, terrain)!
-      mapProps: state.mapProps.map((p) =>
-        p.prefab === "dirt_patch"
-          ? { ...p, dug: false }
-          : p.puzzleTarget
-          ? { ...p, lit: false }
-          : p
-      ),
+      mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: state.enemies
         .filter((e) => !e.id.startsWith("dg-minion-wave2-"))
         .map((e) => ({
@@ -903,13 +992,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     soundEngine.playKeyPickup();
     set((state) => ({
       ...createInitialState("playing", state.muted, state.fps),
-      mapProps: state.mapProps.map((p) =>
-        p.prefab === "dirt_patch"
-          ? { ...p, dug: false }
-          : p.puzzleTarget
-          ? { ...p, lit: false }
-          : p
-      ),
+      mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: state.enemies
         .filter((e) => !e.id.startsWith("dg-minion-wave2-"))
         .map((e) => ({
@@ -1457,6 +1540,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       colliderWidth: meta.w,
       colliderDepth: meta.d,
       colliderKind: meta.kind,
+      ...(pId === "clay_pot" || pId === "light_rock" ? { potReward: "random" as PotRewardKind } : {}),
+      ...(pId === "crystal_switch" ? { switchState: "blue" as const, switchTarget: "orange" as const } : {}),
+      ...(pId === "crystal_barrier" ? { switchTarget: "orange" as const } : {}),
+      ...(pId === "push_block"
+        ? {
+            puzzleTargetX: Number((x + 2.5).toFixed(2)),
+            puzzleTargetZ: z,
+          }
+        : {}),
     };
     const nextProps = [...state.mapProps, newProp];
     set({
@@ -1671,13 +1763,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   resetPlaySimulation: () => {
     set((state) => ({
       phase: "playing",
-      mapProps: state.mapProps.map((p) =>
-        p.prefab === "dirt_patch"
-          ? { ...p, dug: false }
-          : p.puzzleTarget
-          ? { ...p, lit: false }
-          : p
-      ),
+      mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: state.enemies
         .filter((e) => !e.id.startsWith("dg-minion-wave2-"))
         .map((e) => ({
@@ -1707,6 +1793,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       fireballs: [],
       fireZones: [],
       friendlyBees: [],
+      thrownObjects: [],
+      activeBombs: [],
       projectiles: [],
       hazards: [],
       boomerang: null,
@@ -1718,11 +1806,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
         chestUnlocked: false,
         overworldTorchPuzzleSolved: false,
         dungeonTorchPuzzleSolved: false,
+        overworldCrystalPuzzleSolved: false,
+        dungeonCrystalPuzzleSolved: false,
+        frontierCrystalPuzzleSolved: false,
       },
       hero: {
         ...state.hero,
         hp: state.hero.maxHp,
         mp: state.hero.maxMp,
+        heldObject: null,
+        pushTimer: 0,
+        pushTargetPropId: null,
+        interactPrompt: null,
         damageFractionAcc: 0,
         attackTimer: 0,
         spinAttackTimer: 0,
@@ -1748,7 +1843,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   exportMapJson: () => {
     const state = get();
     const payload = {
-      version: 2,
+      version: 3,
       mapProps: state.mapProps,
       enemies: state.enemies.filter((e) => !e.id.startsWith("dg-minion-wave2-")),
       rupees: state.rupees.filter(
@@ -1910,6 +2005,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? "Press E or 2 to shoot arrows with your bow!"
           : "Remember to purchase the Ranger's Bow to shoot these arrows!"
       );
+    } else if (item === "bombs") {
+      const maxBombs = hero.maxBombs || 30;
+      if ((hero.bombs ?? 0) >= maxBombs) {
+        soundEngine.playGateLocked();
+        pushNotice("Bomb Bag Full!", `Your Bomb Bag already holds ${maxBombs} Bombs.`);
+        return;
+      }
+      if (hero.rupees < 10) {
+        soundEngine.playGateLocked();
+        pushNotice("Not Enough Rupees!", "A Bundle of 5 Bombs costs 10 Rupees.");
+        return;
+      }
+      hero.rupees -= 10;
+      hero.bombs = Math.min(maxBombs, (hero.bombs ?? 0) + 5);
+      soundEngine.playShopPurchase();
+      pushNotice(
+        `Purchased 5 Bombs! (Total: ${hero.bombs})`,
+        "Press B or 6 to place or throw a Bomb and blow up cracked boulders!"
+      );
     } else if (item === "heart") {
       if (hero.hp >= hero.maxHp) {
         soundEngine.playGateLocked();
@@ -1993,10 +2107,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         mapPropsMutated = true;
       }
     };
-    const dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+    let dynamicObstacles = buildObstaclesFromMapProps(mapProps);
 
     const hero: HeroState = {
       ...state.hero,
+      heldObject: state.hero.heldObject ? { ...state.hero.heldObject } : null,
       bottles: [...(state.hero.bottles ?? ["red_potion", "fairy", "bee", "empty"])],
     };
     const flags: GameFlags = { ...state.flags };
@@ -2026,6 +2141,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Passive Magic Power regeneration (2.5 MP/s)
     hero.maxMp = hero.maxMp || 100;
     hero.mp = Math.min(hero.maxMp, (hero.mp ?? 100) + dt * 2.5);
+    hero.maxBombs = hero.maxBombs || 30;
+    hero.bombs = hero.bombs ?? 10;
 
     // Tunic damage multiplier:
     // - Forest Green Tunic (default): 1.0x (0% physical/magical reduction)
@@ -2202,19 +2319,259 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let fireballs: FireballProjectileState[] = (state.fireballs ?? []).map((f) => ({ ...f }));
     let fireZones: FireZoneState[] = (state.fireZones ?? []).map((fz) => ({ ...fz }));
     let friendlyBees: FriendlyBeeState[] = (state.friendlyBees ?? []).map((b) => ({ ...b }));
+    let thrownObjects: ThrownObjectState[] = (state.thrownObjects ?? []).map((t) => ({ ...t }));
+    let activeBombs: BombProjectileState[] = (state.activeBombs ?? []).map((b) => ({ ...b }));
     const rupees: RupeeItemState[] = state.rupees.map((r) => ({
       ...r,
       spawnBounceTimer: Math.max(0, (r.spawnBounceTimer ?? 0) - dt),
     }));
     const enemies: EnemyState[] = state.enemies.map((e) => ({ ...e }));
 
-    // Track cut bushes, looted bushes, bush rupee cap, and active leaf/dirt bursts
+    // Track cut bushes, looted bushes, bush rupee cap, and active leaf/dirt/ceramic/rock bursts
     let cutBushIds = [...state.cutBushIds];
     const lootedBushIds = [...state.lootedBushIds];
     let bushRupeesEarned = state.bushRupeesEarned;
     const bushBursts: BushBurstState[] = state.bushBursts
       .map((b) => ({ ...b, timer: b.timer - dt }))
       .filter((b) => b.timer > 0);
+
+    // Decrement Crystal Switch hit cooldowns
+    for (let i = 0; i < mapProps.length; i++) {
+      if ((mapProps[i].hitCooldown ?? 0) > 0) {
+        ensureMutableMapProps();
+        mapProps[i].hitCooldown = Math.max(0, (mapProps[i].hitCooldown ?? 0) - dt);
+      }
+    }
+
+    // Helper: Smash a Clay Pot or Light Rock, spawning ceramic/stone shards and its hidden reward!
+    const smashPotOrRock = (
+      sx: number,
+      sz: number,
+      kind: "clay_pot" | "light_rock",
+      potReward?: PotRewardKind,
+      sourceId?: string
+    ) => {
+      soundEngine.playPotSmash();
+      bushBursts.push({
+        id: `smash-burst-${sourceId ?? stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+        zone,
+        x: sx,
+        z: sz,
+        timer: 0.82,
+        maxTimer: 0.82,
+        seed: Math.floor(Math.abs(sx * 43 + sz * 79) + stats.elapsedSeconds * 120),
+        isCeramic: kind === "clay_pot",
+        isRock: kind === "light_rock",
+      });
+
+      const reward: PotRewardKind = potReward ?? "random";
+      if (reward === "small_key") {
+        flags.keyPickedUp = true;
+        hero.hasDungeonKey = true;
+        soundEngine.playKeyPickup();
+        pushBanner(
+          "Found a Small Key Inside the Clay Pot!",
+          "Use this Small Key to unlock the Sanctum Gate to the next room!",
+          5.2
+        );
+      } else if (reward === "bombs_5") {
+        hero.bombs = Math.min(hero.maxBombs || 30, (hero.bombs ?? 0) + 5);
+        soundEngine.playKeyPickup();
+        pushBanner(
+          `Found 5 Bombs! (Total: ${hero.bombs})`,
+          "Press B or 6 to place or throw a Bomb and blow up cracked boulders!",
+          4.0
+        );
+      } else if (reward === "red_rupee" || reward === "blue_rupee" || reward === "green_rupee" || reward === "heart") {
+        const tier: RupeeTier =
+          reward === "red_rupee"
+            ? "red"
+            : reward === "blue_rupee"
+            ? "blue"
+            : reward === "heart"
+            ? "heart"
+            : "green";
+        const val = tier === "red" ? 20 : tier === "blue" ? 5 : tier === "heart" ? 2 : 1;
+        rupees.push({
+          id: `pot-drop-${sourceId ?? stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+          zone,
+          x: sx,
+          z: sz,
+          tier,
+          value: val,
+          collected: false,
+          spawnBounceTimer: 0.45,
+        });
+      } else if (reward === "random") {
+        const roll = Math.random();
+        if (roll >= 0.92) {
+          hero.bombs = Math.min(hero.maxBombs || 30, (hero.bombs ?? 0) + 3);
+          soundEngine.playKeyPickup();
+          pushBanner(`Found 3 Bombs! (Total: ${hero.bombs})`, "Hidden inside the shattered vessel!", 3.0);
+        } else if (roll >= 0.42) {
+          const tier: RupeeTier = roll >= 0.80 ? "blue" : roll >= 0.62 ? "heart" : "green";
+          const val = tier === "blue" ? 5 : tier === "heart" ? 2 : 1;
+          rupees.push({
+            id: `pot-drop-${sourceId ?? stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+            zone,
+            x: sx,
+            z: sz,
+            tier,
+            value: val,
+            collected: false,
+            spawnBounceTimer: 0.44,
+          });
+        }
+      }
+    };
+
+    // Helper: Sync Crystal Barriers and check Crystal Switch puzzles in the given zone
+    const syncCrystalBarriersAndPuzzles = (targetZone: ZoneId): boolean => {
+      const zoneSwitches = mapProps.filter(
+        (p) => p.zone === targetZone && p.prefab === "crystal_switch"
+      );
+      if (zoneSwitches.length === 0) return false;
+
+      const allMatchTarget = zoneSwitches.every(
+        (s) => (s.switchState ?? "blue") === (s.switchTarget ?? "orange")
+      );
+      ensureMutableMapProps();
+      for (let i = 0; i < mapProps.length; i++) {
+        const prop = mapProps[i];
+        if (prop.zone !== targetZone || prop.prefab !== "crystal_barrier") continue;
+        if (allMatchTarget) {
+          prop.hasCollider = false;
+          prop.y = -2.05;
+        } else {
+          prop.hasCollider = true;
+          prop.y = 0;
+        }
+      }
+      dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+
+      if (allMatchTarget) {
+        if (targetZone === "overworld" && !flags.overworldCrystalPuzzleSolved) {
+          flags.overworldCrystalPuzzleSolved = true;
+          soundEngine.playSecretSolve();
+          rupees.push(
+            {
+              id: `crystal-ow-reward-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "overworld",
+              x: 13.8,
+              z: 12.1,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `crystal-ow-reward-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "overworld",
+              x: 13.8,
+              z: 11.1,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            }
+          );
+          pushBanner(
+            "Crystal Switch Activated! (Barriers Lowered!)",
+            "The East Ruin crystal barrier pillars retracted into the ground, revealing +20 Rupees!",
+            4.8
+          );
+          return true;
+        }
+        if (targetZone === "dungeon" && !flags.dungeonCrystalPuzzleSolved) {
+          flags.dungeonCrystalPuzzleSolved = true;
+          soundEngine.playSecretSolve();
+          rupees.push(
+            {
+              id: `crystal-dg-reward-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "dungeon",
+              x: 8.8,
+              z: -1.5,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `crystal-dg-reward-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "dungeon",
+              x: 8.8,
+              z: -0.4,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            }
+          );
+          pushBanner(
+            "Sanctum Crystal Barriers Lowered!",
+            "Both Crystal Switches are aligned to Orange — the Eastern Alcove is now open!",
+            5.0
+          );
+          return true;
+        }
+        if (targetZone === "frontier" && !flags.frontierCrystalPuzzleSolved) {
+          flags.frontierCrystalPuzzleSolved = true;
+          soundEngine.playSecretSolve();
+          rupees.push(
+            {
+              id: `crystal-fr-reward-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "frontier",
+              x: -19.2,
+              z: -2.5,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `crystal-fr-reward-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "frontier",
+              x: -17.8,
+              z: -2.5,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            }
+          );
+          pushBanner(
+            "Frontier Crystal Vault Unlocked! (+40 Rupees)",
+            "Both Frontier Crystal Switches are aligned — the Western Crystal Barriers lowered!",
+            5.0
+          );
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const toggleCrystalSwitch = (propId: string): boolean => {
+      ensureMutableMapProps();
+      const sw = mapProps.find((p) => p.id === propId);
+      if (!sw || sw.prefab !== "crystal_switch" || (sw.hitCooldown ?? 0) > 0) {
+        return false;
+      }
+      sw.hitCooldown = 0.32;
+      const nextColor = sw.switchState === "orange" ? "blue" : "orange";
+      sw.switchState = nextColor;
+      soundEngine.playCrystalSwitch(nextColor === "orange");
+      const solvedNow = syncCrystalBarriersAndPuzzles(sw.zone);
+      if (!solvedNow) {
+        pushBanner(
+          nextColor === "orange"
+            ? "Crystal Switch Toggled → Orange!"
+            : "Crystal Switch Toggled → Blue!",
+          "Align all Crystal Switches in the area to Orange to lower the Crystal Barriers!",
+          2.8
+        );
+      }
+      return true;
+    };
 
     // Quick-Use Bottle Hotkey (V or 5): uses the first non-empty bottle!
     if (input.bottlePressed && !state.shopOpen && !state.characterOpen) {
@@ -2266,10 +2623,242 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // =========================================================
+    // 1b. LIFTABLE POTS, LIGHT ROCKS & BOMBS (Pick Up with F / Throw with F, B, or Attack)
+    // =========================================================
+    let consumedAttackThisFrame = false;
+    let consumedBombThisFrame = false;
+
+    if (hero.heldObject) {
+      // If holding a lit bomb overhead, tick down its fuse!
+      if (hero.heldObject.kind === "bomb") {
+        hero.heldObject.fuseTimer = (hero.heldObject.fuseTimer ?? 2.4) - dt;
+        if (hero.heldObject.fuseTimer <= 0) {
+          // Explodes right in the hero's hands!
+          activeBombs.push({
+            id: `bomb-hand-explode-${stats.elapsedSeconds.toFixed(3)}`,
+            zone,
+            x: hero.x,
+            z: hero.z,
+            y: 1.4,
+            vx: 0,
+            vz: 0,
+            vy: 0,
+            fuseTimer: 0,
+            maxFuseTimer: hero.heldObject.maxFuseTimer ?? 2.4,
+          });
+          hero.heldObject = null;
+        }
+      }
+
+      // Throw held object when pressing Interact (F/K/X), Attack (Space/LMB), or Bomb (B/6 when holding a bomb)
+      if (
+        hero.heldObject &&
+        !state.shopOpen &&
+        !state.characterOpen &&
+        (input.interactPressed ||
+          input.attackPressed ||
+          (hero.heldObject.kind === "bomb" && input.bombPressed))
+      ) {
+        const held = hero.heldObject;
+        hero.heldObject = null;
+        hero.isBlocking = false;
+        hero.throwAnimTimer = 0.28;
+        hero.weaponLockTimer = 0.30;
+        consumedAttackThisFrame = true;
+        if (held.kind === "bomb") {
+          consumedBombThisFrame = true;
+        }
+        soundEngine.playThrow();
+
+        if (held.kind === "bomb") {
+          activeBombs.push({
+            id: `bomb-thrown-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+            zone,
+            x: hero.x + Math.sin(hero.facing) * 0.7,
+            z: hero.z + Math.cos(hero.facing) * 0.7,
+            y: 1.5,
+            vx: Math.sin(hero.facing) * 11.2,
+            vz: Math.cos(hero.facing) * 11.2,
+            vy: 3.8,
+            fuseTimer: Math.max(0.2, held.fuseTimer ?? 1.8),
+            maxFuseTimer: held.maxFuseTimer ?? 2.4,
+          });
+        } else {
+          const throwRange = 5.4;
+          thrownObjects.push({
+            id: `thrown-${held.propId ?? stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+            kind: held.kind,
+            zone,
+            startX: hero.x,
+            startZ: hero.z,
+            targetX: hero.x + Math.sin(hero.facing) * throwRange,
+            targetZ: hero.z + Math.cos(hero.facing) * throwRange,
+            x: hero.x + Math.sin(hero.facing) * 0.5,
+            z: hero.z + Math.cos(hero.facing) * 0.5,
+            y: 1.55,
+            flightTime: 0,
+            totalFlightTime: 0.38,
+            potReward: held.potReward,
+          });
+        }
+      }
+    } else if (
+      input.interactPressed &&
+      !state.shopOpen &&
+      !state.characterOpen &&
+      hero.knockbackLockTimer <= 0 &&
+      hero.weaponLockTimer <= 0
+    ) {
+      // Try picking up an adjacent ground Bomb first, or an adjacent Clay Pot / Light Rock!
+      let pickedUpBombIdx = -1;
+      let bestBombDist = 2.25;
+      for (let i = 0; i < activeBombs.length; i++) {
+        const b = activeBombs[i];
+        if (b.zone !== zone || b.exploded) continue;
+        const d = Math.hypot(b.x - hero.x, b.z - hero.z);
+        if (d <= bestBombDist) {
+          bestBombDist = d;
+          pickedUpBombIdx = i;
+        }
+      }
+
+      if (pickedUpBombIdx !== -1) {
+        const picked = activeBombs[pickedUpBombIdx];
+        activeBombs.splice(pickedUpBombIdx, 1);
+        hero.heldObject = {
+          kind: "bomb",
+          fuseTimer: picked.fuseTimer,
+          maxFuseTimer: picked.maxFuseTimer,
+        };
+        hero.isBlocking = false;
+        hero.weaponLockTimer = 0.22;
+        soundEngine.playLift();
+      } else {
+        // Find the closest liftable Clay Pot or Light Rock adjacent to the Hero
+        let bestProp: MapPropInstance | null = null;
+        let bestScore = Infinity;
+        for (const prop of mapProps) {
+          if (
+            prop.zone !== zone ||
+            prop.smashed ||
+            (prop.prefab !== "clay_pot" && prop.prefab !== "light_rock")
+          ) {
+            continue;
+          }
+          const dx = prop.x - hero.x;
+          const dz = prop.z - hero.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist > 2.35) continue;
+          const angleToProp = Math.atan2(dx, dz);
+          const angleDiff = Math.abs(normalizeAngleDiff(angleToProp, hero.facing));
+          if (angleDiff <= 1.65 || dist <= 1.55) {
+            const score = dist + angleDiff * 0.45;
+            if (score < bestScore) {
+              bestScore = score;
+              bestProp = prop;
+            }
+          }
+        }
+
+        if (bestProp) {
+          ensureMutableMapProps();
+          const mProp = mapProps.find((p) => p.id === bestProp!.id);
+          if (mProp) {
+            mProp.smashed = true;
+            mProp.hasCollider = false;
+            dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+            hero.heldObject = {
+              kind: mProp.prefab as "clay_pot" | "light_rock",
+              propId: mProp.id,
+              potReward: mProp.potReward,
+            };
+            hero.isBlocking = false;
+            hero.weaponLockTimer = 0.22;
+            soundEngine.playLift();
+          }
+        }
+      }
+    }
+
+    // Bomb Action (Press B or 6):
+    // - If standing next to a placed bomb, lifts it overhead so pressing B again (or F/Attack) throws it!
+    // - Otherwise places a lit ticking Bomb at the Hero's feet (or throws if already holding a bomb).
+    if (
+      input.bombPressed &&
+      !consumedBombThisFrame &&
+      !hero.heldObject &&
+      !state.shopOpen &&
+      !state.characterOpen &&
+      hero.knockbackLockTimer <= 0
+    ) {
+      let nearbyBombIdx = -1;
+      let nearestDist = 1.95;
+      for (let i = 0; i < activeBombs.length; i++) {
+        const b = activeBombs[i];
+        if (b.zone !== zone || b.exploded || b.y > 0.35) continue;
+        const d = Math.hypot(b.x - hero.x, b.z - hero.z);
+        if (d <= nearestDist) {
+          nearestDist = d;
+          nearbyBombIdx = i;
+        }
+      }
+
+      if (nearbyBombIdx !== -1) {
+        const picked = activeBombs[nearbyBombIdx];
+        activeBombs.splice(nearbyBombIdx, 1);
+        hero.heldObject = {
+          kind: "bomb",
+          fuseTimer: picked.fuseTimer,
+          maxFuseTimer: picked.maxFuseTimer,
+        };
+        hero.isBlocking = false;
+        hero.weaponLockTimer = 0.20;
+        soundEngine.playLift();
+      } else if ((hero.bombs ?? 0) <= 0) {
+        soundEngine.playGateLocked();
+        pushBanner(
+          "Out of Bombs!",
+          "Smash clay pots or buy a Bomb Bundle (+5) at Merchant Bramble's Shop!",
+          3.0
+        );
+      } else {
+        hero.bombs = Math.max(0, (hero.bombs ?? 0) - 1);
+        hero.isBlocking = false;
+        soundEngine.playBombPlace();
+        const placeX = hero.x + Math.sin(hero.facing) * 0.85;
+        const placeZ = hero.z + Math.cos(hero.facing) * 0.85;
+        const gatePassableNow =
+          flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated);
+        const resB = resolveWorldCollisions(
+          placeX,
+          placeZ,
+          0.38,
+          zone,
+          gatePassableNow,
+          dynamicObstacles,
+          flags.bossDefeated
+        );
+        activeBombs.push({
+          id: `bomb-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+          zone,
+          x: resB.x,
+          z: resB.z,
+          y: 0,
+          vx: 0,
+          vz: 0,
+          vy: 0,
+          fuseTimer: 2.4,
+          maxFuseTimer: 2.4,
+        });
+      }
+    }
+
     // Charged Spin Attack Logic: Hold Attack button after swinging to charge, release at >= 0.62s for 360° Double-Damage Spin!
     const SPIN_CHARGE_THRESHOLD = 0.62;
     if (
       input.attackHeld &&
+      !hero.heldObject &&
       !state.shopOpen &&
       !state.characterOpen &&
       hero.knockbackLockTimer <= 0 &&
@@ -2281,7 +2870,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         soundEngine.playSpinChargeReady();
       }
     } else {
-      if ((hero.swordChargeTimer ?? 0) >= SPIN_CHARGE_THRESHOLD && hero.knockbackLockTimer <= 0) {
+      if (
+        !hero.heldObject &&
+        (hero.swordChargeTimer ?? 0) >= SPIN_CHARGE_THRESHOLD &&
+        hero.knockbackLockTimer <= 0
+      ) {
         // Unleash 360° Charged Spin Attack (Double Sword Damage!)
         hero.spinAttackTimer = 0.38;
         hero.attackTimer = 0.38;
@@ -2302,6 +2895,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const FIRE_CHARGE_THRESHOLD = 0.55;
     if (
       input.fireRodHeld &&
+      !hero.heldObject &&
       hero.hasFireRod &&
       !state.shopOpen &&
       !state.characterOpen &&
@@ -2313,6 +2907,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         soundEngine.playSpinChargeReady();
       }
     } else if (
+      !hero.heldObject &&
       ((hero.fireRodChargeTimer ?? 0) > 0.02 || input.fireRodPressed) &&
       hero.hasFireRod &&
       hero.fireRodCooldown <= 0 &&
@@ -2354,8 +2949,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.fireRodChargeTimer = 0;
     }
 
-    // Mutually exclusive weapon actions
+    // Mutually exclusive weapon actions (disabled while carrying an object overhead)
     const canUseWeapon =
+      !hero.heldObject &&
       !state.shopOpen &&
       !state.characterOpen &&
       hero.knockbackLockTimer <= 0 &&
@@ -2620,7 +3216,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           lifeTimer: 1.5,
         });
       }
-    } else if (canUseWeapon && input.attackPressed && hero.attackCooldown <= 0) {
+    } else if (
+      canUseWeapon &&
+      input.attackPressed &&
+      !consumedAttackThisFrame &&
+      hero.attackCooldown <= 0
+    ) {
       // Trigger Sword Swing
       hero.isAttacking = true;
       hero.isSpinAttacking = false;
@@ -2638,11 +3239,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.throwAnimTimer > 0 ||
       hero.digAnimTimer > 0;
 
-    // Right-click Shield Block
+    // Right-click Shield Block (disabled while holding a pot/rock/bomb overhead)
     hero.isBlocking =
-      input.blockHeld && !isUsingAnyWeapon && hero.knockbackLockTimer <= 0;
+      input.blockHeld &&
+      !hero.heldObject &&
+      !isUsingAnyWeapon &&
+      hero.knockbackLockTimer <= 0;
 
-    // 2. Hero Movement + Boots Speed Multiplier + Knockback
+    // 2. Hero Movement + Boots Speed Multiplier + Knockback + Pushable Block Puzzles
     const isKnockbackLocked = hero.knockbackLockTimer > 0;
     let mx = isKnockbackLocked ? 0 : input.moveX;
     let mz = isKnockbackLocked ? 0 : input.moveZ;
@@ -2665,6 +3269,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const baseMoveSpeed = isUsingAnyWeapon
       ? 4.8
+      : hero.heldObject
+      ? 7.8
       : (hero.swordChargeTimer ?? 0) > 0.25 || (hero.fireRodChargeTimer ?? 0) > 0.2
       ? 6.4
       : hero.isBlocking
@@ -2702,6 +3308,190 @@ export const useGameStore = create<GameStore>((set, get) => ({
       zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated
         ? Math.max(13.55, resolvedHero.z)
         : resolvedHero.z;
+
+    // 2b. Update Sliding Push Blocks & Check 1.0-Second Continuous Push Against Pushable Blocks (`push_block`)
+    for (let i = 0; i < mapProps.length; i++) {
+      const p = mapProps[i];
+      if (p.prefab !== "push_block" || (p.slideTimer ?? 0) <= 0) continue;
+      ensureMutableMapProps();
+      const mp = mapProps[i];
+      const nextSlideTimer = Math.max(0, (mp.slideTimer ?? 0) - dt);
+      mp.slideTimer = nextSlideTimer;
+      const t = 1 - nextSlideTimer / 0.36;
+      const sx = mp.slideStartX ?? mp.x;
+      const sz = mp.slideStartZ ?? mp.z;
+      const tx = mp.slideTargetX ?? mp.x;
+      const tz = mp.slideTargetZ ?? mp.z;
+      mp.x = Number((sx + (tx - sx) * t).toFixed(3));
+      mp.z = Number((sz + (tz - sz) * t).toFixed(3));
+
+      if (nextSlideTimer === 0) {
+        mp.x = tx;
+        mp.z = tz;
+        if (
+          mp.puzzleTargetX !== undefined &&
+          mp.puzzleTargetZ !== undefined &&
+          !mp.pushedSolved &&
+          Math.hypot(mp.x - mp.puzzleTargetX, mp.z - mp.puzzleTargetZ) <= 0.75
+        ) {
+          mp.x = mp.puzzleTargetX;
+          mp.z = mp.puzzleTargetZ;
+          mp.pushedSolved = true;
+          soundEngine.playSecretSolve();
+
+          if (mp.zone === "overworld") {
+            hero.bombs = Math.min(hero.maxBombs || 30, (hero.bombs ?? 0) + 5);
+            rupees.push({
+              id: `push-reward-ow-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "overworld",
+              x: mp.x,
+              z: mp.z + 1.85,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            });
+            pushBanner(
+              "Ruins Block Socket Solved! (+20 Rupees & +5 Bombs)",
+              "The ancient stone block locked into its floor socket!",
+              4.8
+            );
+          } else if (mp.zone === "dungeon") {
+            rupees.push(
+              {
+                id: `push-reward-dg-1-${stats.elapsedSeconds.toFixed(2)}`,
+                zone: "dungeon",
+                x: mp.x + 1.8,
+                z: mp.z,
+                tier: "red",
+                value: 20,
+                collected: false,
+                spawnBounceTimer: 0.45,
+              },
+              {
+                id: `push-reward-dg-2-${stats.elapsedSeconds.toFixed(2)}`,
+                zone: "dungeon",
+                x: mp.x + 1.8,
+                z: mp.z - 1.1,
+                tier: "heart",
+                value: 2,
+                collected: false,
+                spawnBounceTimer: 0.45,
+              }
+            );
+            pushBanner(
+              "Sanctum Rune Block Solved! (+20 Rupees & Heart)",
+              "The heavy glyph block locked into the dungeon floor socket!",
+              4.8
+            );
+          } else {
+            rupees.push(
+              {
+                id: `push-reward-fr-1-${stats.elapsedSeconds.toFixed(2)}`,
+                zone: "frontier",
+                x: mp.x,
+                z: mp.z + 1.9,
+                tier: "red",
+                value: 20,
+                collected: false,
+                spawnBounceTimer: 0.45,
+              },
+              {
+                id: `push-reward-fr-2-${stats.elapsedSeconds.toFixed(2)}`,
+                zone: "frontier",
+                x: mp.x + 1.2,
+                z: mp.z + 1.9,
+                tier: "red",
+                value: 20,
+                collected: false,
+                spawnBounceTimer: 0.45,
+              }
+            );
+            pushBanner(
+              "Sun Temple Block Socket Solved! (+40 Rupees)",
+              "The carved monolith aligned with the Sun Temple floor glyph!",
+              4.8
+            );
+          }
+        }
+      }
+      dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+    }
+
+    if (mag > 0.15 && !hero.heldObject && !isUsingAnyWeapon && !isKnockbackLocked) {
+      // Snap push direction to a cardinal axis
+      const pushDirX = Math.abs(mx) >= Math.abs(mz) ? Math.sign(mx) : 0;
+      const pushDirZ = Math.abs(mz) > Math.abs(mx) ? Math.sign(mz) : 0;
+      const probeX = hero.x + pushDirX * 1.15;
+      const probeZ = hero.z + pushDirZ * 1.15;
+
+      const targetBlock = mapProps.find(
+        (p) =>
+          p.zone === zone &&
+          p.prefab === "push_block" &&
+          (p.slideTimer ?? 0) <= 0 &&
+          Math.hypot(p.x - probeX, p.z - probeZ) <= 1.25
+      );
+
+      if (targetBlock) {
+        if (hero.pushTargetPropId === targetBlock.id) {
+          hero.pushTimer = (hero.pushTimer ?? 0) + dt;
+        } else {
+          hero.pushTargetPropId = targetBlock.id;
+          hero.pushTimer = dt;
+        }
+
+        if (hero.pushTimer >= 1.0) {
+          hero.pushTimer = 0;
+          const slideStep = 2.5;
+          let destX = Number((targetBlock.x + pushDirX * slideStep).toFixed(2));
+          let destZ = Number((targetBlock.z + pushDirZ * slideStep).toFixed(2));
+
+          if (
+            targetBlock.puzzleTargetX !== undefined &&
+            targetBlock.puzzleTargetZ !== undefined &&
+            Math.hypot(destX - targetBlock.puzzleTargetX, destZ - targetBlock.puzzleTargetZ) <= 0.85
+          ) {
+            destX = targetBlock.puzzleTargetX;
+            destZ = targetBlock.puzzleTargetZ;
+          }
+
+          const obstaclesWithoutSelf = buildObstaclesFromMapProps(
+            mapProps.filter((p) => p.id !== targetBlock.id)
+          );
+          const checkDest = resolveWorldCollisions(
+            destX,
+            destZ,
+            0.82,
+            zone,
+            initialGatePassable,
+            obstaclesWithoutSelf,
+            flags.bossDefeated
+          );
+
+          if (!checkDest.hitObstacle) {
+            ensureMutableMapProps();
+            const mBlock = mapProps.find((p) => p.id === targetBlock.id);
+            if (mBlock) {
+              mBlock.slideStartX = mBlock.x;
+              mBlock.slideStartZ = mBlock.z;
+              mBlock.slideTargetX = destX;
+              mBlock.slideTargetZ = destZ;
+              mBlock.slideTimer = 0.36;
+              soundEngine.playBlockSlide();
+            }
+          } else {
+            soundEngine.playGateLocked();
+          }
+        }
+      } else {
+        hero.pushTimer = 0;
+        hero.pushTargetPropId = null;
+      }
+    } else {
+      hero.pushTimer = 0;
+      hero.pushTargetPropId = null;
+    }
 
     // Check proximity to Merchant Shop Stall in South Clearing
     const distToShop =
@@ -2757,7 +3547,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.knockbackVx = 0;
           hero.knockbackVz = 0;
           hero.portalCooldown = 1.25;
+          hero.heldObject = null;
+          hero.pushTimer = 0;
+          hero.pushTargetPropId = null;
           boomerang = null;
+          thrownObjects = [];
+          activeBombs = [];
           arrows = arrows.map((a) => (a.stuck && a.stuckInShield ? { ...a, zone } : a));
           cutBushIds = [];
           soundEngine.playPortalTransition();
@@ -3080,6 +3875,42 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // 8c. Crystal Switch Orb Toggling via Sword Swing, 360° Spin Attack, or Boomerang
+    for (const prop of mapProps) {
+      if (prop.prefab !== "crystal_switch" || prop.zone !== zone) continue;
+      if ((prop.hitCooldown ?? 0) > 0) continue;
+
+      let hitSwitch = false;
+      if (hero.isAttacking && hero.attackTimer > 0.04) {
+        const dx = prop.x - hero.x;
+        const dz = prop.z - hero.z;
+        const dist = Math.hypot(dx, dz);
+        const reach = (hero.isSpinAttacking ? 3.35 : 2.95) + 0.65;
+        if (dist <= reach) {
+          if (hero.isSpinAttacking) {
+            hitSwitch = true;
+          } else {
+            const angleToSwitch = Math.atan2(dx, dz);
+            const angleDiff = Math.abs(normalizeAngleDiff(angleToSwitch, hero.facing));
+            if (angleDiff <= 1.42 || dist <= 1.4) {
+              hitSwitch = true;
+            }
+          }
+        }
+      }
+
+      if (!hitSwitch && boomerang) {
+        if (Math.hypot(prop.x - boomerang.x, prop.z - boomerang.z) <= 1.25) {
+          hitSwitch = true;
+          boomerang.returning = true;
+        }
+      }
+
+      if (hitSwitch) {
+        toggleCrystalSwitch(prop.id);
+      }
+    }
+
     // Helper to handle enemy defeat & rupee / recovery heart drops
     const handleEnemyDeath = (enemy: EnemyState) => {
       enemy.hp = 0;
@@ -3163,6 +3994,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       const nextAx = arrow.x + Math.sin(arrow.angle) * arrow.speed * dt;
       const nextAz = arrow.z + Math.cos(arrow.angle) * arrow.speed * dt;
+
+      // Check if a Hero arrow strikes a Crystal Switch Orb before obstacle collision!
+      if (arrow.fromHero) {
+        let hitSwitchWithArrow = false;
+        for (const prop of mapProps) {
+          if (prop.prefab !== "crystal_switch" || prop.zone !== zone) continue;
+          if (Math.hypot(nextAx - prop.x, nextAz - prop.z) <= 0.95) {
+            toggleCrystalSwitch(prop.id);
+            arrow.stuck = true;
+            arrow.stuckTimer = 1.8;
+            arrow.x = nextAx - Math.sin(arrow.angle) * 0.12;
+            arrow.z = nextAz - Math.cos(arrow.angle) * 0.12;
+            soundEngine.playArrowStick();
+            remainingArrows.push(arrow);
+            hitSwitchWithArrow = true;
+            break;
+          }
+        }
+        if (hitSwitchWithArrow) continue;
+      }
+
       const resA = resolveArrowCollisions(
         nextAx,
         nextAz,
@@ -3536,21 +4388,34 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const nextFx = fb.x + Math.sin(fb.angle) * fb.speed * dt;
       const nextFz = fb.z + Math.cos(fb.angle) * fb.speed * dt;
 
-      // Light any unlit wall_torch along the fireball's path!
+      // Light any unlit wall_torch or toggle any crystal_switch along the fireball's path!
+      let hitSwitchWithFb = false;
       for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
         const prop = mapProps[pIdx];
-        if (prop.zone !== zone || prop.prefab !== "wall_torch") continue;
-        if (Math.hypot(nextFx - prop.x, nextFz - prop.z) <= fb.radius + 0.95) {
-          if (prop.lit === false) {
-            if (!mapPropsMutated) {
-              mapProps = mapProps.map((mp) => ({ ...mp }));
-              mapPropsMutated = true;
+        if (prop.zone !== zone) continue;
+        if (prop.prefab === "wall_torch") {
+          if (Math.hypot(nextFx - prop.x, nextFz - prop.z) <= fb.radius + 0.95) {
+            if (prop.lit === false) {
+              ensureMutableMapProps();
+              mapProps[pIdx].lit = true;
+              soundEngine.playTorchLight();
+              checkTorchCombinationPuzzles();
             }
-            mapProps[pIdx].lit = true;
-            soundEngine.playTorchLight();
-            checkTorchCombinationPuzzles();
+          }
+        } else if (prop.prefab === "crystal_switch") {
+          if (Math.hypot(nextFx - prop.x, nextFz - prop.z) <= fb.radius + 0.85) {
+            toggleCrystalSwitch(prop.id);
+            hitSwitchWithFb = true;
           }
         }
+      }
+      if (hitSwitchWithFb) {
+        if (fb.isCharged) {
+          spawnChargedFireZone(fb.x, fb.z);
+        } else {
+          soundEngine.playFireExplosion();
+        }
+        continue;
       }
 
       // Check if fireball burns any bushes along its path!
@@ -3755,6 +4620,278 @@ export const useGameStore = create<GameStore>((set, get) => ({
       remainingBees.push(bee);
     }
     friendlyBees = remainingBees;
+
+    // 9c. Update Thrown Clay Pots & Light Rocks in Flight (`thrownObjects`)
+    const remainingThrown: ThrownObjectState[] = [];
+    for (const obj of thrownObjects) {
+      if (obj.zone !== zone) continue;
+      obj.flightTime += dt;
+      const t = Math.min(1, obj.flightTime / obj.totalFlightTime);
+      const nextX = obj.startX + (obj.targetX - obj.startX) * t;
+      const nextZ = obj.startZ + (obj.targetZ - obj.startZ) * t;
+      obj.y = Math.max(0, (1 - t) * 1.55 + Math.sin(t * Math.PI) * 1.35);
+
+      let shouldSmash = t >= 1;
+
+      // Check if thrown pot/rock hits a Crystal Switch
+      for (const prop of mapProps) {
+        if (prop.prefab !== "crystal_switch" || prop.zone !== zone) continue;
+        if (Math.hypot(nextX - prop.x, nextZ - prop.z) <= 1.25) {
+          toggleCrystalSwitch(prop.id);
+          shouldSmash = true;
+          break;
+        }
+      }
+
+      // Check if thrown pot/rock hits an Enemy (deals 2 damage on impact!)
+      if (!shouldSmash) {
+        for (const enemy of enemies) {
+          if (enemy.zone !== zone || enemy.state === "dead") continue;
+          const eRad = enemy.kind === "boss" ? 1.45 : 0.85;
+          if (Math.hypot(enemy.x - nextX, enemy.z - nextZ) <= eRad + 0.55) {
+            shouldSmash = true;
+            const isSanctumFoe =
+              enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
+            if (!isSanctumFoe || flags.bossAwakened) {
+              enemy.provoked = true;
+              if (enemy.kind === "boss" && enemy.state !== "stunned") {
+                soundEngine.playArmorDeflect();
+              } else {
+                enemy.hp -= 2;
+                enemy.hitFlashTimer = 0.25;
+                const dx = enemy.x - obj.startX;
+                const dz = enemy.z - obj.startZ;
+                const d = Math.hypot(dx, dz) || 1;
+                if (enemy.kind !== "boss") {
+                  enemy.knockbackVx = (dx / d) * 6.5;
+                  enemy.knockbackVz = (dz / d) * 6.5;
+                  if (enemy.state === "idle" || enemy.state === "recover") {
+                    enemy.state = "aggro";
+                  }
+                }
+                if (enemy.hp <= 0) {
+                  handleEnemyDeath(enemy);
+                } else {
+                  soundEngine.playEnemyHit(enemy.kind === "boss");
+                }
+              }
+            }
+            break;
+          }
+        }
+      }
+
+      // Check obstacle collision
+      if (!shouldSmash) {
+        const resT = resolveArrowCollisions(
+          nextX,
+          nextZ,
+          0.35,
+          zone,
+          gatePassable,
+          dynamicObstacles
+        );
+        if (resT.hitObstacle) {
+          shouldSmash = true;
+        } else {
+          obj.x = nextX;
+          obj.z = nextZ;
+        }
+      }
+
+      if (shouldSmash) {
+        smashPotOrRock(obj.x, obj.z, obj.kind, obj.potReward, obj.id);
+      } else {
+        remainingThrown.push(obj);
+      }
+    }
+    thrownObjects = remainingThrown;
+
+    // 9d. Update Active Bombs (`activeBombs` — Arc Flight, Fuse Countdown, & Explosion Blast!)
+    const remainingBombs: BombProjectileState[] = [];
+    for (const bomb of activeBombs) {
+      if (bomb.zone !== zone) continue;
+
+      if (bomb.exploded) {
+        bomb.explosionTimer = (bomb.explosionTimer ?? 0.42) - dt;
+        if (bomb.explosionTimer > 0) {
+          remainingBombs.push(bomb);
+        }
+        continue;
+      }
+
+      // Move thrown bomb along arc if airborne or sliding
+      if (bomb.y > 0 || Math.hypot(bomb.vx, bomb.vz) > 0.08) {
+        const nextBx = bomb.x + bomb.vx * dt;
+        const nextBz = bomb.z + bomb.vz * dt;
+        const resB = resolveWorldCollisions(
+          nextBx,
+          nextBz,
+          0.38,
+          zone,
+          gatePassable,
+          dynamicObstacles,
+          bossExitOpen
+        );
+        if (resB.hitObstacle) {
+          bomb.vx *= -0.35;
+          bomb.vz *= -0.35;
+        } else {
+          bomb.x = resB.x;
+          bomb.z = resB.z;
+        }
+        bomb.vy -= 18.5 * dt;
+        bomb.y = Math.max(0, bomb.y + bomb.vy * dt);
+        if (bomb.y === 0) {
+          bomb.vy = 0;
+          bomb.vx *= Math.exp(-12 * dt);
+          bomb.vz *= Math.exp(-12 * dt);
+        }
+      }
+
+      bomb.fuseTimer -= dt;
+      if (bomb.fuseTimer <= 0) {
+        // DETONATE BOMB!
+        bomb.exploded = true;
+        bomb.explosionTimer = 0.44;
+        bomb.y = 0;
+        soundEngine.playBombExplosion();
+
+        const blastRadius = 3.5;
+
+        // 1. Blow up any Explodable Cracked Rocks (`cracked_rock`), Pots (`clay_pot`), or Light Rocks (`light_rock`) in blast radius!
+        for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
+          const prop = mapProps[pIdx];
+          if (prop.zone !== zone) continue;
+          const distToProp = Math.hypot(prop.x - bomb.x, prop.z - bomb.z);
+
+          if (prop.prefab === "cracked_rock" && !prop.smashed && distToProp <= 3.85) {
+            ensureMutableMapProps();
+            mapProps[pIdx].smashed = true;
+            mapProps[pIdx].hasCollider = false;
+            bushBursts.push({
+              id: `cracked-rock-burst-${prop.id}-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: prop.x,
+              z: prop.z,
+              timer: 0.95,
+              maxTimer: 0.95,
+              seed: Math.floor(Math.abs(prop.x * 59 + prop.z * 97) + stats.elapsedSeconds * 110),
+              isRock: true,
+            });
+            soundEngine.playSecretSolve();
+            if (prop.id === "prop-ow-cracked-cave-rock") {
+              pushBanner(
+                "Secret Echo Cave Entrance Unsealed!",
+                "Your bomb shattered the cracked boulder blocking the North-West cliffside cave!",
+                5.5
+              );
+            } else {
+              pushBanner(
+                "Cracked Boulder Shattered!",
+                "The bomb explosion pulverized the fractured stone!",
+                3.6
+              );
+            }
+          } else if (
+            (prop.prefab === "clay_pot" || prop.prefab === "light_rock") &&
+            !prop.smashed &&
+            distToProp <= blastRadius
+          ) {
+            ensureMutableMapProps();
+            mapProps[pIdx].smashed = true;
+            mapProps[pIdx].hasCollider = false;
+            smashPotOrRock(prop.x, prop.z, prop.prefab, prop.potReward, prop.id);
+          } else if (prop.prefab === "crystal_switch" && distToProp <= 3.65) {
+            toggleCrystalSwitch(prop.id);
+          } else if (
+            prop.prefab === "bush" &&
+            !cutBushIds.includes(prop.id) &&
+            distToProp <= blastRadius
+          ) {
+            cutBushIds.push(prop.id);
+            bushBursts.push({
+              id: `bush-burst-bomb-${prop.id}-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: prop.x,
+              z: prop.z,
+              timer: 0.85,
+              maxTimer: 0.85,
+              seed: Math.floor(Math.abs(prop.x * 41 + prop.z * 83) + stats.elapsedSeconds * 130),
+            });
+          }
+        }
+
+        if (mapPropsMutated) {
+          dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+        }
+
+        // 2. Deal 3 Heavy Blast Damage to Enemies in blast radius (and crack Malakor's armor!)
+        for (const enemy of enemies) {
+          if (enemy.zone !== zone || enemy.state === "dead") continue;
+          const eRad = enemy.kind === "boss" ? 1.5 : 0.85;
+          const dx = enemy.x - bomb.x;
+          const dz = enemy.z - bomb.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist <= blastRadius + eRad) {
+            const isSanctumFoe =
+              enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
+            if (isSanctumFoe && !flags.bossAwakened) continue;
+            enemy.provoked = true;
+            if (enemy.kind === "boss") {
+              if (enemy.state !== "stunned") {
+                soundEngine.playBossWallCrash();
+                enemy.state = "stunned";
+                enemy.stateTimer = 2.8;
+                enemy.hitFlashTimer = 0.28;
+                pushBanner(
+                  "Bomb Blast Cracked Malakor's Armor!",
+                  "Malakor is stunned by the explosion — strike him now!",
+                  3.2
+                );
+              } else {
+                enemy.hp -= 3;
+                enemy.hitFlashTimer = 0.28;
+                if (enemy.hp <= 0) {
+                  handleEnemyDeath(enemy);
+                } else {
+                  soundEngine.playEnemyHit(true);
+                }
+              }
+            } else {
+              enemy.hp -= 3;
+              enemy.hitFlashTimer = 0.28;
+              const pushX = dist > 0.01 ? dx / dist : 0;
+              const pushZ = dist > 0.01 ? dz / dist : 1;
+              enemy.knockbackVx = pushX * 11.5;
+              enemy.knockbackVz = pushZ * 11.5;
+              if (enemy.state === "idle" || enemy.state === "recover") {
+                enemy.state = "aggro";
+              }
+              if (enemy.hp <= 0) {
+                handleEnemyDeath(enemy);
+              } else {
+                soundEngine.playEnemyHit(false);
+              }
+            }
+          }
+        }
+
+        // 3. Damage Hero if standing right on top of the explosion
+        const hDx = hero.x - bomb.x;
+        const hDz = hero.z - bomb.z;
+        const hDist = Math.hypot(hDx, hDz);
+        if (hDist <= 2.15) {
+          const pushX = hDist > 0.01 ? (hDx / hDist) * 11.5 : 0;
+          const pushZ = hDist > 0.01 ? (hDz / hDist) * 11.5 : -11.5;
+          const angleToBomb = Math.atan2(bomb.x - hero.x, bomb.z - hero.z);
+          damageHero(1, pushX, pushZ, false, false, angleToBomb, 4.0);
+        }
+      }
+
+      remainingBombs.push(bomb);
+    }
+    activeBombs = remainingBombs;
 
     // 10. Update Enemies, Pathfinding & Weight-Balanced Combat Knockback
     for (let i = 0; i < enemies.length; i++) {
@@ -4780,6 +5917,50 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // 14. Compute Contextual Interaction Prompt for HUD (`hero.interactPrompt`)
+    if (hero.heldObject) {
+      hero.interactPrompt =
+        hero.heldObject.kind === "bomb"
+          ? "Press [F] / [B] or Attack to Throw Bomb"
+          : hero.heldObject.kind === "clay_pot"
+          ? "Press [F] or Attack to Throw Clay Pot"
+          : "Press [F] or Attack to Throw Rock";
+    } else if ((hero.pushTimer ?? 0) > 0.08) {
+      const pct = Math.min(100, Math.round(((hero.pushTimer ?? 0) / 1.0) * 100));
+      hero.interactPrompt = `Pushing Stone Block... (${pct}%)`;
+    } else {
+      const nearGroundBomb = activeBombs.find(
+        (b) => b.zone === zone && !b.exploded && Math.hypot(b.x - hero.x, b.z - hero.z) <= 2.2
+      );
+      const nearLiftable = mapProps.find(
+        (p) =>
+          p.zone === zone &&
+          !p.smashed &&
+          (p.prefab === "clay_pot" || p.prefab === "light_rock") &&
+          Math.hypot(p.x - hero.x, p.z - hero.z) <= 2.35
+      );
+      const nearCrackedRock = mapProps.find(
+        (p) =>
+          p.zone === zone &&
+          !p.smashed &&
+          p.prefab === "cracked_rock" &&
+          Math.hypot(p.x - hero.x, p.z - hero.z) <= 3.35
+      );
+
+      if (nearGroundBomb) {
+        hero.interactPrompt = "Press [F] or [B] to Lift & Throw Bomb";
+      } else if (nearLiftable) {
+        hero.interactPrompt =
+          nearLiftable.prefab === "clay_pot"
+            ? "Press [F] to Lift Clay Pot"
+            : "Press [F] to Lift Light Rock";
+      } else if (nearCrackedRock) {
+        hero.interactPrompt = "Cracked Boulder — Press [B] to Place Bomb!";
+      } else {
+        hero.interactPrompt = null;
+      }
+    }
+
     set({
       phase,
       zone,
@@ -4791,6 +5972,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       fireballs,
       fireZones,
       friendlyBees,
+      thrownObjects,
+      activeBombs,
       projectiles,
       hazards,
       rupees,
