@@ -13,6 +13,7 @@ import {
   DUNGEON_KEY_POS,
   DungeonRoomId,
   EnemyKind,
+  EnemyShieldArmor,
   getDefaultEnemyWeight,
   HERO_SPAWN,
   INITIAL_ENEMIES,
@@ -205,6 +206,8 @@ export interface EnemyState {
   speed: number;
   damage: number;
   rupeeDrop: RupeeTier | "boss";
+  shieldArmor?: EnemyShieldArmor;
+  initialShieldArmor?: EnemyShieldArmor;
   provoked?: boolean;
   // Boss & Goblin Lunge combat state
   chargeAngle: number;
@@ -339,6 +342,8 @@ export interface GameFlags {
   chestUnlocked: boolean;
   overworldTorchPuzzleSolved?: boolean;
   dungeonTorchPuzzleSolved?: boolean;
+  overworldTimedTorchSolved?: boolean;
+  dungeonTimedTorchSolved?: boolean;
   overworldCrystalPuzzleSolved?: boolean;
   dungeonCrystalPuzzleSolved?: boolean;
   frontierCrystalPuzzleSolved?: boolean;
@@ -669,6 +674,8 @@ function createInitialEnemies(): EnemyState[] {
     speed: spawn.speed,
     damage: spawn.damage,
     rupeeDrop: spawn.rupeeDrop,
+    shieldArmor: spawn.shieldArmor ?? "none",
+    initialShieldArmor: spawn.shieldArmor ?? "none",
     chargeAngle: Math.PI,
     chargePathLength: BOSS_MAX_LUNGE_RANGE,
     chargeDistanceTraveled: 0,
@@ -765,7 +772,27 @@ function createInitialState(
     thrownObjects: [],
     activeBombs: [],
     projectiles: [],
-    hazards: [],
+    // Persistent floor traps in Dungeon Room II (Hall of Pillars) so lighting the Dark Room illuminates traps & monsters!
+    hazards: [
+      {
+        id: "dg-hall-trap-w",
+        zone: "dungeon",
+        x: -3.4,
+        z: 1.5,
+        radius: 1.75,
+        timer: 999999,
+        maxTimer: 999999,
+      },
+      {
+        id: "dg-hall-trap-e",
+        zone: "dungeon",
+        x: 3.4,
+        z: 1.5,
+        radius: 1.75,
+        timer: 999999,
+        maxTimer: 999999,
+      },
+    ],
     rupees: createInitialRupees(),
     cutBushIds: [],
     lootedBushIds: [],
@@ -789,6 +816,8 @@ function createInitialState(
       chestUnlocked: false,
       overworldTorchPuzzleSolved: false,
       dungeonTorchPuzzleSolved: false,
+      overworldTimedTorchSolved: false,
+      dungeonTimedTorchSolved: false,
       overworldCrystalPuzzleSolved: false,
       dungeonCrystalPuzzleSolved: false,
       frontierCrystalPuzzleSolved: false,
@@ -804,7 +833,7 @@ function createInitialState(
             id: 1,
             text: "Whispering Vale",
             subtext:
-              "Press F to Lift & Throw Pots/Rocks • Press B for Bombs • Walk into Blocks for 1s to Push • Strike Crystal Orbs!",
+              "Use Flame Rod [R] on Timed Lanterns, Dark Rooms, Briars/Spiderwebs, & Shielded Monsters!",
             timer: 6.2,
           }
         : null,
@@ -829,7 +858,7 @@ function createInitialState(
   };
 }
 
-const MAP_STORAGE_KEY = "zeldo-authored-map-v3";
+const MAP_STORAGE_KEY = "zeldo-authored-map-v4";
 
 function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   if (p.prefab === "dirt_patch") {
@@ -837,6 +866,9 @@ function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   }
   if (p.prefab === "clay_pot" || p.prefab === "light_rock" || p.prefab === "cracked_rock") {
     return { ...p, smashed: false, hasCollider: true };
+  }
+  if (p.prefab === "briar_barrier" || p.prefab === "spiderweb_barrier") {
+    return { ...p, smashed: false, hasCollider: true, burningTimer: 0 };
   }
   if (p.prefab === "crystal_switch") {
     return { ...p, switchState: "blue", hitCooldown: 0 };
@@ -846,6 +878,12 @@ function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   }
   if (p.prefab === "push_block") {
     return { ...p, slideTimer: 0 };
+  }
+  if (p.timedDuration && p.timedDuration > 0) {
+    return { ...p, lit: false, litTimer: 0, timedSolved: false };
+  }
+  if (p.zone === "dungeon" && p.prefab === "wall_torch" && Math.abs(p.z - 10.2) < 0.5) {
+    return { ...p, lit: false };
   }
   if (p.puzzleTarget) {
     return { ...p, lit: false };
@@ -870,6 +908,7 @@ function persistAuthoredMapToStorage(state: {
         x: e.spawnX,
         z: e.spawnZ,
         hp: e.maxHp,
+        shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
         state: "idle" as EnemyAIState,
         stateTimer: 0,
         hitFlashTimer: 0,
@@ -886,7 +925,7 @@ function persistAuthoredMapToStorage(state: {
       .map((r) => ({ ...r, collected: false, spawnBounceTimer: 0 }));
 
     const payload = {
-      version: 3,
+      version: 4,
       mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: cleanEnemies,
       rupees: cleanRupees,
@@ -935,6 +974,8 @@ const DEFAULT_PROP_META: Record<
   crystal_switch: { label: "Crystal Switch Orb", hasCollider: true, w: 1.2, d: 1.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   crystal_barrier: { label: "Crystal Barrier Pillar", hasCollider: true, w: 1.8, d: 1.8, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   cracked_rock: { label: "Explodable Cracked Rock", hasCollider: true, w: 2.3, d: 2.3, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
+  briar_barrier: { label: "Dry Briar Barrier (Burnable)", hasCollider: true, w: 2.8, d: 1.6, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "tree" },
+  spiderweb_barrier: { label: "Thick Spiderweb Barrier (Burnable)", hasCollider: true, w: 5.0, d: 1.6, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "wall" },
   boulder: { label: "Mossy Boulder", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
   ruin_pillar: { label: "Watchtower Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   dungeon_pillar: { label: "Sanctum Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
@@ -966,6 +1007,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           x: e.spawnX,
           z: e.spawnZ,
           hp: e.maxHp,
+          shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
           state: "idle",
           stateTimer: 0,
           hitFlashTimer: 0,
@@ -1000,6 +1042,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           x: e.spawnX,
           z: e.spawnZ,
           hp: e.maxHp,
+          shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
           state: "idle",
           stateTimer: 0,
           hitFlashTimer: 0,
@@ -1603,6 +1646,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
               ...patch,
               spawnX: patch.x !== undefined ? patch.x : e.spawnX,
               spawnZ: patch.z !== undefined ? patch.z : e.spawnZ,
+              initialShieldArmor:
+                patch.shieldArmor !== undefined
+                  ? patch.shieldArmor
+                  : e.initialShieldArmor,
             }
           : e
       );
@@ -1771,6 +1818,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           x: e.spawnX,
           z: e.spawnZ,
           hp: e.maxHp,
+          shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
           state: "idle",
           stateTimer: 0,
           hitFlashTimer: 0,
@@ -1796,7 +1844,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
       thrownObjects: [],
       activeBombs: [],
       projectiles: [],
-      hazards: [],
+      hazards: [
+        {
+          id: "dg-hall-trap-w",
+          zone: "dungeon",
+          x: -3.4,
+          z: 1.5,
+          radius: 1.75,
+          timer: 999999,
+          maxTimer: 999999,
+        },
+        {
+          id: "dg-hall-trap-e",
+          zone: "dungeon",
+          x: 3.4,
+          z: 1.5,
+          radius: 1.75,
+          timer: 999999,
+          maxTimer: 999999,
+        },
+      ],
       boomerang: null,
       flags: {
         ...state.flags,
@@ -1806,6 +1873,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         chestUnlocked: false,
         overworldTorchPuzzleSolved: false,
         dungeonTorchPuzzleSolved: false,
+        overworldTimedTorchSolved: false,
+        dungeonTimedTorchSolved: false,
         overworldCrystalPuzzleSolved: false,
         dungeonCrystalPuzzleSolved: false,
         frontierCrystalPuzzleSolved: false,
@@ -4064,6 +4133,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
               if (enemy.kind === "boss" && enemy.state !== "stunned") {
                 soundEngine.playArmorDeflect();
                 soundEngine.playArrowStick();
+              } else if (enemy.shieldArmor === "wood" || enemy.shieldArmor === "ice") {
+                soundEngine.playShieldBlock();
+                soundEngine.playArrowStick();
+                enemy.hitFlashTimer = 0.16;
+                if (enemy.state === "idle" || enemy.state === "recover") {
+                  enemy.state = "aggro";
+                }
+                if (armorNoticeCooldown <= 0) {
+                  armorNoticeCooldown = 2.8;
+                  pushBanner(
+                    enemy.shieldArmor === "ice"
+                      ? "Glacial Ice Armor Deflects Your Arrow!"
+                      : "Wooden Shield Blocks Your Arrow!",
+                    "Cast the Flame Rod [R / 3] to melt or burn their defense first!",
+                    3.4
+                  );
+                }
               } else {
                 enemy.hp -= arrow.damage;
                 enemy.hitFlashTimer = 0.22;
@@ -4181,7 +4267,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     arrows = remainingArrows;
 
-    // 9b. Torch Combination Puzzles, Magic Fireballs, Burning Ground Fire Zones & Friendly Golden Bees
+    // 9b. Torch Combination Puzzles, Timed 4-Torch Squares, Burnable Barriers, Magic Fireballs & Fire Zones
     const checkTorchCombinationPuzzles = () => {
       if (zone === "overworld" && !flags.overworldTorchPuzzleSolved) {
         const owPuzzleTorches = mapProps.filter(
@@ -4298,6 +4384,247 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     };
 
+    // Check Timed Torch Square Puzzles (4 lanterns with `timedDuration: 8` lit simultaneously!)
+    const checkTimedTorchPuzzles = () => {
+      const timedTorches = mapProps.filter(
+        (p) =>
+          p.zone === zone &&
+          p.prefab === "wall_torch" &&
+          (p.timedDuration ?? 0) > 0
+      );
+      if (
+        timedTorches.length > 0 &&
+        !timedTorches.every((p) => p.timedSolved) &&
+        timedTorches.every((p) => p.lit !== false)
+      ) {
+        ensureMutableMapProps();
+        let sumX = 0;
+        let sumZ = 0;
+        for (let i = 0; i < mapProps.length; i++) {
+          const mp = mapProps[i];
+          if (mp.zone === zone && mp.prefab === "wall_torch" && (mp.timedDuration ?? 0) > 0) {
+            mp.timedSolved = true;
+            mp.lit = true;
+            mp.litTimer = mp.timedDuration ?? 8;
+            sumX += mp.x;
+            sumZ += mp.z;
+          }
+        }
+        const centerX = sumX / timedTorches.length;
+        const centerZ = sumZ / timedTorches.length;
+        soundEngine.playSecretSolve();
+
+        if (zone === "dungeon") {
+          flags.dungeonTimedTorchSolved = true;
+          if (!flags.gateUnlocked) {
+            flags.gateUnlocked = true;
+            soundEngine.playGateUnlock();
+          }
+          rupees.push(
+            {
+              id: `timed-torch-dg-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "dungeon",
+              x: centerX - 0.65,
+              z: centerZ,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.46,
+            },
+            {
+              id: `timed-torch-dg-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "dungeon",
+              x: centerX + 0.65,
+              z: centerZ,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.46,
+            }
+          );
+          pushBanner(
+            "4-Lantern Timed Square Solved! (Sanctum Gate Unlocked!)",
+            "All 4 timed lanterns were lit within 8 seconds — the room blazes with light and the Sanctum Gate opens!",
+            5.8
+          );
+        } else {
+          flags.overworldTimedTorchSolved = true;
+          rupees.push(
+            {
+              id: `timed-torch-ow-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone,
+              x: centerX - 0.7,
+              z: centerZ,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.46,
+            },
+            {
+              id: `timed-torch-ow-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone,
+              x: centerX + 0.7,
+              z: centerZ,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.46,
+            },
+            {
+              id: `timed-torch-ow-heart-${stats.elapsedSeconds.toFixed(2)}`,
+              zone,
+              x: centerX,
+              z: centerZ + 0.65,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.46,
+            }
+          );
+          pushBanner(
+            "4-Lantern Timed Square Solved! (+40 Rupees & Heart)",
+            "All 4 timed lanterns were lit simultaneously within the 8-second countdown!",
+            5.2
+          );
+        }
+      }
+    };
+
+    // Tick down 8-second Timed Torches (`litTimer`) and Burning Barriers (`burningTimer`)
+    for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
+      const prop = mapProps[pIdx];
+      if (prop.zone !== zone) continue;
+
+      // 1. Timed Torch 8-Second Countdown
+      if (
+        prop.prefab === "wall_torch" &&
+        (prop.timedDuration ?? 0) > 0 &&
+        prop.lit !== false &&
+        !prop.timedSolved
+      ) {
+        ensureMutableMapProps();
+        const mp = mapProps[pIdx];
+        const nextTimer = Math.max(0, (mp.litTimer ?? mp.timedDuration ?? 8) - dt);
+        mp.litTimer = nextTimer;
+        if (nextTimer <= 0) {
+          mp.lit = false;
+          mp.litTimer = 0;
+          soundEngine.playTorchExtinguish();
+        }
+      }
+
+      // 2. Burnable Barrier (`briar_barrier` & `spiderweb_barrier`) Ash Disintegration
+      if (
+        (prop.prefab === "briar_barrier" || prop.prefab === "spiderweb_barrier") &&
+        !prop.smashed &&
+        (prop.burningTimer ?? 0) > 0
+      ) {
+        ensureMutableMapProps();
+        const mp = mapProps[pIdx];
+        const nextBurn = Math.max(0, (mp.burningTimer ?? 0) - dt);
+        mp.burningTimer = nextBurn;
+        if (nextBurn <= 0) {
+          mp.smashed = true;
+          mp.hasCollider = false;
+          mp.burningTimer = 0;
+          dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+          bushBursts.push({
+            id: `burn-finish-${mp.id}-${stats.elapsedSeconds.toFixed(3)}`,
+            zone,
+            x: mp.x,
+            z: mp.z,
+            timer: 0.85,
+            maxTimer: 0.85,
+            seed: Math.floor(Math.abs(mp.x * 53 + mp.z * 89) + stats.elapsedSeconds * 120),
+            isDirt: mp.prefab === "briar_barrier",
+          });
+          if (mp.prefab === "spiderweb_barrier") {
+            pushBanner(
+              "Thick Spiderwebs Incinerated!",
+              "The Flame Rod burned away the web barrier — the path to the Elderwood Frontier is open!",
+              4.8
+            );
+          } else {
+            pushBanner(
+              "Dry Briar Barrier Burned Away!",
+              "The thorny brambles crumbled to ash under your Flame Rod!",
+              4.0
+            );
+          }
+        }
+      }
+    }
+
+    const igniteBurnableBarrier = (pIdx: number): boolean => {
+      const prop = mapProps[pIdx];
+      if (
+        !prop ||
+        prop.smashed ||
+        (prop.burningTimer ?? 0) > 0 ||
+        (prop.prefab !== "briar_barrier" && prop.prefab !== "spiderweb_barrier")
+      ) {
+        return false;
+      }
+      ensureMutableMapProps();
+      mapProps[pIdx].burningTimer = 0.55;
+      soundEngine.playBurnBarrier();
+      bushBursts.push({
+        id: `burn-start-${prop.id}-${stats.elapsedSeconds.toFixed(3)}`,
+        zone,
+        x: prop.x,
+        z: prop.z,
+        timer: 0.75,
+        maxTimer: 0.75,
+        seed: Math.floor(Math.abs(prop.x * 37 + prop.z * 73) + stats.elapsedSeconds * 110),
+        isDirt: prop.prefab === "briar_barrier",
+      });
+      return true;
+    };
+
+    const meltOrBurnEnemyShield = (enemy: EnemyState): boolean => {
+      if (enemy.shieldArmor !== "wood" && enemy.shieldArmor !== "ice") {
+        return false;
+      }
+      const wasIce = enemy.shieldArmor === "ice";
+      enemy.shieldArmor = "none";
+      enemy.hitFlashTimer = 0.3;
+      enemy.stunTimer = Math.max(enemy.stunTimer, 0.85);
+      soundEngine.playBurnBarrier();
+      bushBursts.push({
+        id: `shield-break-${enemy.id}-${stats.elapsedSeconds.toFixed(3)}`,
+        zone,
+        x: enemy.x,
+        z: enemy.z,
+        timer: 0.85,
+        maxTimer: 0.85,
+        seed: Math.floor(Math.abs(enemy.x * 61 + enemy.z * 97) + stats.elapsedSeconds * 130),
+        isRock: wasIce,
+        isDirt: !wasIce,
+      });
+      pushBanner(
+        wasIce ? "Glacial Ice Armor Melted!" : "Wooden Shield Burned Away!",
+        "The monster's defense is destroyed — strike with your Sword or Bow!",
+        3.5
+      );
+      return true;
+    };
+
+    const lightTorchAtPropIndex = (pIdx: number) => {
+      const prop = mapProps[pIdx];
+      if (!prop || prop.prefab !== "wall_torch") return;
+      const wasUnlit = prop.lit === false;
+      ensureMutableMapProps();
+      mapProps[pIdx].lit = true;
+      if ((prop.timedDuration ?? 0) > 0 && !prop.timedSolved) {
+        mapProps[pIdx].litTimer = prop.timedDuration ?? 8;
+      }
+      if (wasUnlit) {
+        soundEngine.playTorchLight();
+      }
+      checkTorchCombinationPuzzles();
+      checkTimedTorchPuzzles();
+    };
+
     // Allow sword swing or boomerang to fan out / extinguish a lit puzzle torch so the player can adjust combinations!
     if (
       (hero.isAttacking && hero.attackTimer > 0.14) ||
@@ -4347,7 +4674,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
         maxTimer: 3.8,
         tickTimer: 0.12,
       });
-      // Immediate splash damage on explosion!
+      // Ignite any burnable barriers or torches caught in the charged explosion!
+      for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
+        const prop = mapProps[pIdx];
+        if (prop.zone !== zone) continue;
+        if (prop.prefab === "wall_torch" && Math.hypot(fx - prop.x, fz - prop.z) <= 2.75) {
+          lightTorchAtPropIndex(pIdx);
+        } else if (
+          (prop.prefab === "briar_barrier" || prop.prefab === "spiderweb_barrier") &&
+          !prop.smashed &&
+          Math.hypot(fx - prop.x, fz - prop.z) <= 3.2
+        ) {
+          igniteBurnableBarrier(pIdx);
+        }
+      }
+      // Immediate splash damage on explosion (also melts Ice Armor / burns Wooden Shields)!
       for (const enemy of enemies) {
         if (enemy.zone !== zone || enemy.state === "dead") continue;
         const eRad = enemy.kind === "boss" ? 1.5 : 0.9;
@@ -4356,6 +4697,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
           if (isSanctumFoe && !flags.bossAwakened) continue;
           enemy.provoked = true;
+          meltOrBurnEnemyShield(enemy);
           if (enemy.kind === "boss" && enemy.state !== "stunned") {
             soundEngine.playArmorDeflect();
           } else {
@@ -4388,28 +4730,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const nextFx = fb.x + Math.sin(fb.angle) * fb.speed * dt;
       const nextFz = fb.z + Math.cos(fb.angle) * fb.speed * dt;
 
-      // Light any unlit wall_torch or toggle any crystal_switch along the fireball's path!
-      let hitSwitchWithFb = false;
+      // Light any unlit/timed wall_torch, ignite any briar/spiderweb barrier, or toggle any crystal_switch along the fireball's path!
+      let hitSwitchOrBarrierWithFb = false;
       for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
         const prop = mapProps[pIdx];
         if (prop.zone !== zone) continue;
         if (prop.prefab === "wall_torch") {
           if (Math.hypot(nextFx - prop.x, nextFz - prop.z) <= fb.radius + 0.95) {
-            if (prop.lit === false) {
-              ensureMutableMapProps();
-              mapProps[pIdx].lit = true;
-              soundEngine.playTorchLight();
-              checkTorchCombinationPuzzles();
+            if (prop.lit === false || ((prop.timedDuration ?? 0) > 0 && !prop.timedSolved)) {
+              lightTorchAtPropIndex(pIdx);
             }
+          }
+        } else if (
+          (prop.prefab === "briar_barrier" || prop.prefab === "spiderweb_barrier") &&
+          !prop.smashed
+        ) {
+          const halfW = prop.colliderWidth * prop.scaleX * 0.5 + fb.radius + 0.35;
+          const halfD = prop.colliderDepth * prop.scaleZ * 0.5 + fb.radius + 0.35;
+          if (Math.abs(nextFx - prop.x) <= halfW && Math.abs(nextFz - prop.z) <= halfD) {
+            igniteBurnableBarrier(pIdx);
+            hitSwitchOrBarrierWithFb = true;
           }
         } else if (prop.prefab === "crystal_switch") {
           if (Math.hypot(nextFx - prop.x, nextFz - prop.z) <= fb.radius + 0.85) {
             toggleCrystalSwitch(prop.id);
-            hitSwitchWithFb = true;
+            hitSwitchOrBarrierWithFb = true;
           }
         }
       }
-      if (hitSwitchWithFb) {
+      if (hitSwitchOrBarrierWithFb) {
         if (fb.isCharged) {
           spawnChargedFireZone(fb.x, fb.z);
         } else {
@@ -4472,6 +4821,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               soundEngine.playArmorDeflect();
             } else {
               enemy.provoked = true;
+              meltOrBurnEnemyShield(enemy);
               if (enemy.kind === "boss" && enemy.state !== "stunned") {
                 soundEngine.playArmorDeflect();
               } else {
@@ -4505,18 +4855,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       fz.timer -= dt;
       if (fz.timer <= 0) continue;
 
-      // Also light any unlit torch touching the fire zone!
+      // Also light any unlit/timed torch or burnable barrier touching the fire zone!
       for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
         const prop = mapProps[pIdx];
-        if (prop.zone !== zone || prop.prefab !== "wall_torch" || prop.lit !== false) continue;
-        if (Math.hypot(fz.x - prop.x, fz.z - prop.z) <= fz.radius + 0.65) {
-          if (!mapPropsMutated) {
-            mapProps = mapProps.map((mp) => ({ ...mp }));
-            mapPropsMutated = true;
+        if (prop.zone !== zone) continue;
+        if (prop.prefab === "wall_torch" && prop.lit === false) {
+          if (Math.hypot(fz.x - prop.x, fz.z - prop.z) <= fz.radius + 0.65) {
+            lightTorchAtPropIndex(pIdx);
           }
-          mapProps[pIdx].lit = true;
-          soundEngine.playTorchLight();
-          checkTorchCombinationPuzzles();
+        } else if (
+          (prop.prefab === "briar_barrier" || prop.prefab === "spiderweb_barrier") &&
+          !prop.smashed &&
+          Math.hypot(fz.x - prop.x, fz.z - prop.z) <= fz.radius + 1.4
+        ) {
+          igniteBurnableBarrier(pIdx);
         }
       }
 
@@ -4531,6 +4883,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
             if (isSanctumFoe && !flags.bossAwakened) continue;
             enemy.provoked = true;
+            meltOrBurnEnemyShield(enemy);
             if (enemy.kind === "boss" && enemy.state !== "stunned") {
               soundEngine.playArmorDeflect();
             } else {
@@ -4589,6 +4942,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           nearestEnemy.provoked = true;
           if (nearestEnemy.kind === "boss" && nearestEnemy.state !== "stunned") {
             soundEngine.playArmorDeflect();
+          } else if (nearestEnemy.shieldArmor === "wood" || nearestEnemy.shieldArmor === "ice") {
+            soundEngine.playShieldBlock();
           } else {
             nearestEnemy.hp -= 1;
             nearestEnemy.hitFlashTimer = 0.18;
@@ -4643,7 +4998,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
-      // Check if thrown pot/rock hits an Enemy (deals 2 damage on impact!)
+      // Check if thrown pot/rock hits an Enemy (deals 2 damage on impact, unless blocked by Wood Shield / Ice Armor!)
       if (!shouldSmash) {
         for (const enemy of enemies) {
           if (enemy.zone !== zone || enemy.state === "dead") continue;
@@ -4656,6 +5011,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
               enemy.provoked = true;
               if (enemy.kind === "boss" && enemy.state !== "stunned") {
                 soundEngine.playArmorDeflect();
+              } else if (enemy.shieldArmor === "wood" || enemy.shieldArmor === "ice") {
+                soundEngine.playShieldBlock();
+                enemy.hitFlashTimer = 0.16;
+                if (armorNoticeCooldown <= 0) {
+                  armorNoticeCooldown = 2.8;
+                  pushBanner(
+                    enemy.shieldArmor === "ice"
+                      ? "Glacial Ice Armor Deflects the Vessel!"
+                      : "Wooden Shield Blocks the Vessel!",
+                    "Cast the Flame Rod [R / 3] to melt or burn their defense first!",
+                    3.2
+                  );
+                }
               } else {
                 enemy.hp -= 2;
                 enemy.hitFlashTimer = 0.25;
@@ -4920,6 +5288,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
             enemy.provoked = true;
             if (enemy.kind === "boss") {
               soundEngine.playArmorDeflect();
+            } else if (enemy.shieldArmor === "wood" || enemy.shieldArmor === "ice") {
+              soundEngine.playShieldBlock();
+              enemy.hitFlashTimer = 0.16;
+              if (enemy.state === "idle") {
+                enemy.state = "aggro";
+              }
+              if (armorNoticeCooldown <= 0) {
+                armorNoticeCooldown = 2.8;
+                pushBanner(
+                  enemy.shieldArmor === "ice"
+                    ? "Glacial Ice Armor Deflects Boomerang!"
+                    : "Wooden Shield Blocks Boomerang!",
+                  "Cast the Flame Rod [R / 3] to melt or burn their defense first!",
+                  3.2
+                );
+              }
             } else {
               enemy.hp -= 1;
               enemy.hitFlashTimer = 0.22;
@@ -4985,6 +5369,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 } else {
                   soundEngine.playEnemyHit(true);
                 }
+              }
+            } else if (enemy.shieldArmor === "wood" || enemy.shieldArmor === "ice") {
+              // Wooden Shield or Glacial Ice Armor blocks Sword & Spin Attack strikes!
+              soundEngine.playShieldBlock();
+              enemy.hitFlashTimer = 0.16;
+              const kbDirX = dist > 0.01 ? dx / dist : Math.sin(hero.facing);
+              const kbDirZ = dist > 0.01 ? dz / dist : Math.cos(hero.facing);
+              enemy.knockbackVx = kbDirX * 2.2;
+              enemy.knockbackVz = kbDirZ * 2.2;
+              if (enemy.state === "idle") {
+                enemy.state = "aggro";
+              }
+              if (armorNoticeCooldown <= 0) {
+                armorNoticeCooldown = 2.8;
+                pushBanner(
+                  enemy.shieldArmor === "ice"
+                    ? "Glacial Ice Armor Deflects Your Sword!"
+                    : "Wooden Shield Blocks Your Sword!",
+                  "Cast the Flame Rod [R / 3] to melt or burn their defense first!",
+                  3.5
+                );
               }
             } else {
               // Weight-based knockback system!
@@ -5946,6 +6351,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
           p.prefab === "cracked_rock" &&
           Math.hypot(p.x - hero.x, p.z - hero.z) <= 3.35
       );
+      const nearBurnableBarrier = mapProps.find(
+        (p) =>
+          p.zone === zone &&
+          !p.smashed &&
+          (p.prefab === "briar_barrier" || p.prefab === "spiderweb_barrier") &&
+          Math.hypot(p.x - hero.x, p.z - hero.z) <= 3.85
+      );
+      const nearUnlitTorch = mapProps.find(
+        (p) =>
+          p.zone === zone &&
+          p.prefab === "wall_torch" &&
+          p.lit === false &&
+          Math.hypot(p.x - hero.x, p.z - hero.z) <= 2.95
+      );
 
       if (nearGroundBomb) {
         hero.interactPrompt = "Press [F] or [B] to Lift & Throw Bomb";
@@ -5956,6 +6375,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
             : "Press [F] to Lift Light Rock";
       } else if (nearCrackedRock) {
         hero.interactPrompt = "Cracked Boulder — Press [B] to Place Bomb!";
+      } else if (nearBurnableBarrier) {
+        hero.interactPrompt =
+          nearBurnableBarrier.prefab === "spiderweb_barrier"
+            ? "Thick Spiderwebs — Shoot with Flame Rod [R] to Burn!"
+            : "Dry Briar Thicket — Shoot with Flame Rod [R] to Burn!";
+      } else if (nearUnlitTorch) {
+        hero.interactPrompt =
+          (nearUnlitTorch.timedDuration ?? 0) > 0
+            ? `Timed Lantern (${nearUnlitTorch.timedDuration}s) — Shoot with Flame Rod [R] to Light All 4!`
+            : "Unlit Lantern — Shoot with Flame Rod [R] to Illuminate!";
       } else {
         hero.interactPrompt = null;
       }

@@ -14,6 +14,7 @@ import {
 import {
   BuriedRewardKind,
   EnemyKind,
+  EnemyShieldArmor,
   PotRewardKind,
   PropPrefabId,
   RupeeTier,
@@ -128,6 +129,8 @@ const PROP_PALETTE: Array<{ id: PropPrefabId; label: string; tag: string }> = [
   { id: "crystal_switch", label: "Crystal Orb Switch", tag: "Puzzle" },
   { id: "crystal_barrier", label: "Crystal Barrier Pillar", tag: "Puzzle" },
   { id: "cracked_rock", label: "Cracked Boulder (Bomb)", tag: "Secret" },
+  { id: "briar_barrier", label: "Dry Briars (Burn w/ Flame Rod)", tag: "Barrier" },
+  { id: "spiderweb_barrier", label: "Spiderweb Arch (Burn w/ Flame Rod)", tag: "Barrier" },
   { id: "wall_torch", label: "Flame Brazier / Torch", tag: "Puzzle" },
   { id: "dirt_patch", label: "Soft Dirt Patch (Dig)", tag: "Secret" },
   { id: "pine_tree", label: "Pine Tree", tag: "Nature" },
@@ -351,23 +354,53 @@ export default function GameOverlay() {
     (e) => e.kind === "minion" && e.zone === zone && e.state !== "dead"
   ).length;
 
+  // Dark Room (Hall of Pillars) & Timed 8-Second Torch Square Status
+  const inDarkHall =
+    phase === "playing" && !editorMode && zone === "dungeon" && dungeonRoom === "hall";
+  const hallTorches = mapProps.filter(
+    (p) =>
+      p.zone === "dungeon" &&
+      p.prefab === "wall_torch" &&
+      p.z >= -15.5 &&
+      p.z <= 11.8
+  );
+  const litHallTorchesCount = hallTorches.filter((p) => p.lit !== false).length;
+  const hallLightRatio = Math.min(1, litHallTorchesCount / 4);
+
+  const zoneTimedTorches = mapProps.filter(
+    (p) =>
+      p.zone === zone &&
+      p.prefab === "wall_torch" &&
+      (p.timedDuration ?? 0) > 0
+  );
+  const litTimedTorches = zoneTimedTorches.filter((p) => p.lit === true);
+  const timedSquareSolved =
+    zoneTimedTorches.length > 0 && zoneTimedTorches.every((p) => Boolean(p.timedSolved));
+  const minTimedLeft = litTimedTorches.reduce(
+    (acc, p) =>
+      p.timedSolved
+        ? acc
+        : Math.min(acc, p.litTimer ?? p.timedDuration ?? 8),
+    99
+  );
+
   let currentObjective =
-    "Light the East Sun Shrine Torches (R), Dig Dirt Patches (G), or find the Sanctum Key";
+    "Light the Timed Torch Square (R), Burn Dry Briars (R), or find the Sanctum Key";
   if (zone === "frontier") {
     currentObjective =
-      "Explore the Elderwood Frontier — dig soft dirt patches (G) or open Map Editor (Tab)!";
+      "Melt Ice Armor & Burn Wooden Shields with Flame Rod (R), or dig Dirt Patches (G)!";
   } else if (flags.chestUnlocked) {
     currentObjective =
-      "Zeldo Crest Restored! Walk North through the Sanctum Exit to the Elderwood Frontier!";
+      "Zeldo Crest Restored! Burn the North Exit Spiderwebs with Flame Rod (R) to enter Map 3!";
   } else if (flags.bossDefeated) {
     currentObjective =
-      "Open the Golden Chest or step North through the unsealed Sanctum Exit!";
+      "Open the Golden Chest, then burn the North Exit Spiderwebs (R) to enter Map 3!";
   } else if (zone === "dungeon" && flags.gateUnlocked) {
     currentObjective = "Defeat Malakor, Warden of the Eclipse & his minions";
   } else if (zone === "dungeon" && !flags.gateUnlocked) {
     currentObjective = hero.hasDungeonKey
       ? "Advance North through the Hall of Pillars to unlock the Gate"
-      : "Return South to the Overworld & find the Sanctum Key in the West";
+      : "Light all 4 Timed Lanterns in the Dark Hall within 8s (R) or find a Small Key!";
   } else if (flags.keyPickedUp) {
     currentObjective = "Head North across the bridge to enter the Sunken Sanctum";
   }
@@ -401,8 +434,30 @@ export default function GameOverlay() {
       ? portals.find((pt) => pt.id === editorSelected.id) ?? null
       : null;
 
+  const innerConePct = Math.round(13 + hallLightRatio * 36);
+  const midConePct = Math.round(24 + hallLightRatio * 42);
+  const outerConePct = Math.round(36 + hallLightRatio * 52);
+  const darkOverlayAlpha = Number(((1 - hallLightRatio) * 0.88).toFixed(2));
+
   return (
     <div className="hud-layer">
+      {/* GPU-COMPOSITED DARK ROOM VISIBILITY CONE OVERLAY (0 WebGL Draw Calls / 0 FPS Cost!) */}
+      {inDarkHall && hallLightRatio < 1 && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            pointerEvents: "none",
+            zIndex: 0,
+            background: `radial-gradient(circle at 50% 52%, rgba(255, 195, 95, 0.08) 0%, rgba(12, 10, 22, 0.14) ${innerConePct}%, rgba(6, 6, 14, ${
+              darkOverlayAlpha * 0.72
+            }) ${midConePct}%, rgba(2, 2, 7, ${darkOverlayAlpha}) ${outerConePct}%)`,
+            transition: "background 220ms ease-out",
+          }}
+        />
+      )}
+
       {/* Hidden File Inputs for 3D .OBJ Import & Map JSON Import */}
       <input
         ref={objInputRef}
@@ -420,7 +475,7 @@ export default function GameOverlay() {
       />
 
       {/* TOP HUD BAR */}
-      <header className="hud-top-bar">
+      <header className="hud-top-bar" style={{ position: "relative", zIndex: 2 }}>
         {/* Left: Life Hearts, Magic Meter, Zone Location & Gear Slots */}
         <div className="hud-panel hud-left">
           <div className="hud-vitals-header">
@@ -482,7 +537,7 @@ export default function GameOverlay() {
                   ? "gear-slot-owned"
                   : "gear-slot-warn"
               }`}
-              title="Tap R or 3 for a quick fireball (lights torches, 1 DMG). HOLD R or 3 to charge a heavy explosive fireball (2 DMG + burning ground fire)!"
+              title="Tap R or 3 for a quick fireball (lights torches, burns briars/webs, melts ice/wood shields, 1 DMG). HOLD R or 3 to charge a heavy explosive fireball (2 DMG + burning ground fire)!"
             >
               <span className="gear-key">R</span>
               <span className="gear-name">
@@ -598,7 +653,7 @@ export default function GameOverlay() {
           </div>
         </div>
 
-        {/* Center: Unity-Style Play / Map Editor Toolbar + Contextual Prompt + Boss Health Bar */}
+        {/* Center: Unity-Style Play / Map Editor Toolbar + Contextual Prompt + Dark Room / Timed Torch Badges + Boss Health Bar */}
         <div className="hud-center-stack">
           <div className="unity-mode-bar">
             <button
@@ -629,6 +684,54 @@ export default function GameOverlay() {
               ↺ Reset Sim
             </button>
           </div>
+
+          {inDarkHall && (
+            <div
+              className="hud-panel"
+              style={{
+                padding: "5px 13px",
+                borderRadius: "999px",
+                border:
+                  hallLightRatio >= 1
+                    ? "1px solid rgba(116, 255, 178, 0.55)"
+                    : "1px solid rgba(255, 178, 92, 0.55)",
+                background: "rgba(14, 16, 28, 0.92)",
+                color: hallLightRatio >= 1 ? "#9effc6" : "#ffd699",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+                boxShadow: "0 6px 18px rgba(0,0,0,0.45)",
+              }}
+            >
+              {hallLightRatio >= 1
+                ? `🕯 Dark Hall Illuminated (${litHallTorchesCount}/${hallTorches.length} Lanterns Lit) — Floor Traps Revealed!`
+                : `🕯 Shrouded Dark Hall (${litHallTorchesCount}/${hallTorches.length} Lanterns Lit) — Shoot Lanterns with Flame Rod (R) to See Floor Traps!`}
+            </div>
+          )}
+
+          {!editorMode &&
+            phase === "playing" &&
+            litTimedTorches.length > 0 &&
+            !timedSquareSolved &&
+            minTimedLeft < 90 && (
+              <div
+                className="hud-panel"
+                style={{
+                  padding: "5px 14px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(82, 224, 255, 0.65)",
+                  background: "rgba(12, 24, 38, 0.92)",
+                  color: "#8ceeff",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.03em",
+                  boxShadow: "0 6px 18px rgba(0,0,0,0.45)",
+                }}
+              >
+                🔥 Timed Torch Square: {litTimedTorches.length}/{zoneTimedTorches.length} Lit •{" "}
+                {minTimedLeft.toFixed(1)}s before extinguish!
+              </div>
+            )}
 
           {!editorMode && phase === "playing" && hero.interactPrompt && (
             <div
@@ -1307,10 +1410,31 @@ export default function GameOverlay() {
                         onChange={(e) =>
                           updatePropInstance(selectedProp.id, {
                             lit: e.target.checked,
+                            litTimer: e.target.checked
+                              ? selectedProp.timedDuration
+                              : undefined,
                           })
                         }
                       />
                       <span>Torch Currently Lit (Shoot with Flame Rod R to Light)</span>
+                    </label>
+                    <label className="inspector-field">
+                      <span>Timed Torch Countdown (s) (0 = Permanent)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={30}
+                        step={1}
+                        value={selectedProp.timedDuration ?? 0}
+                        onChange={(e) => {
+                          const dur = Math.max(0, parseInt(e.target.value, 10) || 0);
+                          updatePropInstance(selectedProp.id, {
+                            timedDuration: dur > 0 ? dur : undefined,
+                            litTimer: dur > 0 && selectedProp.lit ? dur : undefined,
+                            timedSolved: false,
+                          });
+                        }}
+                      />
                     </label>
                     <label className="inspector-field">
                       <span>Torch Combination Puzzle Target</span>
@@ -1324,7 +1448,7 @@ export default function GameOverlay() {
                           });
                         }}
                       >
-                        <option value="none">None (Decorative Brazier)</option>
+                        <option value="none">None (Decorative / Timed Torch)</option>
                         <option value="lit">Puzzle Torch: MUST BE LIT</option>
                         <option value="unlit">Puzzle Torch: MUST BE UNLIT</option>
                       </select>
@@ -1490,6 +1614,23 @@ export default function GameOverlay() {
                   </label>
                 )}
 
+                {(selectedProp.prefab === "briar_barrier" ||
+                  selectedProp.prefab === "spiderweb_barrier") && (
+                  <label className="inspector-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedProp.smashed)}
+                      onChange={(e) =>
+                        updatePropInstance(selectedProp.id, {
+                          smashed: e.target.checked,
+                          burningTimer: undefined,
+                        })
+                      }
+                    />
+                    <span>Already Burned Away (Shoot with Flame Rod R)</span>
+                  </label>
+                )}
+
                 <div className="inspector-actions-row">
                   <button
                     type="button"
@@ -1509,7 +1650,7 @@ export default function GameOverlay() {
               </div>
             )}
 
-            {/* 2. MONSTER INSPECTOR (INCLUDING WEIGHT TUNING!) */}
+            {/* 2. MONSTER INSPECTOR (INCLUDING WEIGHT TUNING & ELEMENTAL ARMOR!) */}
             {selectedEnemy && (
               <div className="inspector-form">
                 <div className="inspector-type-pill">
@@ -1534,6 +1675,26 @@ export default function GameOverlay() {
                     <option value="boss">Boss: Malakor</option>
                   </select>
                 </label>
+
+                {selectedEnemy.kind !== "boss" && (
+                  <label className="inspector-field">
+                    <span>Elemental Shield / Armor (Melt/Burn with Flame Rod R)</span>
+                    <select
+                      value={selectedEnemy.shieldArmor ?? "none"}
+                      onChange={(e) => {
+                        const sa = e.target.value as EnemyShieldArmor;
+                        updateEnemyInstance(selectedEnemy.id, {
+                          shieldArmor: sa,
+                          initialShieldArmor: sa,
+                        });
+                      }}
+                    >
+                      <option value="none">None (Normal Vulnerability)</option>
+                      <option value="wood">Wooden Shield (Blocks Sword/Arrows — Burn w/ R)</option>
+                      <option value="ice">Glacial Ice Armor (Blocks Sword/Arrows — Melt w/ R)</option>
+                    </select>
+                  </label>
+                )}
 
                 <div className="inspector-xyz-grid">
                   <label className="inspector-field">

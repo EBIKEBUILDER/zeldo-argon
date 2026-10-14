@@ -58,6 +58,8 @@ interface EnemyMeshRig {
   lungeShieldMesh?: Mesh;
   stunStarsRoot?: TransformNode;
   archerAimLine?: Mesh;
+  woodShieldNode?: TransformNode;
+  iceArmorNode?: TransformNode;
 }
 
 /**
@@ -113,6 +115,7 @@ interface PropVisualRig {
   bushFoliage?: Mesh | TransformNode;
   bushStump?: TransformNode;
   torchFlame?: Mesh;
+  timedTorchRing?: Mesh;
   dirtMound?: TransformNode;
   dirtHole?: TransformNode;
   crystalOrbMat?: StandardMaterial;
@@ -979,6 +982,38 @@ export default function BabylonCanvas() {
       0.86,
       72
     );
+    const briarVineMat = makeMat(
+      "briarVineMat",
+      new Color3(0.42, 0.27, 0.14),
+      new Color3(0.06, 0.03, 0.01),
+      new Color3(0.14, 0.1, 0.06)
+    );
+    const briarThornMat = makeMat(
+      "briarThornMat",
+      new Color3(0.76, 0.32, 0.16),
+      new Color3(0.22, 0.06, 0.02)
+    );
+    const spiderwebSilkMat = makeMat(
+      "spiderwebSilkMat",
+      new Color3(0.92, 0.96, 1.0),
+      new Color3(0.32, 0.38, 0.48),
+      new Color3(1.0, 1.0, 1.0),
+      0.88,
+      72
+    );
+    const timedRingMat = makeMat(
+      "timedRingMat",
+      new Color3(0.32, 0.92, 1.0),
+      new Color3(0.2, 0.74, 0.98)
+    );
+    const iceArmorMat = makeMat(
+      "iceArmorMat",
+      new Color3(0.54, 0.92, 1.0),
+      new Color3(0.24, 0.65, 0.92),
+      new Color3(1.0, 1.0, 1.0),
+      0.62,
+      92
+    );
 
     const buildPropRig = (
       prop: MapPropInstance,
@@ -990,6 +1025,7 @@ export default function BabylonCanvas() {
       let bushFoliage: Mesh | TransformNode | undefined;
       let bushStump: TransformNode | undefined;
       let torchFlame: Mesh | undefined;
+      let timedTorchRing: Mesh | undefined;
       let dirtMound: TransformNode | undefined;
       let dirtHole: TransformNode | undefined;
       let crystalOrbMat: StandardMaterial | undefined;
@@ -1195,6 +1231,18 @@ export default function BabylonCanvas() {
           hintRing.material = hintMat;
           hintRing.parent = root;
         }
+
+        // Timed Torch 8-Second Countdown Ring around the pedestal base
+        const tRing = MeshBuilder.CreateTorus(
+          `timedRing-${prop.id}`,
+          { diameter: 1.72, thickness: 0.11, tessellation: 24 },
+          scene
+        );
+        tRing.position.set(0, 0.11, 0);
+        tRing.material = timedRingMat;
+        tRing.parent = root;
+        tRing.setEnabled((prop.timedDuration ?? 0) > 0);
+        timedTorchRing = tRing;
 
         const flame = MeshBuilder.CreateSphere(
           `torchFlame-${prop.id}`,
@@ -1714,6 +1762,111 @@ export default function BabylonCanvas() {
           root,
           meta
         );
+      } else if (prop.prefab === "briar_barrier") {
+        // Entangled Dry Thorny Briar Hedge (Burnable with the Flame Rod!)
+        const vineParts: Mesh[] = [];
+        const thornParts: Mesh[] = [];
+
+        for (let b = 0; b < 7; b++) {
+          const bx = -1.45 + b * 0.48;
+          const post = MeshBuilder.CreateCylinder(
+            `briarStem-${prop.id}-${b}`,
+            { diameterTop: 0.22, diameterBottom: 0.36, height: 1.65, tessellation: 8 },
+            scene
+          );
+          post.position.set(bx, 0.82, ((b % 2) - 0.5) * 0.26);
+          post.rotation.z = ((b % 3) - 1) * 0.28;
+          post.rotation.x = ((b % 2) - 0.5) * 0.22;
+          vineParts.push(post);
+        }
+
+        for (const hy of [0.46, 0.94, 1.38]) {
+          const crossVine = MeshBuilder.CreateCylinder(
+            `briarCross-${prop.id}-${hy}`,
+            { diameterTop: 0.24, diameterBottom: 0.28, height: 3.45, tessellation: 10 },
+            scene
+          );
+          crossVine.rotation.z = Math.PI / 2 + (hy === 0.94 ? 0.08 : -0.08);
+          crossVine.position.set(0, hy, 0);
+          vineParts.push(crossVine);
+        }
+
+        const brambleCore = MeshBuilder.CreatePolyhedron(
+          `briarCore-${prop.id}`,
+          { type: 2, size: 0.86 },
+          scene
+        );
+        brambleCore.scaling.set(1.78, 0.78, 0.65);
+        brambleCore.position.set(0, 0.78, 0);
+        vineParts.push(brambleCore);
+
+        for (let tIdx = 0; tIdx < 12; tIdx++) {
+          const tx = -1.5 + (tIdx % 6) * 0.6;
+          const ty = tIdx < 6 ? 0.62 : 1.24;
+          const thorn = MeshBuilder.CreateCylinder(
+            `briarThorn-${prop.id}-${tIdx}`,
+            { diameterTop: 0.02, diameterBottom: 0.16, height: 0.42, tessellation: 6 },
+            scene
+          );
+          thorn.position.set(tx, ty, tIdx % 2 === 0 ? 0.32 : -0.32);
+          thorn.rotation.x = tIdx % 2 === 0 ? 0.68 : -0.68;
+          thorn.rotation.z = ((tIdx % 3) - 1) * 0.35;
+          thornParts.push(thorn);
+        }
+
+        mergeGroupWithMaterial(`briarVinesMerged-${prop.id}`, vineParts, briarVineMat, root, meta);
+        mergeGroupWithMaterial(`briarThornsMerged-${prop.id}`, thornParts, briarThornMat, root, meta);
+      } else if (prop.prefab === "spiderweb_barrier") {
+        // Thick Dungeon / Archway Spiderweb Barrier (Burnable with the Flame Rod!)
+        const pillarParts: Mesh[] = [];
+        for (const px of [-2.05, 2.05]) {
+          const anchorPost = MeshBuilder.CreateCylinder(
+            `webPost-${prop.id}-${px}`,
+            { diameterTop: 0.38, diameterBottom: 0.52, height: 2.55, tessellation: 10 },
+            scene
+          );
+          anchorPost.position.set(px, 1.275, 0);
+          pillarParts.push(anchorPost);
+        }
+        mergeGroupWithMaterial(`webPostsMerged-${prop.id}`, pillarParts, dgPillarMat, root, meta);
+
+        const silkParts: Mesh[] = [];
+        // Radial silk spokes from center (0, 1.32, 0)
+        for (let r = 0; r < 8; r++) {
+          const ang = (r / 8) * Math.PI;
+          const spoke = MeshBuilder.CreateCylinder(
+            `webSpoke-${prop.id}-${r}`,
+            { diameter: 0.09, height: 4.1, tessellation: 8 },
+            scene
+          );
+          spoke.position.set(0, 1.32, 0);
+          spoke.rotation.z = ang;
+          silkParts.push(spoke);
+        }
+
+        // Concentric silk web rings
+        for (const diam of [1.1, 2.15, 3.25]) {
+          const webRing = MeshBuilder.CreateTorus(
+            `webRing-${prop.id}-${diam}`,
+            { diameter: diam, thickness: 0.085, tessellation: 16 },
+            scene
+          );
+          webRing.rotation.x = Math.PI / 2;
+          webRing.scaling.set(1.18, 1.0, 0.78);
+          webRing.position.set(0, 1.32, 0);
+          silkParts.push(webRing);
+        }
+
+        const centerCocoon = MeshBuilder.CreatePolyhedron(
+          `webCocoon-${prop.id}`,
+          { type: 1, size: 0.34 },
+          scene
+        );
+        centerCocoon.scaling.set(1.25, 0.9, 0.55);
+        centerCocoon.position.set(0, 1.32, 0);
+        silkParts.push(centerCocoon);
+
+        mergeGroupWithMaterial(`webSilkMerged-${prop.id}`, silkParts, spiderwebSilkMat, root, meta);
       } else if (prop.prefab === "custom_model") {
         const asset = customModels.find((m) => m.id === prop.customModelId);
         const customMesh = new Mesh(`customMesh-${prop.id}`, scene);
@@ -1754,6 +1907,7 @@ export default function BabylonCanvas() {
         bushFoliage,
         bushStump,
         torchFlame,
+        timedTorchRing,
         dirtMound,
         dirtHole,
         crystalOrbMat,
@@ -2129,6 +2283,24 @@ export default function BabylonCanvas() {
     chargeAuraRing.material = chargeAuraMat;
     chargeAuraRing.parent = heroRoot;
     chargeAuraRing.setEnabled(false);
+
+    // Zero-cost emissive floor lantern illumination disc under the Hero in Dark Rooms!
+    const heroLanternDisc = MeshBuilder.CreateCylinder(
+      "heroLanternDisc",
+      { diameter: 9.8, height: 0.03, tessellation: 32 },
+      scene
+    );
+    heroLanternDisc.position.set(0, 0.04, 0);
+    heroLanternDisc.material = makeMat(
+      "heroLanternDiscMat",
+      new Color3(1.0, 0.78, 0.34),
+      new Color3(0.95, 0.65, 0.22),
+      new Color3(0, 0, 0),
+      0.16
+    );
+    heroLanternDisc.isPickable = false;
+    heroLanternDisc.parent = heroRoot;
+    heroLanternDisc.setEnabled(false);
 
     // --- 3D MAGIC FIRE ROD ON HERO (SHOWN WHEN CHARGING / CASTING FIREBALLS) ---
     const heroFireRodNode = new TransformNode("heroFireRodNode", scene);
@@ -3917,6 +4089,72 @@ export default function BabylonCanvas() {
       );
       hpBarFill.parent = hpBarHolder;
 
+      // Burnable Wooden Shield & Glacial Ice Armor nodes (for Map 3 / Frontier enemies!)
+      const woodShieldNode = new TransformNode(`enemyWoodShield-${id}`, scene);
+      woodShieldNode.parent = body;
+      const shieldY = kind === "knight" ? 1.18 : kind === "goblin" || kind === "archer" ? 0.94 : 0.65;
+      const shieldZ = kind === "knight" ? 0.64 : kind === "goblin" || kind === "archer" ? 0.62 : 0.72;
+      const shieldScale = kind === "knight" ? 1.25 : 1.0;
+
+      const bucklerWood = MeshBuilder.CreateCylinder(
+        `woodBuckler-${id}`,
+        { diameter: 1.08 * shieldScale, height: 0.14, tessellation: 14 },
+        scene
+      );
+      bucklerWood.rotation.x = Math.PI / 2;
+      bucklerWood.position.set(-0.22, shieldY, shieldZ);
+      bucklerWood.material = woodMat;
+      bucklerWood.parent = woodShieldNode;
+
+      const bucklerRim = MeshBuilder.CreateTorus(
+        `woodBucklerRim-${id}`,
+        { diameter: 1.08 * shieldScale, thickness: 0.09, tessellation: 16 },
+        scene
+      );
+      bucklerRim.rotation.x = Math.PI / 2;
+      bucklerRim.position.set(-0.22, shieldY, shieldZ + 0.05);
+      bucklerRim.material = ironGateMat;
+      bucklerRim.parent = woodShieldNode;
+
+      const bucklerBoss = MeshBuilder.CreateSphere(
+        `woodBucklerBoss-${id}`,
+        { diameter: 0.32 * shieldScale, segments: 10 },
+        scene
+      );
+      bucklerBoss.position.set(-0.22, shieldY, shieldZ + 0.1);
+      bucklerBoss.material = goldKeyMat;
+      bucklerBoss.parent = woodShieldNode;
+      woodShieldNode.setEnabled(false);
+
+      // Translucent Glacial Ice Armor Shell (blocks normal attacks until melted with the Flame Rod!)
+      const iceArmorNode = new TransformNode(`enemyIceArmor-${id}`, scene);
+      iceArmorNode.position.set(0, kind === "knight" ? 1.22 : kind === "slime" ? 0.72 : 1.0, 0);
+      iceArmorNode.parent = body;
+      const iceParts: Mesh[] = [];
+      const iceShell = MeshBuilder.CreatePolyhedron(
+        `iceShell-${id}`,
+        { type: 1, size: kind === "knight" ? 1.28 : kind === "slime" ? 0.96 : 1.06 },
+        scene
+      );
+      iceShell.scaling.set(1.08, kind === "knight" ? 1.38 : 1.15, 1.08);
+      iceParts.push(iceShell);
+
+      for (let c = 0; c < 4; c++) {
+        const ang = (c / 4) * Math.PI * 2 + 0.4;
+        const shard = MeshBuilder.CreateCylinder(
+          `iceShard-${id}-${c}`,
+          { diameterTop: 0.04, diameterBottom: 0.34, height: 0.75, tessellation: 6 },
+          scene
+        );
+        const rad = kind === "knight" ? 0.95 : 0.78;
+        shard.position.set(Math.cos(ang) * rad, 0.25, Math.sin(ang) * rad);
+        shard.rotation.z = -Math.cos(ang) * 0.55;
+        shard.rotation.x = Math.sin(ang) * 0.55;
+        iceParts.push(shard);
+      }
+      mergeGroupWithMaterial(`enemyIceArmorMerged-${id}`, iceParts, iceArmorMat, iceArmorNode);
+      iceArmorNode.setEnabled(false);
+
       tagHierarchyMetadata(root, "enemy", id);
 
       return {
@@ -3938,6 +4176,8 @@ export default function BabylonCanvas() {
         lungeShieldMesh,
         stunStarsRoot,
         archerAimLine,
+        woodShieldNode,
+        iceArmorNode,
       };
     };
 
@@ -4868,16 +5108,51 @@ export default function BabylonCanvas() {
         hemiLight.intensity = 0.92;
         dirLight.intensity = 0.76;
         sanctumPointLight.intensity = 0;
+        heroLanternDisc.setEnabled(false);
       } else if (isFrontier) {
         scene.clearColor.set(0.06, 0.14, 0.12, 1);
         hemiLight.intensity = 0.88;
         dirLight.intensity = 0.74;
         sanctumPointLight.intensity = 0;
+        heroLanternDisc.setEnabled(false);
       } else {
-        scene.clearColor.set(0.05, 0.05, 0.09, 1);
-        hemiLight.intensity = 0.58;
-        dirLight.intensity = 0.48;
-        sanctumPointLight.intensity = snap.flags.bossDefeated ? 1.35 : 0.72;
+        // Dark Room Visibility Cone & Lantern Illumination in Dungeon Room II (Hall of Pillars)
+        // Zero extra dynamic PointLights or shadow maps — scales existing scene light uniforms!
+        if (snap.dungeonRoom === "hall" && !snap.editorMode) {
+          let litHallTorches = 0;
+          for (const p of snap.mapProps) {
+            if (
+              p.zone === "dungeon" &&
+              p.prefab === "wall_torch" &&
+              p.z >= -15.5 &&
+              p.z <= 11.8 &&
+              p.lit !== false
+            ) {
+              litHallTorches++;
+            }
+          }
+          const hallLightRatio = Math.min(1, litHallTorches / 4);
+          scene.clearColor.set(
+            0.015 + hallLightRatio * 0.035,
+            0.015 + hallLightRatio * 0.035,
+            0.03 + hallLightRatio * 0.06,
+            1
+          );
+          hemiLight.intensity = 0.22 + hallLightRatio * 0.48;
+          dirLight.intensity = 0.16 + hallLightRatio * 0.42;
+          sanctumPointLight.intensity = snap.flags.bossDefeated ? 1.35 : 0.45;
+          heroLanternDisc.setEnabled(hallLightRatio < 1);
+          if (hallLightRatio < 1) {
+            const discScale = 1.0 + hallLightRatio * 0.65 + Math.sin(t * 9) * 0.03;
+            heroLanternDisc.scaling.set(discScale, 1, discScale);
+          }
+        } else {
+          scene.clearColor.set(0.05, 0.05, 0.09, 1);
+          hemiLight.intensity = 0.58;
+          dirLight.intensity = 0.48;
+          sanctumPointLight.intensity = snap.flags.bossDefeated ? 1.35 : 0.72;
+          heroLanternDisc.setEnabled(false);
+        }
       }
 
       // 2. Sync Individual 3D Environment Props (`snap.mapProps`)
@@ -4903,7 +5178,9 @@ export default function BabylonCanvas() {
           Boolean(prop.smashed) &&
           (prop.prefab === "clay_pot" ||
             prop.prefab === "light_rock" ||
-            prop.prefab === "cracked_rock");
+            prop.prefab === "cracked_rock" ||
+            prop.prefab === "briar_barrier" ||
+            prop.prefab === "spiderweb_barrier");
         const showProp = prop.zone === snap.zone && !isSmashedHidden;
         pRig.root.setEnabled(showProp);
         if (pRig.pushTargetSocket) {
@@ -4940,7 +5217,20 @@ export default function BabylonCanvas() {
             pRig.root.position.set(prop.x, groundY + prop.y, prop.z);
           }
           pRig.root.rotation.y = prop.rotY;
-          pRig.root.scaling.set(prop.scaleX, prop.scaleY, prop.scaleZ);
+          if (
+            (prop.prefab === "briar_barrier" || prop.prefab === "spiderweb_barrier") &&
+            (prop.burningTimer ?? 0) > 0
+          ) {
+            const burnProg = Math.max(0.15, (prop.burningTimer ?? 0) / 0.55);
+            const jitter = Math.sin(t * 48) * 0.08;
+            pRig.root.scaling.set(
+              prop.scaleX * (burnProg + jitter),
+              prop.scaleY * burnProg,
+              prop.scaleZ * (burnProg - jitter)
+            );
+          } else {
+            pRig.root.scaling.set(prop.scaleX, prop.scaleY, prop.scaleZ);
+          }
 
           if (prop.prefab === "bush") {
             const isCut = !snap.editorMode && snap.cutBushIds.includes(prop.id);
@@ -4953,6 +5243,19 @@ export default function BabylonCanvas() {
               if (isLit) {
                 const flicker = 1 + Math.sin(t * 14 + prop.x) * 0.14;
                 pRig.torchFlame.scaling.set(flicker, 1.45 + Math.cos(t * 18) * 0.18, flicker);
+              }
+            }
+            if (pRig.timedTorchRing) {
+              const hasTimer = (prop.timedDuration ?? 0) > 0;
+              pRig.timedTorchRing.setEnabled(hasTimer);
+              if (hasTimer) {
+                const dur = Math.max(1, prop.timedDuration ?? 8);
+                const ratio = prop.timedSolved
+                  ? 1.0
+                  : isLit
+                  ? Math.max(0.18, (prop.litTimer ?? dur) / dur)
+                  : 0.45;
+                pRig.timedTorchRing.scaling.set(ratio, 1, ratio);
               }
             }
           } else if (prop.prefab === "dirt_patch") {
@@ -5290,6 +5593,16 @@ export default function BabylonCanvas() {
 
         if (rig.archerAimLine) {
           rig.archerAimLine.setEnabled(enemy.state === "windup");
+        }
+        if (rig.woodShieldNode) {
+          rig.woodShieldNode.setEnabled(enemy.shieldArmor === "wood");
+        }
+        if (rig.iceArmorNode) {
+          const hasIce = enemy.shieldArmor === "ice";
+          rig.iceArmorNode.setEnabled(hasIce);
+          if (hasIce) {
+            rig.iceArmorNode.rotation.y = t * 1.1;
+          }
         }
 
         if (enemy.kind === "goblin" || enemy.kind === "knight") {

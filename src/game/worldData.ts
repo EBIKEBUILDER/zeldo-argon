@@ -14,6 +14,8 @@ export type PropPrefabId =
   | "crystal_switch"
   | "crystal_barrier"
   | "cracked_rock"
+  | "briar_barrier"
+  | "spiderweb_barrier"
   | "boulder"
   | "ruin_pillar"
   | "dungeon_pillar"
@@ -26,6 +28,8 @@ export type PropPrefabId =
   | "wooden_bridge"
   | "temple_arch"
   | "custom_model";
+
+export type EnemyShieldArmor = "none" | "wood" | "ice";
 
 export type BuriedRewardKind =
   | "random"
@@ -79,6 +83,12 @@ export interface MapPropInstance {
   colorHex?: string;
   lit?: boolean;
   puzzleTarget?: "lit" | "unlit";
+  // Timed Torch Puzzle (e.g., stays lit for 8s before extinguishing unless all timed torches in zone are lit!)
+  timedDuration?: number;
+  litTimer?: number;
+  timedSolved?: boolean;
+  // Burnable Overworld / Dungeon Exit Barriers (Dry Briars & Thick Spiderwebs)
+  burningTimer?: number;
   dug?: boolean;
   buriedReward?: BuriedRewardKind;
   // Liftable Pots, Light Rocks & Explodable Cracked Rocks
@@ -137,6 +147,7 @@ export interface EnemySpawn {
   speed: number;
   damage: number; // in half-hearts (1 = 0.5 heart, 2 = 1.0 heart)
   rupeeDrop: RupeeTier | "boss";
+  shieldArmor?: EnemyShieldArmor; // "wood" (Wooden Shield) or "ice" (Ice Armor) — blocks Sword/Arrows until burned/melted with Flame Rod (R)!
 }
 
 export interface WorldRupeeSpawn {
@@ -718,7 +729,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     rupeeDrop: "boss",
   },
 
-  // Elderwood Frontier — Post-Boss Highland Map (reuses existing monsters; ready for Map Editor customization!)
+  // Elderwood Frontier — Post-Boss Highland Map (features Wooden Shield & Glacial Ice Armor monsters that require the Flame Rod [R]!)
   {
     id: "fr-slime-1",
     kind: "slime",
@@ -731,6 +742,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     speed: 5.0,
     damage: 1,
     rupeeDrop: "blue",
+    shieldArmor: "ice",
   },
   {
     id: "fr-slime-2",
@@ -744,6 +756,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     speed: 5.0,
     damage: 1,
     rupeeDrop: "blue",
+    shieldArmor: "ice",
   },
   {
     id: "fr-goblin-1",
@@ -757,6 +770,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     speed: 5.5,
     damage: 1,
     rupeeDrop: "blue",
+    shieldArmor: "wood",
   },
   {
     id: "fr-goblin-2",
@@ -770,6 +784,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     speed: 5.5,
     damage: 1,
     rupeeDrop: "blue",
+    shieldArmor: "wood",
   },
   {
     id: "fr-archer-1",
@@ -822,6 +837,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     speed: 5.0,
     damage: 1,
     rupeeDrop: "red",
+    shieldArmor: "ice",
   },
   {
     id: "fr-knight-2",
@@ -835,6 +851,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     speed: 5.0,
     damage: 1,
     rupeeDrop: "red",
+    shieldArmor: "ice",
   },
 ];
 
@@ -1314,10 +1331,14 @@ export function buildInitialMapProps(): MapPropInstance[] {
     { x: 14.5, z: 32 },
   ];
   torchCoords.forEach((tc, idx) => {
+    // Room 2 (Hall of Pillars, z = 10.2) starts unlit so the Dark Room visibility mechanic is active!
+    const isDarkHallTorch = Math.abs(tc.z - 10.2) < 0.5;
     props.push({
       id: `prop-dg-torch-${idx + 1}`,
       prefab: "wall_torch",
-      name: `Sanctum Brazier #${idx + 1}`,
+      name: isDarkHallTorch
+        ? `Dark Hall Brazier #${idx + 1} (Light with Flame Rod [R]!)`
+        : `Sanctum Brazier #${idx + 1}`,
       zone: "dungeon",
       x: tc.x,
       y: 0,
@@ -1330,7 +1351,7 @@ export function buildInitialMapProps(): MapPropInstance[] {
       colliderWidth: 0.9,
       colliderDepth: 0.9,
       colliderKind: "pillar",
-      lit: true,
+      lit: !isDarkHallTorch,
     });
   });
 
@@ -2190,6 +2211,155 @@ export function buildInitialMapProps(): MapPropInstance[] {
       colliderKind: "wall",
       smashed: false,
       potReward: "heart",
+    }
+  );
+
+  // =========================================================
+  // 13. TIMED TORCH SQUARE PUZZLES (8-SECOND COUNTDOWN — LIGHT ALL 4 SIMULTANEOUSLY!)
+  // =========================================================
+  // Dungeon Room 2 (Hall of Pillars) — 4 unlit timed lanterns in a square.
+  // Lighting them illuminates the Dark Room AND if all 4 are lit simultaneously within 8s,
+  // they lock in permanently, unlock the Boss Sanctum Gate, and spawn a treasure chest reward!
+  const dgTimedSquare = [
+    { id: "prop-dg-timed-torch-sw", name: "Hall Timed Lantern SW (8s Timer)", x: -4.2, z: -7.8 },
+    { id: "prop-dg-timed-torch-se", name: "Hall Timed Lantern SE (8s Timer)", x: 4.2, z: -7.8 },
+    { id: "prop-dg-timed-torch-nw", name: "Hall Timed Lantern NW (8s Timer)", x: -4.2, z: -3.2 },
+    { id: "prop-dg-timed-torch-ne", name: "Hall Timed Lantern NE (8s Timer)", x: 4.2, z: -3.2 },
+  ];
+  dgTimedSquare.forEach((tt) => {
+    props.push({
+      id: tt.id,
+      prefab: "wall_torch",
+      name: tt.name,
+      zone: "dungeon",
+      x: tt.x,
+      y: 0,
+      z: tt.z,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: false,
+      colliderWidth: 0.9,
+      colliderDepth: 0.9,
+      colliderKind: "pillar",
+      lit: false,
+      timedDuration: 8,
+      litTimer: 0,
+      timedSolved: false,
+    });
+  });
+
+  // Overworld West Meadow — 4 unlit timed lanterns in a square (8s countdown)
+  const owTimedSquare = [
+    { id: "prop-ow-timed-torch-sw", name: "Meadow Timed Lantern SW (8s Timer)", x: -14.0, z: -10.5 },
+    { id: "prop-ow-timed-torch-se", name: "Meadow Timed Lantern SE (8s Timer)", x: -9.8, z: -10.5 },
+    { id: "prop-ow-timed-torch-nw", name: "Meadow Timed Lantern NW (8s Timer)", x: -14.0, z: -6.3 },
+    { id: "prop-ow-timed-torch-ne", name: "Meadow Timed Lantern NE (8s Timer)", x: -9.8, z: -6.3 },
+  ];
+  owTimedSquare.forEach((tt) => {
+    props.push({
+      id: tt.id,
+      prefab: "wall_torch",
+      name: tt.name,
+      zone: "overworld",
+      x: tt.x,
+      y: 0,
+      z: tt.z,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: false,
+      colliderWidth: 0.9,
+      colliderDepth: 0.9,
+      colliderKind: "pillar",
+      lit: false,
+      timedDuration: 8,
+      litTimer: 0,
+      timedSolved: false,
+    });
+  });
+
+  // =========================================================
+  // 14. BURNABLE BARRIERS (SPIDERWEBS & DRY BRIARS — BURN AWAY WITH FLAME ROD [R]!)
+  // =========================================================
+  props.push(
+    // Thick Spiderweb Barrier blocking the Dungeon North Exit into Map 3 (Elderwood Frontier)!
+    {
+      id: "prop-dg-exit-spiderweb",
+      prefab: "spiderweb_barrier",
+      name: "Sanctum Exit Thick Spiderweb (Burn with Flame Rod [R]!)",
+      zone: "dungeon",
+      x: 0,
+      y: 0,
+      z: 33.4,
+      rotY: 0,
+      scaleX: 1.35,
+      scaleY: 1.2,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 5.2,
+      colliderDepth: 1.6,
+      colliderKind: "wall",
+      smashed: false,
+    },
+    // Overworld South-West Dry Briar Thicket (right near spawn so player can test burning briars immediately!)
+    {
+      id: "prop-ow-south-briar",
+      prefab: "briar_barrier",
+      name: "South Clearing Dry Briars (Burn with Flame Rod [R]!)",
+      zone: "overworld",
+      x: -13.0,
+      y: 0,
+      z: -25.2,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 2.8,
+      colliderDepth: 1.6,
+      colliderKind: "tree",
+      smashed: false,
+    },
+    // Overworld East Grove Dry Briar Barrier guarding the Bottled Fairy dirt cache
+    {
+      id: "prop-ow-east-briar",
+      prefab: "briar_barrier",
+      name: "East Grove Thorny Briars (Burn with Flame Rod [R]!)",
+      zone: "overworld",
+      x: 18.5,
+      y: 0,
+      z: -8.5,
+      rotY: 0,
+      scaleX: 1.15,
+      scaleY: 1.05,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 3.0,
+      colliderDepth: 1.6,
+      colliderKind: "tree",
+      smashed: false,
+    },
+    // Elderwood Frontier Entrance Dry Briar Barrier
+    {
+      id: "prop-fr-entry-briar",
+      prefab: "briar_barrier",
+      name: "Frontier Highland Briar Barrier (Burn with Flame Rod [R]!)",
+      zone: "frontier",
+      x: 0,
+      y: 0,
+      z: -22.5,
+      rotY: 0,
+      scaleX: 1.4,
+      scaleY: 1.15,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 3.4,
+      colliderDepth: 1.6,
+      colliderKind: "tree",
+      smashed: false,
     }
   );
 
