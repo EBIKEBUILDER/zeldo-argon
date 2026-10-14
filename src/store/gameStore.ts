@@ -5,6 +5,7 @@ import {
   BOSS_MAX_LUNGE_RANGE,
   buildInitialMapProps,
   buildObstaclesFromMapProps,
+  BuriedRewardKind,
   computeBossChargePathLength,
   computeEnemyChargePathLength,
   computePathfindingMoveDir,
@@ -30,11 +31,31 @@ import {
 import { soundEngine } from "@/audio/soundEngine";
 
 export type GamePhase = "title" | "playing" | "gameover" | "victory";
-export type ShopItemId = "boomerang" | "bow" | "arrows" | "heart";
+export type ShopItemId =
+  | "boomerang"
+  | "bow"
+  | "arrows"
+  | "heart"
+  | "red_potion"
+  | "green_potion"
+  | "blue_potion"
+  | "bottle";
 export type EditorToolId = "select" | "place" | "terrain" | "delete";
 export type EditorEntityKind = "prop" | "enemy" | "rupee" | "portal";
 export type EditorPlaceCategory = "props" | "monsters" | "rupees" | "portals" | "custom";
 export type TerrainBrushMode = "raise" | "lower" | "flatten" | "paint";
+
+export type PrimaryHandId = "traveler_blade" | "tempered_blade";
+export type OffhandId = "wooden_buckler" | "mirror_shield";
+export type TunicId = "green_tunic" | "blue_mail" | "red_mail";
+export type BootsId = "leather_boots" | "swift_boots" | "titan_greaves";
+export type BottleContentId =
+  | "empty"
+  | "red_potion"
+  | "green_potion"
+  | "blue_potion"
+  | "fairy"
+  | "bee";
 
 export interface EditorSelection {
   kind: EditorEntityKind;
@@ -65,16 +86,38 @@ export interface HeroState {
   facing: number;
   hp: number; // in half-hearts (10 = 5 full hearts)
   maxHp: number;
+  mp: number; // Magic Power (0..maxMp)
+  maxMp: number;
+  damageFractionAcc: number; // Accumulates fractional half-heart damage from 50% / 75% armor mitigation
   rupees: number;
   hasDungeonKey: boolean;
   hasBoomerang: boolean;
   hasBow: boolean;
+  hasFireRod: boolean;
+  hasShovel: boolean;
   arrows: number;
-  shieldBlock: number; // Physical damage blocked by current shield (1 at start; upgradeable with better shields later)
+  // Character Sheet Equipment Slots
+  equippedPrimary: PrimaryHandId;
+  equippedOffhand: OffhandId;
+  equippedTunic: TunicId;
+  equippedBoots: BootsId;
+  unlockedPrimaries: PrimaryHandId[];
+  unlockedOffhands: OffhandId[];
+  unlockedTunics: TunicId[];
+  unlockedBoots: BootsId[];
+  bottles: BottleContentId[];
+  shieldBlock: number; // Physical damage blocked by current shield
+  swordDamage: number; // Base sword damage (1 for Traveler's Sword, 2 for Tempered Blade)
   isAttacking: boolean;
+  isSpinAttacking: boolean;
   isBlocking: boolean;
   shieldAbsorbToggle: boolean;
   attackTimer: number;
+  spinAttackTimer: number;
+  swordChargeTimer: number;
+  fireRodChargeTimer: number;
+  fireRodCooldown: number;
+  digAnimTimer: number;
   attackCooldown: number;
   boomerangCooldown: number;
   bowCooldown: number;
@@ -158,6 +201,41 @@ export interface ArrowProjectileState {
   stuckShieldYaw?: number;
 }
 
+export interface FireballProjectileState {
+  id: string;
+  zone: ZoneId;
+  x: number;
+  z: number;
+  angle: number;
+  speed: number;
+  damage: number;
+  radius: number;
+  isCharged: boolean;
+  lifeTimer: number;
+}
+
+export interface FireZoneState {
+  id: string;
+  zone: ZoneId;
+  x: number;
+  z: number;
+  radius: number;
+  timer: number;
+  maxTimer: number;
+  tickTimer: number;
+}
+
+export interface FriendlyBeeState {
+  id: string;
+  zone: ZoneId;
+  x: number;
+  z: number;
+  facing: number;
+  timer: number;
+  maxTimer: number;
+  stingCooldown: number;
+}
+
 export interface BossProjectileState {
   id: string;
   zone: ZoneId;
@@ -200,6 +278,7 @@ export interface BushBurstState {
   timer: number;
   maxTimer: number;
   seed: number;
+  isDirt?: boolean;
 }
 
 export interface GameFlags {
@@ -209,6 +288,8 @@ export interface GameFlags {
   bossPhase2: boolean;
   bossDefeated: boolean;
   chestUnlocked: boolean;
+  overworldTorchPuzzleSolved?: boolean;
+  dungeonTorchPuzzleSolved?: boolean;
 }
 
 export interface GameStats {
@@ -228,9 +309,14 @@ export interface FrameInput {
   moveX: number;
   moveZ: number;
   attackPressed: boolean;
+  attackHeld?: boolean;
   blockHeld: boolean;
   boomerangPressed: boolean;
   bowPressed: boolean;
+  fireRodPressed?: boolean;
+  fireRodHeld?: boolean;
+  shovelPressed?: boolean;
+  bottlePressed?: boolean;
 }
 
 export interface SerializableGameState {
@@ -241,6 +327,9 @@ export interface SerializableGameState {
   enemies: EnemyState[];
   boomerang: BoomerangState | null;
   arrows: ArrowProjectileState[];
+  fireballs: FireballProjectileState[];
+  fireZones: FireZoneState[];
+  friendlyBees: FriendlyBeeState[];
   projectiles: BossProjectileState[];
   hazards: HazardZoneState[];
   rupees: RupeeItemState[];
@@ -258,6 +347,7 @@ export interface SerializableGameState {
   banner: BannerMessage | null;
   nearShop: boolean;
   shopOpen: boolean;
+  characterOpen: boolean;
   shopDismissedOnRug: boolean;
   gateNoticeCooldown: number;
   chestNoticeCooldown: number;
@@ -282,7 +372,15 @@ export interface GameActions {
   toggleMute: () => void;
   setFps: (fps: number) => void;
   setShopOpen: (open: boolean) => void;
+  setCharacterOpen: (open: boolean) => void;
   buyShopItem: (item: ShopItemId) => void;
+  equipHeroItem: (
+    slot: "primary" | "offhand" | "tunic" | "boots",
+    itemId: string
+  ) => void;
+  useBottleSlot: (index: number) => void;
+  fillBottleSlot: (index: number, content: BottleContentId, rupeeCost?: number) => void;
+  addEmptyBottle: () => void;
   tick: (dt: number, input: FrameInput) => void;
   // Map Editor Actions
   setEditorMode: (enabled: boolean) => void;
@@ -550,16 +648,37 @@ function createInitialState(
       facing: HERO_SPAWN.facing,
       hp: 10,
       maxHp: 10,
+      mp: 100,
+      maxMp: 100,
+      damageFractionAcc: 0,
       rupees: 0,
       hasDungeonKey: false,
       hasBoomerang: false,
       hasBow: false,
+      hasFireRod: true,
+      hasShovel: true,
       arrows: 0,
+      equippedPrimary: "traveler_blade",
+      equippedOffhand: "wooden_buckler",
+      equippedTunic: "green_tunic",
+      equippedBoots: "leather_boots",
+      unlockedPrimaries: ["traveler_blade", "tempered_blade"],
+      unlockedOffhands: ["wooden_buckler", "mirror_shield"],
+      unlockedTunics: ["green_tunic", "blue_mail", "red_mail"],
+      unlockedBoots: ["leather_boots", "swift_boots", "titan_greaves"],
+      bottles: ["red_potion", "fairy", "bee", "empty"],
       shieldBlock: 1,
+      swordDamage: 1,
       isAttacking: false,
+      isSpinAttacking: false,
       isBlocking: false,
       shieldAbsorbToggle: false,
       attackTimer: 0,
+      spinAttackTimer: 0,
+      swordChargeTimer: 0,
+      fireRodChargeTimer: 0,
+      fireRodCooldown: 0,
+      digAnimTimer: 0,
       attackCooldown: 0,
       boomerangCooldown: 0,
       bowCooldown: 0,
@@ -578,6 +697,9 @@ function createInitialState(
     enemies: createInitialEnemies(),
     boomerang: null,
     arrows: [],
+    fireballs: [],
+    fireZones: [],
+    friendlyBees: [],
     projectiles: [],
     hazards: [],
     rupees: createInitialRupees(),
@@ -601,6 +723,8 @@ function createInitialState(
       bossPhase2: false,
       bossDefeated: false,
       chestUnlocked: false,
+      overworldTorchPuzzleSolved: false,
+      dungeonTorchPuzzleSolved: false,
     },
     stats: {
       enemiesDefeated: 0,
@@ -613,12 +737,13 @@ function createInitialState(
             id: 1,
             text: "Whispering Vale",
             subtext:
-              "Visit Merchant Bramble's Shop to the East, find the Sanctum Key in the West, or click 'Map Editor' at the top!",
-            timer: 5.5,
+              "Hold Attack for Spin Slash • Press R/3 for Flame Rod • Press G/4 to Dig • Press C for Character Gear!",
+            timer: 5.8,
           }
         : null,
     nearShop: false,
     shopOpen: false,
+    characterOpen: false,
     shopDismissedOnRug: false,
     gateNoticeCooldown: 0,
     chestNoticeCooldown: 0,
@@ -714,6 +839,7 @@ const DEFAULT_PROP_META: Record<
   pine_tree: { label: "Pine Tree", hasCollider: true, w: 2.1, d: 2.1, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "tree" },
   bush: { label: "Meadow Bush", hasCollider: false, w: 1.4, d: 1.4, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "tree" },
   flower_patch: { label: "Wildflower Patch", hasCollider: false, w: 1.2, d: 1.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "tree" },
+  dirt_patch: { label: "Soft Dirt Patch", hasCollider: false, w: 1.5, d: 1.5, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
   boulder: { label: "Mossy Boulder", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
   ruin_pillar: { label: "Watchtower Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   dungeon_pillar: { label: "Sanctum Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
@@ -737,7 +863,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set((state) => ({
       ...createInitialState("playing", state.muted, state.fps),
       // Preserve all authored map edits (props, enemies, rupees, portals, custom models, terrain)!
-      mapProps: state.mapProps,
+      mapProps: state.mapProps.map((p) =>
+        p.prefab === "dirt_patch"
+          ? { ...p, dug: false }
+          : p.puzzleTarget
+          ? { ...p, lit: false }
+          : p
+      ),
       enemies: state.enemies
         .filter((e) => !e.id.startsWith("dg-minion-wave2-"))
         .map((e) => ({
@@ -771,7 +903,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     soundEngine.playKeyPickup();
     set((state) => ({
       ...createInitialState("playing", state.muted, state.fps),
-      mapProps: state.mapProps,
+      mapProps: state.mapProps.map((p) =>
+        p.prefab === "dirt_patch"
+          ? { ...p, dug: false }
+          : p.puzzleTarget
+          ? { ...p, lit: false }
+          : p
+      ),
       enemies: state.enemies
         .filter((e) => !e.id.startsWith("dg-minion-wave2-"))
         .map((e) => ({
@@ -815,8 +953,219 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setShopOpen: (open: boolean) => {
     set((state) => ({
       shopOpen: open,
+      characterOpen: open ? false : state.characterOpen,
       shopDismissedOnRug: !open && state.nearShop,
     }));
+  },
+
+  setCharacterOpen: (open: boolean) => {
+    set((state) => ({
+      characterOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+    }));
+  },
+
+  equipHeroItem: (slot, itemId) => {
+    set((state) => {
+      const hero = { ...state.hero };
+      let label = "";
+      let desc = "";
+
+      if (slot === "primary") {
+        const pId = itemId as PrimaryHandId;
+        hero.equippedPrimary = pId;
+        hero.swordDamage = pId === "tempered_blade" ? 2 : 1;
+        label = pId === "tempered_blade" ? "Equipped Tempered Sun-Blade" : "Equipped Traveler's Sword";
+        desc =
+          pId === "tempered_blade"
+            ? "2 Base Damage • Charged Spin Attack deals 4 Damage!"
+            : "1 Base Damage • Charged Spin Attack deals 2 Damage!";
+      } else if (slot === "offhand") {
+        const oId = itemId as OffhandId;
+        hero.equippedOffhand = oId;
+        hero.shieldBlock = oId === "mirror_shield" ? 2 : 1;
+        label = oId === "mirror_shield" ? "Equipped Aegis Mirror Shield" : "Equipped Wooden Buckler";
+        desc =
+          oId === "mirror_shield"
+            ? "Blocks 2 Physical & Magical Damage when raised!"
+            : "Blocks 1 Physical Damage when raised!";
+      } else if (slot === "tunic") {
+        const tId = itemId as TunicId;
+        hero.equippedTunic = tId;
+        if (tId === "red_mail") {
+          label = "Equipped Crimson Dragon Mail";
+          desc = "Reduces ALL incoming physical & magical damage by 75%!";
+        } else if (tId === "blue_mail") {
+          label = "Equipped Sapphire Mail";
+          desc = "Reduces ALL incoming physical & magical damage by 50%!";
+        } else {
+          label = "Equipped Forest Green Tunic";
+          desc = "Standard traveler's tunic (0% damage reduction — baseline damage).";
+        }
+      } else if (slot === "boots") {
+        const bId = itemId as BootsId;
+        hero.equippedBoots = bId;
+        if (bId === "swift_boots") {
+          label = "Equipped Swiftwind Boots";
+          desc = "Increases movement & sprinting speed by +25%!";
+        } else if (bId === "titan_greaves") {
+          label = "Equipped Titan Iron Greaves";
+          desc = "+12% Movement Speed & reduces Shield Block knockback by 50%!";
+        } else {
+          label = "Equipped Traveler's Leather Boots";
+          desc = "Standard baseline movement speed (1.0x).";
+        }
+      }
+
+      soundEngine.playShopPurchase();
+      return {
+        hero,
+        banner: {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          text: label,
+          subtext: desc,
+          timer: 3.4,
+        },
+      };
+    });
+  },
+
+  useBottleSlot: (index: number) => {
+    const state = get();
+    const hero = { ...state.hero, bottles: [...state.hero.bottles] };
+    const friendlyBees = [...state.friendlyBees];
+    const content = hero.bottles[index];
+    if (!content || content === "empty") {
+      soundEngine.playGateLocked();
+      set({
+        banner: {
+          id: Date.now(),
+          text: `Bottle #${index + 1} is Empty!`,
+          subtext: "Fill it with a Red/Green/Blue Potion, Fairy, or Golden Bee in the Character Sheet or Shop.",
+          timer: 3.2,
+        },
+      });
+      return;
+    }
+
+    let text = "";
+    let subtext = "";
+
+    if (content === "red_potion") {
+      hero.hp = hero.maxHp;
+      hero.damageFractionAcc = 0;
+      hero.bottles[index] = "empty";
+      soundEngine.playPotionDrink();
+      text = "Drank Red Potion!";
+      subtext = "All Life Hearts completely restored! The bottle is now empty.";
+    } else if (content === "green_potion") {
+      hero.mp = hero.maxMp;
+      hero.bottles[index] = "empty";
+      soundEngine.playPotionDrink();
+      text = "Drank Green Magic Potion!";
+      subtext = "100% Magic Power (MP) restored for your Flame Rod! The bottle is now empty.";
+    } else if (content === "blue_potion") {
+      hero.hp = hero.maxHp;
+      hero.mp = hero.maxMp;
+      hero.damageFractionAcc = 0;
+      hero.bottles[index] = "empty";
+      soundEngine.playPotionDrink();
+      text = "Drank Blue Elixir!";
+      subtext = "All Life Hearts AND 100% Magic Power restored! The bottle is now empty.";
+    } else if (content === "fairy") {
+      hero.hp = Math.min(hero.maxHp, hero.hp + 14); // Heals up to 7 Full Hearts (14 half-hearts)!
+      hero.damageFractionAcc = 0;
+      hero.bottles[index] = "empty";
+      soundEngine.playFairyRevive();
+      text = "Released Bottled Fairy!";
+      subtext = "Restored up to 7 Full Hearts! (Fairies also auto-revive you upon death!)";
+    } else if (content === "bee") {
+      hero.bottles[index] = "empty";
+      soundEngine.playBeeBuzz();
+      friendlyBees.push({
+        id: `bee-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        zone: state.zone,
+        x: hero.x + Math.sin(hero.facing) * 1.1,
+        z: hero.z + Math.cos(hero.facing) * 1.1,
+        facing: hero.facing,
+        timer: 15.0,
+        maxTimer: 15.0,
+        stingCooldown: 0.1,
+      });
+      text = "Unleashed the Golden Attack Bee!";
+      subtext = "The friendly bee will hunt down and sting nearby monsters for 15 seconds!";
+    }
+
+    set({
+      hero,
+      friendlyBees,
+      banner: {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        text,
+        subtext,
+        timer: 3.8,
+      },
+    });
+  },
+
+  fillBottleSlot: (index: number, content: BottleContentId, rupeeCost = 0) => {
+    const state = get();
+    const hero = { ...state.hero, bottles: [...state.hero.bottles] };
+    if (index < 0 || index >= hero.bottles.length) return;
+    if (rupeeCost > 0 && hero.rupees < rupeeCost) {
+      soundEngine.playGateLocked();
+      set({
+        banner: {
+          id: Date.now(),
+          text: "Not Enough Rupees!",
+          subtext: `Filling this bottle requires ${rupeeCost} Rupees.`,
+          timer: 3.0,
+        },
+      });
+      return;
+    }
+    hero.rupees = Math.max(0, hero.rupees - rupeeCost);
+    hero.bottles[index] = content;
+    soundEngine.playShopPurchase();
+
+    const names: Record<BottleContentId, string> = {
+      empty: "Emptied Bottle",
+      red_potion: "Red Potion (Restores All Hearts)",
+      green_potion: "Green Potion (Restores All Magic Power)",
+      blue_potion: "Blue Potion (Restores All Hearts & Magic)",
+      fairy: "Captured Fairy (Heals 7 Hearts or Auto-Revives on Death)",
+      bee: "Captured Golden Bee (Unleash to Attack Enemies)",
+    };
+
+    set({
+      hero,
+      banner: {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        text: `Bottle #${index + 1}: ${names[content]}`,
+        subtext: "Click 'Use' in the Character Sheet or press V / 5 to use your first filled bottle!",
+        timer: 3.4,
+      },
+    });
+  },
+
+  addEmptyBottle: () => {
+    set((state) => {
+      if (state.hero.bottles.length >= 6) return {};
+      const hero = {
+        ...state.hero,
+        bottles: [...state.hero.bottles, "empty" as BottleContentId],
+      };
+      soundEngine.playKeyPickup();
+      return {
+        hero,
+        banner: {
+          id: Date.now(),
+          text: `Acquired Glass Bottle #${hero.bottles.length}!`,
+          subtext: "You can store Potions, Fairies, or Golden Bees inside your bottles!",
+          timer: 3.5,
+        },
+      };
+    });
   },
 
   // =========================================================
@@ -830,6 +1179,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return {
         editorMode: enabled,
         shopOpen: enabled ? false : state.shopOpen,
+        characterOpen: enabled ? false : state.characterOpen,
         phase: state.phase === "title" && enabled ? "playing" : state.phase,
       };
     });
@@ -1321,6 +1671,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   resetPlaySimulation: () => {
     set((state) => ({
       phase: "playing",
+      mapProps: state.mapProps.map((p) =>
+        p.prefab === "dirt_patch"
+          ? { ...p, dug: false }
+          : p.puzzleTarget
+          ? { ...p, lit: false }
+          : p
+      ),
       enemies: state.enemies
         .filter((e) => !e.id.startsWith("dg-minion-wave2-"))
         .map((e) => ({
@@ -1347,6 +1704,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       bushRupeesEarned: 0,
       bushBursts: [],
       arrows: [],
+      fireballs: [],
+      fireZones: [],
+      friendlyBees: [],
       projectiles: [],
       hazards: [],
       boomerang: null,
@@ -1356,11 +1716,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
         bossPhase2: false,
         bossDefeated: false,
         chestUnlocked: false,
+        overworldTorchPuzzleSolved: false,
+        dungeonTorchPuzzleSolved: false,
       },
       hero: {
         ...state.hero,
         hp: state.hero.maxHp,
+        mp: state.hero.maxMp,
+        damageFractionAcc: 0,
         attackTimer: 0,
+        spinAttackTimer: 0,
+        swordChargeTimer: 0,
+        fireRodChargeTimer: 0,
+        fireRodCooldown: 0,
+        digAnimTimer: 0,
         attackCooldown: 0,
         boomerangCooldown: 0,
         bowCooldown: 0,
@@ -1484,7 +1853,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // =========================================================
   buyShopItem: (item: ShopItemId) => {
     const state = get();
-    const hero = { ...state.hero };
+    const hero = { ...state.hero, bottles: [...state.hero.bottles] };
 
     const pushNotice = (text: string, subtext: string) => {
       set({
@@ -1556,6 +1925,55 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.hp = Math.min(hero.maxHp, hero.hp + 4);
       soundEngine.playShopPurchase();
       pushNotice("Restored 2 Full Hearts!", "You feel invigorated for the battles ahead.");
+    } else if (item === "bottle") {
+      if (hero.bottles.length >= 6) {
+        soundEngine.playGateLocked();
+        pushNotice("Max Bottles Reached!", "Your belt already holds 6 Glass Bottles.");
+        return;
+      }
+      if (hero.rupees < 20) {
+        soundEngine.playGateLocked();
+        pushNotice("Not Enough Rupees!", "An Empty Glass Bottle costs 20 Rupees.");
+        return;
+      }
+      hero.rupees -= 20;
+      hero.bottles.push("empty");
+      soundEngine.playShopPurchase();
+      pushNotice(
+        `Purchased Glass Bottle #${hero.bottles.length}!`,
+        "Fill it with Red/Green/Blue Potions, Fairies, or Golden Bees!"
+      );
+    } else if (
+      item === "red_potion" ||
+      item === "green_potion" ||
+      item === "blue_potion"
+    ) {
+      const emptyIdx = hero.bottles.findIndex((b) => b === "empty");
+      if (emptyIdx === -1) {
+        soundEngine.playGateLocked();
+        pushNotice(
+          "No Empty Bottle Available!",
+          "Use an existing bottle or acquire an Empty Glass Bottle first."
+        );
+        return;
+      }
+      const cost = item === "blue_potion" ? 25 : item === "red_potion" ? 15 : 12;
+      if (hero.rupees < cost) {
+        soundEngine.playGateLocked();
+        pushNotice("Not Enough Rupees!", `This potion costs ${cost} Rupees.`);
+        return;
+      }
+      hero.rupees -= cost;
+      hero.bottles[emptyIdx] = item;
+      soundEngine.playShopPurchase();
+      pushNotice(
+        item === "blue_potion"
+          ? "Bottled Blue Potion!"
+          : item === "red_potion"
+          ? "Bottled Red Potion!"
+          : "Bottled Green Potion!",
+        `Stored in Bottle #${emptyIdx + 1} — press V / 5 or open Character Sheet (C) to drink!`
+      );
     }
   },
 
@@ -1567,9 +1985,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (state.phase !== "playing" || state.editorMode) return;
 
     const dt = Math.min(rawDt, 0.05);
-    const dynamicObstacles = buildObstaclesFromMapProps(state.mapProps);
+    let mapProps = state.mapProps;
+    let mapPropsMutated = false;
+    const ensureMutableMapProps = () => {
+      if (!mapPropsMutated) {
+        mapProps = state.mapProps.map((p) => ({ ...p }));
+        mapPropsMutated = true;
+      }
+    };
+    const dynamicObstacles = buildObstaclesFromMapProps(mapProps);
 
-    const hero: HeroState = { ...state.hero };
+    const hero: HeroState = {
+      ...state.hero,
+      bottles: [...(state.hero.bottles ?? ["red_potion", "fairy", "bee", "empty"])],
+    };
     const flags: GameFlags = { ...state.flags };
     const stats: GameStats = {
       ...state.stats,
@@ -1594,6 +2023,41 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     };
 
+    // Passive Magic Power regeneration (2.5 MP/s)
+    hero.maxMp = hero.maxMp || 100;
+    hero.mp = Math.min(hero.maxMp, (hero.mp ?? 100) + dt * 2.5);
+
+    // Tunic damage multiplier:
+    // - Forest Green Tunic (default): 1.0x (0% physical/magical reduction)
+    // - Sapphire Mail (blue_mail): 0.5x (50% physical & magical damage reduction!)
+    // - Crimson Dragon Mail (red_mail): 0.25x (75% physical & magical damage reduction!)
+    const getTunicDamageMultiplier = (): number => {
+      if (hero.equippedTunic === "red_mail") return 0.25;
+      if (hero.equippedTunic === "blue_mail") return 0.5;
+      return 1.0;
+    };
+
+    // Helper: check if hero died and auto-revive with a Bottled Fairy if one is in a bottle!
+    const checkHeroDeathOrFairyRevive = () => {
+      if (hero.hp > 0) return;
+      const fairyIdx = hero.bottles.findIndex((b) => b === "fairy");
+      if (fairyIdx !== -1) {
+        hero.bottles[fairyIdx] = "empty";
+        hero.hp = Math.min(hero.maxHp, 14); // Revives with up to 7 Full Hearts (14 half-hearts)!
+        hero.damageFractionAcc = 0;
+        hero.invulnerableTimer = 1.6;
+        soundEngine.playFairyRevive();
+        pushBanner(
+          "Bottled Fairy Revived You! (+7 Hearts)",
+          `Your Fairy burst from Bottle #${fairyIdx + 1} and restored your life!`,
+          4.5
+        );
+      } else {
+        phase = "gameover";
+        soundEngine.playGameOver();
+      }
+    };
+
     // Shield only blocks when the player is actively holding it up AND facing the incoming attack (~75° half-angle frontal cone)
     const SHIELD_BLOCK_HALF_ANGLE = Math.PI * 0.42;
     const isFacingAttack = (attackFromAngle: number): boolean => {
@@ -1610,7 +2074,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       isGroundHazard = false,
       isBossLunge = false,
       attackFromAngle?: number,
-      attackerWeight = 1.0
+      attackerWeight = 1.0,
+      isMagical = false
     ): { triggered: boolean; blocked: boolean } => {
       if (hero.invulnerableTimer > 0 || phase !== "playing") {
         return { triggered: false, blocked: false };
@@ -1618,7 +2083,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       const shieldPower = Math.max(1, hero.shieldBlock ?? 1);
       let finalDamage = rawAmount;
-      let kbScale = 1.0;
+      const kbScale = hero.equippedBoots === "titan_greaves" ? 0.5 : 1.0;
       let blocked = false;
 
       const incomingAngle =
@@ -1628,25 +2093,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
             ? Math.atan2(-pushX, -pushZ)
             : hero.facing;
       const canBlock =
-        hero.isBlocking && !isGroundHazard && isFacingAttack(incomingAngle);
+        hero.isBlocking &&
+        !isGroundHazard &&
+        (!isMagical || hero.equippedOffhand === "mirror_shield") &&
+        isFacingAttack(incomingAngle);
 
-      // Shield Block absorbs `shieldBlock` physical damage (1 at start of game; upgradeable with better shields later)
-      // only when actively held up and facing the direction of the attack
       if (canBlock) {
         blocked = true;
         soundEngine.playShieldBlock();
 
         if (isBossLunge) {
-          // Blocking the Boss Lunge prevents the damage like regular, but sends the player flying backwards uncontrollably!
           finalDamage = Math.max(0, rawAmount - Math.max(shieldPower, rawAmount));
           soundEngine.playBossWallCrash();
           hero.knockbackLockTimer = 0.65;
           hero.invulnerableTimer = 0.95;
-          hero.knockbackVx = pushX;
-          hero.knockbackVz = pushZ;
+          hero.knockbackVx = pushX * kbScale;
+          hero.knockbackVz = pushZ * kbScale;
           const pushMag = Math.hypot(pushX, pushZ);
           if (pushMag > 0.01) {
-            // Keep facing the charging boss so the hero is launched backwards with shield raised
             hero.facing = Math.atan2(-pushX / pushMag, -pushZ / pushMag);
           }
           return { triggered: true, blocked: true };
@@ -1657,55 +2121,55 @@ export const useGameStore = create<GameStore>((set, get) => ({
           soundEngine.playHeroHurt();
         }
 
-        // Weight-based Shield Block Knockback:
-        // Lighter enemies (Slime 0.5, Arrow 0.65) push the blocking hero back slightly (~6.8),
-        // medium enemies (Goblin 2.0, Minion 2.2) push moderately (~10.2),
-        // and heavy enemies (Sentinel Knight 12.0, Boss 100) deliver a hefty shield shove (~17.2 - 20.5)!
         const weightClamp = Math.max(0.4, Math.min(30, attackerWeight));
         const weightBlockImpulse =
-          attackerWeight >= 50
+          (attackerWeight >= 50
             ? 20.5
             : attackerWeight >= 8.0
             ? 17.2
-            : 4.5 + Math.sqrt(weightClamp) * 3.8;
+            : 4.5 + Math.sqrt(weightClamp) * 3.8) * kbScale;
         const pushMag = Math.hypot(pushX, pushZ);
         const dirX = pushMag > 0.01 ? pushX / pushMag : -Math.sin(incomingAngle);
         const dirZ = pushMag > 0.01 ? pushZ / pushMag : -Math.cos(incomingAngle);
 
-        hero.hp = Math.max(0, hero.hp - finalDamage);
+        const mitigated = finalDamage * getTunicDamageMultiplier();
+        hero.damageFractionAcc = (hero.damageFractionAcc ?? 0) + mitigated;
+        const hpLoss = Math.floor(hero.damageFractionAcc + 1e-6);
+        hero.damageFractionAcc = Math.max(0, hero.damageFractionAcc - hpLoss);
+
+        hero.hp = Math.max(0, hero.hp - hpLoss);
         hero.invulnerableTimer = finalDamage === 0 ? 0.42 : 0.9;
         if (finalDamage > 0) {
           hero.hurtFlashTimer = 0.9;
         }
-        stats.damageTaken += finalDamage;
+        stats.damageTaken += mitigated;
         hero.knockbackVx = dirX * weightBlockImpulse;
         hero.knockbackVz = dirZ * weightBlockImpulse;
         if (attackerWeight >= 8.0) {
           hero.knockbackLockTimer = Math.max(hero.knockbackLockTimer, 0.16);
         }
 
-        if (hero.hp <= 0) {
-          phase = "gameover";
-          soundEngine.playGameOver();
-        }
+        checkHeroDeathOrFairyRevive();
         return { triggered: true, blocked: true };
       } else {
         soundEngine.playHeroHurt();
       }
 
-      hero.hp = Math.max(0, hero.hp - finalDamage);
+      const mitigated = finalDamage * getTunicDamageMultiplier();
+      hero.damageFractionAcc = (hero.damageFractionAcc ?? 0) + mitigated;
+      const hpLoss = Math.floor(hero.damageFractionAcc + 1e-6);
+      hero.damageFractionAcc = Math.max(0, hero.damageFractionAcc - hpLoss);
+
+      hero.hp = Math.max(0, hero.hp - hpLoss);
       hero.invulnerableTimer = 0.95;
       if (finalDamage > 0) {
         hero.hurtFlashTimer = 0.95;
       }
-      stats.damageTaken += finalDamage;
+      stats.damageTaken += mitigated;
       hero.knockbackVx = pushX * kbScale;
       hero.knockbackVz = pushZ * kbScale;
 
-      if (hero.hp <= 0) {
-        phase = "gameover";
-        soundEngine.playGameOver();
-      }
+      checkHeroDeathOrFairyRevive();
       return { triggered: true, blocked };
     };
 
@@ -1713,35 +2177,390 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let chestNoticeCooldown = Math.max(0, state.chestNoticeCooldown - dt);
     let armorNoticeCooldown = Math.max(0, state.armorNoticeCooldown - dt);
 
-    // 1. Update Hero Timers, Sword Attack, Shield Block, Boomerang & Bow
+    // 1. Update Hero Timers, Charged Spin Attack, Shield Block, Boomerang, Bow, Flame Rod & Shovel
     hero.attackTimer = Math.max(0, hero.attackTimer - dt);
+    hero.spinAttackTimer = Math.max(0, (hero.spinAttackTimer ?? 0) - dt);
     hero.attackCooldown = Math.max(0, hero.attackCooldown - dt);
     hero.boomerangCooldown = Math.max(0, (hero.boomerangCooldown ?? 0) - dt);
     hero.bowCooldown = Math.max(0, hero.bowCooldown - dt);
+    hero.fireRodCooldown = Math.max(0, (hero.fireRodCooldown ?? 0) - dt);
     hero.bowAnimTimer = Math.max(0, (hero.bowAnimTimer ?? 0) - dt);
     hero.throwAnimTimer = Math.max(0, (hero.throwAnimTimer ?? 0) - dt);
+    hero.digAnimTimer = Math.max(0, (hero.digAnimTimer ?? 0) - dt);
     hero.weaponLockTimer = Math.max(0, (hero.weaponLockTimer ?? 0) - dt);
     hero.portalCooldown = Math.max(0, hero.portalCooldown - dt);
     hero.invulnerableTimer = Math.max(0, hero.invulnerableTimer - dt);
     hero.hurtFlashTimer = Math.max(0, (hero.hurtFlashTimer ?? 0) - dt);
     hero.knockbackLockTimer = Math.max(0, (hero.knockbackLockTimer ?? 0) - dt);
-    hero.isAttacking = hero.attackTimer > 0;
+    hero.isSpinAttacking = hero.spinAttackTimer > 0;
+    hero.isAttacking = hero.attackTimer > 0 || hero.spinAttackTimer > 0;
 
     let boomerang: BoomerangState | null = state.boomerang
       ? { ...state.boomerang, hitEnemyIds: [...state.boomerang.hitEnemyIds] }
       : null;
     let arrows: ArrowProjectileState[] = state.arrows.map((a) => ({ ...a }));
+    let fireballs: FireballProjectileState[] = (state.fireballs ?? []).map((f) => ({ ...f }));
+    let fireZones: FireZoneState[] = (state.fireZones ?? []).map((fz) => ({ ...fz }));
+    let friendlyBees: FriendlyBeeState[] = (state.friendlyBees ?? []).map((b) => ({ ...b }));
+    const rupees: RupeeItemState[] = state.rupees.map((r) => ({
+      ...r,
+      spawnBounceTimer: Math.max(0, (r.spawnBounceTimer ?? 0) - dt),
+    }));
+    const enemies: EnemyState[] = state.enemies.map((e) => ({ ...e }));
 
-    // Mutually exclusive weapon actions — prevents shooting bow, throwing boomerang, and swinging sword simultaneously!
+    // Track cut bushes, looted bushes, bush rupee cap, and active leaf/dirt bursts
+    let cutBushIds = [...state.cutBushIds];
+    const lootedBushIds = [...state.lootedBushIds];
+    let bushRupeesEarned = state.bushRupeesEarned;
+    const bushBursts: BushBurstState[] = state.bushBursts
+      .map((b) => ({ ...b, timer: b.timer - dt }))
+      .filter((b) => b.timer > 0);
+
+    // Quick-Use Bottle Hotkey (V or 5): uses the first non-empty bottle!
+    if (input.bottlePressed && !state.shopOpen && !state.characterOpen) {
+      const firstFilledIdx = hero.bottles.findIndex((b) => b !== "empty");
+      if (firstFilledIdx !== -1) {
+        const content = hero.bottles[firstFilledIdx];
+        if (content === "red_potion") {
+          hero.hp = hero.maxHp;
+          hero.damageFractionAcc = 0;
+          hero.bottles[firstFilledIdx] = "empty";
+          soundEngine.playPotionDrink();
+          pushBanner("Drank Red Potion!", "All Life Hearts restored!", 3.2);
+        } else if (content === "green_potion") {
+          hero.mp = hero.maxMp;
+          hero.bottles[firstFilledIdx] = "empty";
+          soundEngine.playPotionDrink();
+          pushBanner("Drank Green Potion!", "100% Magic Power restored!", 3.2);
+        } else if (content === "blue_potion") {
+          hero.hp = hero.maxHp;
+          hero.mp = hero.maxMp;
+          hero.damageFractionAcc = 0;
+          hero.bottles[firstFilledIdx] = "empty";
+          soundEngine.playPotionDrink();
+          pushBanner("Drank Blue Elixir!", "All Hearts & Magic Power restored!", 3.2);
+        } else if (content === "fairy") {
+          hero.hp = Math.min(hero.maxHp, hero.hp + 14);
+          hero.damageFractionAcc = 0;
+          hero.bottles[firstFilledIdx] = "empty";
+          soundEngine.playFairyRevive();
+          pushBanner("Released Bottled Fairy!", "Restored 7 Full Hearts!", 3.2);
+        } else if (content === "bee") {
+          hero.bottles[firstFilledIdx] = "empty";
+          soundEngine.playBeeBuzz();
+          friendlyBees.push({
+            id: `bee-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+            zone,
+            x: hero.x + Math.sin(hero.facing) * 1.1,
+            z: hero.z + Math.cos(hero.facing) * 1.1,
+            facing: hero.facing,
+            timer: 15.0,
+            maxTimer: 15.0,
+            stingCooldown: 0.1,
+          });
+          pushBanner("Unleashed Golden Attack Bee!", "The friendly bee is hunting nearby foes!", 3.4);
+        }
+      } else {
+        soundEngine.playGateLocked();
+        pushBanner("All Bottles Empty!", "Press C to open Character Sheet and fill a bottle!", 2.8);
+      }
+    }
+
+    // Charged Spin Attack Logic: Hold Attack button after swinging to charge, release at >= 0.62s for 360° Double-Damage Spin!
+    const SPIN_CHARGE_THRESHOLD = 0.62;
+    if (
+      input.attackHeld &&
+      !state.shopOpen &&
+      !state.characterOpen &&
+      hero.knockbackLockTimer <= 0 &&
+      hero.spinAttackTimer <= 0
+    ) {
+      const prevCharge = hero.swordChargeTimer ?? 0;
+      hero.swordChargeTimer = Math.min(1.6, prevCharge + dt);
+      if (prevCharge < SPIN_CHARGE_THRESHOLD && hero.swordChargeTimer >= SPIN_CHARGE_THRESHOLD) {
+        soundEngine.playSpinChargeReady();
+      }
+    } else {
+      if ((hero.swordChargeTimer ?? 0) >= SPIN_CHARGE_THRESHOLD && hero.knockbackLockTimer <= 0) {
+        // Unleash 360° Charged Spin Attack (Double Sword Damage!)
+        hero.spinAttackTimer = 0.38;
+        hero.attackTimer = 0.38;
+        hero.isSpinAttacking = true;
+        hero.isAttacking = true;
+        hero.isBlocking = false;
+        hero.attackCooldown = 0.42;
+        hero.weaponLockTimer = 0.38;
+        hero.swingId += 1;
+        soundEngine.playSpinAttack();
+      }
+      hero.swordChargeTimer = 0;
+    }
+
+    // Flame Rod Charge & Fireball Cast Logic (Press/Hold R or 3):
+    // - Quick Tap (< 0.55s): Shoots a Small Fireball (1 Damage, fast, lights torches)
+    // - Charged Hold (>= 0.55s): Shoots a Big Slow Fireball (2 Damage, explodes on impact & leaves burning fire on the ground!)
+    const FIRE_CHARGE_THRESHOLD = 0.55;
+    if (
+      input.fireRodHeld &&
+      hero.hasFireRod &&
+      !state.shopOpen &&
+      !state.characterOpen &&
+      hero.knockbackLockTimer <= 0
+    ) {
+      const prevFire = hero.fireRodChargeTimer ?? 0;
+      hero.fireRodChargeTimer = Math.min(1.6, prevFire + dt);
+      if (prevFire < FIRE_CHARGE_THRESHOLD && hero.fireRodChargeTimer >= FIRE_CHARGE_THRESHOLD) {
+        soundEngine.playSpinChargeReady();
+      }
+    } else if (
+      ((hero.fireRodChargeTimer ?? 0) > 0.02 || input.fireRodPressed) &&
+      hero.hasFireRod &&
+      hero.fireRodCooldown <= 0 &&
+      !state.shopOpen &&
+      !state.characterOpen
+    ) {
+      const isCharged = (hero.fireRodChargeTimer ?? 0) >= FIRE_CHARGE_THRESHOLD;
+      hero.fireRodChargeTimer = 0;
+      const mpCost = isCharged ? 16 : 8;
+      if (hero.mp < mpCost) {
+        soundEngine.playGateLocked();
+        hero.fireRodCooldown = 0.35;
+        pushBanner(
+          "Out of Magic Power (MP)!",
+          "Drink a Green or Blue Potion from a Bottle (Press V or C) to restore MP!",
+          3.2
+        );
+      } else {
+        hero.mp = Math.max(0, hero.mp - mpCost);
+        hero.isBlocking = false;
+        hero.throwAnimTimer = 0.28;
+        hero.weaponLockTimer = 0.28;
+        hero.fireRodCooldown = 0.32;
+        soundEngine.playFireballShoot(isCharged);
+        fireballs.push({
+          id: `fb-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+          zone,
+          x: hero.x + Math.sin(hero.facing) * 0.95,
+          z: hero.z + Math.cos(hero.facing) * 0.95,
+          angle: hero.facing,
+          speed: isCharged ? 7.4 : 12.4,
+          damage: isCharged ? 2 : 1,
+          radius: isCharged ? 0.78 : 0.4,
+          isCharged,
+          lifeTimer: isCharged ? 2.1 : 1.55,
+        });
+      }
+    } else if (!input.fireRodHeld) {
+      hero.fireRodChargeTimer = 0;
+    }
+
+    // Mutually exclusive weapon actions
     const canUseWeapon =
       !state.shopOpen &&
+      !state.characterOpen &&
       hero.knockbackLockTimer <= 0 &&
       hero.weaponLockTimer <= 0 &&
       !hero.isAttacking &&
       hero.bowAnimTimer <= 0 &&
-      hero.throwAnimTimer <= 0;
+      hero.throwAnimTimer <= 0 &&
+      hero.digAnimTimer <= 0;
 
-    if (
+    // Shovel Digging Action (Press G or 4)
+    if (canUseWeapon && input.shovelPressed && hero.hasShovel) {
+      hero.isBlocking = false;
+      hero.digAnimTimer = 0.36;
+      hero.weaponLockTimer = 0.34;
+      const digX = hero.x + Math.sin(hero.facing) * 0.85;
+      const digZ = hero.z + Math.cos(hero.facing) * 0.85;
+
+      // Spawn flying brown dirt clod particle burst!
+      bushBursts.push({
+        id: `dirt-burst-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+        zone,
+        x: digX,
+        z: digZ,
+        timer: 0.78,
+        maxTimer: 0.78,
+        seed: Math.floor(Math.abs(digX * 53 + digZ * 97) + stats.elapsedSeconds * 140),
+        isDirt: true,
+      });
+
+      // Check if standing near an un-dug soft dirt patch (`dirt_patch`)
+      const targetPatch = mapProps.find(
+        (p) =>
+          p.prefab === "dirt_patch" &&
+          p.zone === zone &&
+          !p.dug &&
+          (Math.hypot(p.x - digX, p.z - digZ) <= 1.75 ||
+            Math.hypot(p.x - hero.x, p.z - hero.z) <= 1.95)
+      );
+
+      if (targetPatch) {
+        ensureMutableMapProps();
+        const mutablePatch = mapProps.find((p) => p.id === targetPatch.id);
+        if (mutablePatch) {
+          mutablePatch.dug = true;
+        }
+        soundEngine.playShovelDig(true);
+
+        const reward: BuriedRewardKind = targetPatch.buriedReward ?? "random";
+        if (reward === "swift_boots") {
+          hero.equippedBoots = "swift_boots";
+          rupees.push({
+            id: `dig-drop-${targetPatch.id}`,
+            zone,
+            x: targetPatch.x,
+            z: targetPatch.z,
+            tier: "blue",
+            value: 5,
+            collected: false,
+            spawnBounceTimer: 0.48,
+          });
+          pushBanner(
+            "Dug Up the Swiftwind Boots! (+25% Speed)",
+            "Automatically equipped in your Boots slot! Open Character Sheet (C) anytime.",
+            4.5
+          );
+        } else if (reward === "blue_mail") {
+          hero.equippedTunic = "blue_mail";
+          pushBanner(
+            "Dug Up the Sapphire Mail! (-50% Damage)",
+            "Reduces all incoming physical & magical damage by 50%!",
+            4.5
+          );
+        } else if (reward === "red_mail") {
+          hero.equippedTunic = "red_mail";
+          rupees.push({
+            id: `dig-drop-${targetPatch.id}`,
+            zone,
+            x: targetPatch.x,
+            z: targetPatch.z,
+            tier: "red",
+            value: 20,
+            collected: false,
+            spawnBounceTimer: 0.48,
+          });
+          pushBanner(
+            "Dug Up the Crimson Dragon Mail! (-75% Damage)",
+            "Legendary tunic equipped — reduces all physical & magical damage by 75%!",
+            4.8
+          );
+        } else if (reward === "bottle") {
+          if (hero.bottles.length < 6) {
+            hero.bottles.push("empty");
+          }
+          rupees.push({
+            id: `dig-drop-${targetPatch.id}`,
+            zone,
+            x: targetPatch.x,
+            z: targetPatch.z,
+            tier: "blue",
+            value: 5,
+            collected: false,
+            spawnBounceTimer: 0.48,
+          });
+          pushBanner(
+            `Dug Up an Ancient Glass Bottle! (Total: ${hero.bottles.length})`,
+            "Store Red/Green/Blue Potions, Fairies, or Golden Bees in your bottles!",
+            4.5
+          );
+        } else if (reward === "fairy") {
+          const emptyIdx = hero.bottles.findIndex((b) => b === "empty");
+          if (emptyIdx !== -1) {
+            hero.bottles[emptyIdx] = "fairy";
+            soundEngine.playFairyRevive();
+            pushBanner(
+              `Captured a Wild Fairy in Bottle #${emptyIdx + 1}!`,
+              "Heals 7 Hearts when released or automatically revives you upon death!",
+              4.5
+            );
+          } else {
+            hero.hp = Math.min(hero.maxHp, hero.hp + 14);
+            soundEngine.playFairyRevive();
+            pushBanner(
+              "Unearthed a Woodland Fairy! (+7 Hearts)",
+              "The fairy blessed you with 7 Full Hearts of healing!",
+              4.2
+            );
+          }
+        } else if (reward === "bee") {
+          const emptyIdx = hero.bottles.findIndex((b) => b === "empty");
+          if (emptyIdx !== -1) {
+            hero.bottles[emptyIdx] = "bee";
+            soundEngine.playBeeBuzz();
+            pushBanner(
+              `Captured a Golden Bee in Bottle #${emptyIdx + 1}!`,
+              "Press V / 5 or use it in the Character Sheet (C) to unleash it on enemies!",
+              4.5
+            );
+          } else {
+            soundEngine.playBeeBuzz();
+            friendlyBees.push({
+              id: `bee-dig-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: targetPatch.x,
+              z: targetPatch.z,
+              facing: hero.facing,
+              timer: 15.0,
+              maxTimer: 15.0,
+              stingCooldown: 0.1,
+            });
+            pushBanner(
+              "Unearthed a Golden Attack Bee!",
+              "The friendly bee buzzed out of the earth to attack nearby monsters!",
+              4.0
+            );
+          }
+        } else {
+          // Rupee or Recovery Heart treasure pop!
+          let tier: RupeeTier = "blue";
+          let val = 5;
+          if (reward === "rupee_red") {
+            tier = "red";
+            val = 20;
+          } else if (reward === "rupee_green") {
+            tier = "green";
+            val = 1;
+          } else if (reward === "heart") {
+            tier = "heart";
+            val = 2;
+          } else {
+            const roll = Math.random();
+            if (roll > 0.75) {
+              tier = "red";
+              val = 20;
+            } else if (roll > 0.35) {
+              tier = "blue";
+              val = 5;
+            } else {
+              tier = "heart";
+              val = 2;
+            }
+          }
+          rupees.push({
+            id: `dig-drop-${targetPatch.id}-${stats.elapsedSeconds.toFixed(2)}`,
+            zone,
+            x: targetPatch.x,
+            z: targetPatch.z,
+            tier,
+            value: val,
+            collected: false,
+            spawnBounceTimer: 0.48,
+          });
+          pushBanner(
+            tier === "red"
+              ? "Dug Up a Red Rupee! (+20)"
+              : tier === "heart"
+              ? "Dug Up a Recovery Heart!"
+              : "Dug Up Buried Treasure! (+5 Rupees)",
+            "Your shovel uncovered loot hidden beneath the soft earth!",
+            3.4
+          );
+        }
+      } else {
+        soundEngine.playShovelDig(false);
+      }
+    } else if (
       canUseWeapon &&
       input.boomerangPressed &&
       hero.hasBoomerang &&
@@ -1804,6 +2623,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } else if (canUseWeapon && input.attackPressed && hero.attackCooldown <= 0) {
       // Trigger Sword Swing
       hero.isAttacking = true;
+      hero.isSpinAttacking = false;
       hero.isBlocking = false;
       hero.attackTimer = 0.24;
       hero.attackCooldown = 0.35;
@@ -1813,27 +2633,44 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     const isUsingAnyWeapon =
-      hero.isAttacking || hero.bowAnimTimer > 0 || hero.throwAnimTimer > 0;
+      hero.isAttacking ||
+      hero.bowAnimTimer > 0 ||
+      hero.throwAnimTimer > 0 ||
+      hero.digAnimTimer > 0;
 
-    // Right-click Shield Block (active only when actively holding right-click/Shift and not performing any weapon action or knockback flight)
+    // Right-click Shield Block
     hero.isBlocking =
       input.blockHeld && !isUsingAnyWeapon && hero.knockbackLockTimer <= 0;
 
-    // 2. Hero Movement + Knockback (uncontrollable backward flight when knockbackLockTimer > 0)
+    // 2. Hero Movement + Boots Speed Multiplier + Knockback
     const isKnockbackLocked = hero.knockbackLockTimer > 0;
     let mx = isKnockbackLocked ? 0 : input.moveX;
     let mz = isKnockbackLocked ? 0 : input.moveZ;
     const mag = Math.hypot(mx, mz);
+    const bootsMultiplier =
+      hero.equippedBoots === "swift_boots"
+        ? 1.25
+        : hero.equippedBoots === "titan_greaves"
+        ? 1.12
+        : 1.0;
+
     if (mag > 0.01) {
       mx /= mag;
       mz /= mag;
       if (!isUsingAnyWeapon) {
         hero.facing = Math.atan2(mx, mz);
       }
-      hero.walkCycle += dt * (hero.isBlocking ? 7 : 11);
+      hero.walkCycle += dt * (hero.isBlocking ? 7 : 11) * bootsMultiplier;
     }
 
-    const moveSpeed = isUsingAnyWeapon ? 4.8 : hero.isBlocking ? 5.4 : 9.0;
+    const baseMoveSpeed = isUsingAnyWeapon
+      ? 4.8
+      : (hero.swordChargeTimer ?? 0) > 0.25 || (hero.fireRodChargeTimer ?? 0) > 0.2
+      ? 6.4
+      : hero.isBlocking
+      ? 5.4
+      : 9.0;
+    const moveSpeed = baseMoveSpeed * bootsMultiplier;
     const nextHeroX = hero.x + (mx * moveSpeed + hero.knockbackVx) * dt;
     const nextHeroZ = hero.z + (mz * moveSpeed + hero.knockbackVz) * dt;
 
@@ -1874,7 +2711,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const nearShop = distToShop < 3.1;
     let shopOpen = state.shopOpen;
     let shopDismissedOnRug = state.shopDismissedOnRug;
-    if (nearShop && !shopOpen && !shopDismissedOnRug) {
+    if (nearShop && !shopOpen && !shopDismissedOnRug && !state.characterOpen) {
       shopOpen = true;
     } else if (!nearShop) {
       shopOpen = false;
@@ -1892,15 +2729,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // Track cut bushes, looted bushes, bush rupee cap, and active leaf bursts
-    let cutBushIds = [...state.cutBushIds];
-    const lootedBushIds = [...state.lootedBushIds];
-    let bushRupeesEarned = state.bushRupeesEarned;
-    const bushBursts: BushBurstState[] = state.bushBursts
-      .map((b) => ({ ...b, timer: b.timer - dt }))
-      .filter((b) => b.timer > 0);
-
-    // 3. Check Dynamic Portal Transitions (supports all authored & custom Map Editor portals!)
+    // 3. Check Dynamic Portal Transitions
     if (hero.portalCooldown <= 0) {
       for (const portal of state.portals) {
         if (portal.zone !== zone) continue;
@@ -1929,9 +2758,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.knockbackVz = 0;
           hero.portalCooldown = 1.25;
           boomerang = null;
-          // Carry any arrows currently stuck in the hero's shield into the new zone
           arrows = arrows.map((a) => (a.stuck && a.stuckInShield ? { ...a, zone } : a));
-          // Regrow cut bushes when transitioning between zones (lootedBushIds & cap prevent infinite farming!)
           cutBushIds = [];
           soundEngine.playPortalTransition();
           pushBanner(portal.label, portal.sublabel);
@@ -2005,7 +2832,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 6. Check Boss Awakening immediately when stepping past the doorway threshold into Room 3 — slams the Sanctum Gate shut behind the player!
+    // 6. Check Boss Awakening immediately when stepping past the doorway threshold into Room 3
     if (zone === "dungeon" && flags.gateUnlocked && !flags.bossAwakened && hero.z > 13.05) {
       flags.bossAwakened = true;
       hero.z = Math.max(13.58, hero.z);
@@ -2022,7 +2849,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated);
     const bossExitOpen = flags.bossDefeated;
 
-    // 7. Update Arcing Boss Projectiles & Toxic/Fire Ground Hazards
+    // 7. Update Arcing Boss Projectiles & Toxic Ground Hazards (Magical Damage!)
     const projectiles: BossProjectileState[] = [];
     const hazards: HazardZoneState[] = state.hazards
       .map((h) => ({ ...h, timer: h.timer - dt }))
@@ -2043,7 +2870,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const pushDirZ = dist > 0.01 ? dz / dist : -1;
 
           if (dist <= updatedProj.directHitRadius) {
-            // Direct hit from projectile: blockable by the shield only if holding shield up and facing the incoming projectile
             const angleToProjOrigin = Math.atan2(
               updatedProj.startX - hero.x,
               updatedProj.startZ - hero.z
@@ -2065,11 +2891,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
               false,
               false,
               projIncomingAngle,
-              6.0
+              6.0,
+              true
             );
           } else if (dist <= updatedProj.aoeRadius) {
-            // Ground AoE splash damage: NOT blocked by the shield (isGroundHazard = true)
-            damageHero(1, pushDirX * 9.5, pushDirZ * 9.5, true);
+            damageHero(1, pushDirX * 9.5, pushDirZ * 9.5, true, false, undefined, 1.0, true);
           }
         }
 
@@ -2095,17 +2921,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (dist <= hazard.radius) {
         const pushDirX = dist > 0.01 ? dx / dist : 0;
         const pushDirZ = dist > 0.01 ? dz / dist : -1;
-        damageHero(1, pushDirX * 5.5, pushDirZ * 5.5, true);
+        damageHero(1, pushDirX * 5.5, pushDirZ * 5.5, true, false, undefined, 1.0, true);
       }
     }
 
     // 8. Update Boomerang Flight
-    const rupees: RupeeItemState[] = state.rupees.map((r) => ({
-      ...r,
-      spawnBounceTimer: Math.max(0, (r.spawnBounceTimer ?? 0) - dt),
-    }));
-    const enemies: EnemyState[] = state.enemies.map((e) => ({ ...e }));
-
     if (boomerang) {
       if (boomerang.zone !== zone) {
         boomerang = null;
@@ -2162,33 +2982,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 8b. Bush Chopping (via Sword Swing or Boomerang) + Green Leaf Burst & Classic Rupee Drop Table
+    // 8b. Bush Chopping (via Sword Swing, 360° Spin Attack, or Boomerang)
     const MAX_BUSH_RUPEES_CAP = 32;
     let playedBushCutThisFrame = false;
 
-    for (const prop of state.mapProps) {
+    for (const prop of mapProps) {
       if (prop.prefab !== "bush" || prop.zone !== zone) continue;
       if (cutBushIds.includes(prop.id)) continue;
 
       const bushRadius = 0.72 * Math.max(prop.scaleX, prop.scaleZ);
       let hitBush = false;
 
-      // Check Hero Sword Swing arc
       if (hero.isAttacking && hero.attackTimer > 0.04) {
         const dx = prop.x - hero.x;
         const dz = prop.z - hero.z;
         const dist = Math.hypot(dx, dz);
-        const reach = 2.85 + bushRadius;
+        const reach = (hero.isSpinAttacking ? 3.25 : 2.85) + bushRadius;
         if (dist <= reach) {
-          const angleToBush = Math.atan2(dx, dz);
-          const angleDiff = Math.abs(normalizeAngleDiff(angleToBush, hero.facing));
-          if (angleDiff <= 1.42 || dist <= 1.35) {
+          if (hero.isSpinAttacking) {
             hitBush = true;
+          } else {
+            const angleToBush = Math.atan2(dx, dz);
+            const angleDiff = Math.abs(normalizeAngleDiff(angleToBush, hero.facing));
+            if (angleDiff <= 1.42 || dist <= 1.35) {
+              hitBush = true;
+            }
           }
         }
       }
 
-      // Check Boomerang hit
       if (!hitBush && boomerang) {
         if (Math.hypot(prop.x - boomerang.x, prop.z - boomerang.z) <= bushRadius + 0.65) {
           hitBush = true;
@@ -2202,7 +3024,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
           soundEngine.playBushCut();
         }
 
-        // Spawn 3D green leaf & grass blade explosion
         bushBursts.push({
           id: `bush-burst-${prop.id}-${stats.elapsedSeconds.toFixed(3)}`,
           zone,
@@ -2213,12 +3034,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
           seed: Math.floor(Math.abs(prop.x * 41 + prop.z * 83) + stats.elapsedSeconds * 130),
         });
 
-        // Classic Bush Rupee Drop Table:
-        // - First-time cut of a bush: 38% chance to drop a rupee
-        //   * 74% of drops: 1 Rupee (Green)
-        //   * 20% of drops: 5 Rupees (Blue)
-        //   * 6% of drops: 20 Rupees (Red Jackpot!)
-        // - Re-cutting after leaving & re-entering zone: tiny 5% chance for 1 Rupee (capped at MAX_BUSH_RUPEES_CAP)
         const alreadyCutOnce = lootedBushIds.includes(prop.id);
         if (!alreadyCutOnce) {
           lootedBushIds.push(prop.id);
@@ -2514,6 +3329,433 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     arrows = remainingArrows;
 
+    // 9b. Torch Combination Puzzles, Magic Fireballs, Burning Ground Fire Zones & Friendly Golden Bees
+    const checkTorchCombinationPuzzles = () => {
+      if (zone === "overworld" && !flags.overworldTorchPuzzleSolved) {
+        const owPuzzleTorches = mapProps.filter(
+          (p) =>
+            p.zone === "overworld" &&
+            p.prefab === "wall_torch" &&
+            (p.puzzleTarget === "lit" || p.puzzleTarget === "unlit")
+        );
+        if (
+          owPuzzleTorches.length > 0 &&
+          owPuzzleTorches.every(
+            (p) => (p.lit !== false ? "lit" : "unlit") === p.puzzleTarget
+          )
+        ) {
+          flags.overworldTorchPuzzleSolved = true;
+          soundEngine.playSecretSolve();
+          if (!hero.unlockedTunics.includes("blue_mail")) {
+            hero.unlockedTunics = [...hero.unlockedTunics, "blue_mail"];
+          }
+          if (hero.equippedTunic === "green_tunic") {
+            hero.equippedTunic = "blue_mail";
+          }
+          rupees.push(
+            {
+              id: `torch-secret-rupee-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "overworld",
+              x: 10.4,
+              z: -13.2,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `torch-secret-rupee-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "overworld",
+              x: 12.1,
+              z: -13.2,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `torch-secret-heart-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "overworld",
+              x: 11.25,
+              z: -12.6,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            }
+          );
+          pushBanner(
+            "Sun Shrine Torch Combination Solved! (Sapphire Mail Unlocked!)",
+            "Sapphire Mail (-50% Damage Taken) unlocked & equipped, plus +40 Rupees! Press C for Character Sheet.",
+            6.5
+          );
+        }
+      } else if (zone === "dungeon" && !flags.dungeonTorchPuzzleSolved) {
+        const dgPuzzleTorches = mapProps.filter(
+          (p) =>
+            p.zone === "dungeon" &&
+            p.prefab === "wall_torch" &&
+            (p.puzzleTarget === "lit" || p.puzzleTarget === "unlit")
+        );
+        if (
+          dgPuzzleTorches.length > 0 &&
+          dgPuzzleTorches.every(
+            (p) => (p.lit !== false ? "lit" : "unlit") === p.puzzleTarget
+          )
+        ) {
+          flags.dungeonTorchPuzzleSolved = true;
+          soundEngine.playSecretSolve();
+          rupees.push(
+            {
+              id: `dg-torch-secret-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "dungeon",
+              x: -1.2,
+              z: -12.6,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `dg-torch-secret-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "dungeon",
+              x: 1.2,
+              z: -12.6,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `dg-torch-secret-heart-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "dungeon",
+              x: 0,
+              z: -12.2,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            }
+          );
+          pushBanner(
+            "Sanctum Brazier Secret Solved!",
+            "The twin dungeon braziers flare to life, revealing +40 Rupees & a Recovery Heart!",
+            5.5
+          );
+        }
+      }
+    };
+
+    // Allow sword swing or boomerang to fan out / extinguish a lit puzzle torch so the player can adjust combinations!
+    if (
+      (hero.isAttacking && hero.attackTimer > 0.14) ||
+      boomerang !== null
+    ) {
+      for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
+        const prop = mapProps[pIdx];
+        if (
+          prop.zone !== zone ||
+          prop.prefab !== "wall_torch" ||
+          (prop.puzzleTarget !== "lit" && prop.puzzleTarget !== "unlit") ||
+          prop.lit === false
+        ) {
+          continue;
+        }
+        const hitByBoomerang =
+          boomerang !== null &&
+          Math.hypot(boomerang.x - prop.x, boomerang.z - prop.z) <= 1.25;
+        const hitBySword =
+          hero.isAttacking &&
+          hero.attackTimer > 0.18 &&
+          Math.hypot(
+            hero.x + Math.sin(hero.facing) * 1.35 - prop.x,
+            hero.z + Math.cos(hero.facing) * 1.35 - prop.z
+          ) <= 1.35;
+        if (hitByBoomerang || hitBySword) {
+          if (!mapPropsMutated) {
+            mapProps = mapProps.map((mp) => ({ ...mp }));
+            mapPropsMutated = true;
+          }
+          mapProps[pIdx].lit = false;
+          checkTorchCombinationPuzzles();
+        }
+      }
+    }
+
+    // Update Magic Fireballs
+    const spawnChargedFireZone = (fx: number, fz: number) => {
+      soundEngine.playFireExplosion();
+      fireZones.push({
+        id: `fire-zone-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toString(36).slice(2, 6)}`,
+        zone,
+        x: fx,
+        z: fz,
+        radius: 2.35,
+        timer: 3.8,
+        maxTimer: 3.8,
+        tickTimer: 0.12,
+      });
+      // Immediate splash damage on explosion!
+      for (const enemy of enemies) {
+        if (enemy.zone !== zone || enemy.state === "dead") continue;
+        const eRad = enemy.kind === "boss" ? 1.5 : 0.9;
+        if (Math.hypot(enemy.x - fx, enemy.z - fz) <= 2.25 + eRad) {
+          const isSanctumFoe =
+            enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
+          if (isSanctumFoe && !flags.bossAwakened) continue;
+          enemy.provoked = true;
+          if (enemy.kind === "boss" && enemy.state !== "stunned") {
+            soundEngine.playArmorDeflect();
+          } else {
+            enemy.hp -= 2;
+            enemy.hitFlashTimer = 0.26;
+            if (enemy.kind !== "boss" && (enemy.state === "idle" || enemy.state === "recover")) {
+              enemy.state = "aggro";
+            }
+            if (enemy.hp <= 0) {
+              handleEnemyDeath(enemy);
+            } else {
+              soundEngine.playEnemyHit(enemy.kind === "boss");
+            }
+          }
+        }
+      }
+    };
+
+    const remainingFireballs: FireballProjectileState[] = [];
+    for (const fb of fireballs) {
+      if (fb.zone !== zone) continue;
+      fb.lifeTimer -= dt;
+      if (fb.lifeTimer <= 0) {
+        if (fb.isCharged) {
+          spawnChargedFireZone(fb.x, fb.z);
+        }
+        continue;
+      }
+
+      const nextFx = fb.x + Math.sin(fb.angle) * fb.speed * dt;
+      const nextFz = fb.z + Math.cos(fb.angle) * fb.speed * dt;
+
+      // Light any unlit wall_torch along the fireball's path!
+      for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
+        const prop = mapProps[pIdx];
+        if (prop.zone !== zone || prop.prefab !== "wall_torch") continue;
+        if (Math.hypot(nextFx - prop.x, nextFz - prop.z) <= fb.radius + 0.95) {
+          if (prop.lit === false) {
+            if (!mapPropsMutated) {
+              mapProps = mapProps.map((mp) => ({ ...mp }));
+              mapPropsMutated = true;
+            }
+            mapProps[pIdx].lit = true;
+            soundEngine.playTorchLight();
+            checkTorchCombinationPuzzles();
+          }
+        }
+      }
+
+      // Check if fireball burns any bushes along its path!
+      for (const prop of mapProps) {
+        if (prop.prefab !== "bush" || prop.zone !== zone) continue;
+        if (cutBushIds.includes(prop.id)) continue;
+        if (Math.hypot(nextFx - prop.x, nextFz - prop.z) <= fb.radius + 0.85) {
+          cutBushIds.push(prop.id);
+          soundEngine.playBushCut();
+          bushBursts.push({
+            id: `bush-burst-${prop.id}-${stats.elapsedSeconds.toFixed(3)}`,
+            zone,
+            x: prop.x,
+            z: prop.z,
+            timer: 0.88,
+            maxTimer: 0.88,
+            seed: Math.floor(Math.abs(prop.x * 41 + prop.z * 83) + stats.elapsedSeconds * 130),
+          });
+        }
+      }
+
+      const resFb = resolveArrowCollisions(
+        nextFx,
+        nextFz,
+        0.26,
+        zone,
+        gatePassable,
+        dynamicObstacles
+      );
+      if (resFb.hitObstacle) {
+        if (fb.isCharged) {
+          spawnChargedFireZone(fb.x, fb.z);
+        } else {
+          soundEngine.playFireExplosion();
+        }
+        continue;
+      }
+
+      fb.x = nextFx;
+      fb.z = nextFz;
+
+      let fbConsumed = false;
+      for (const enemy of enemies) {
+        if (enemy.zone !== zone || enemy.state === "dead") continue;
+        const eRad = enemy.kind === "boss" ? 1.45 : 0.88;
+        if (Math.hypot(enemy.x - fb.x, enemy.z - fb.z) <= eRad + fb.radius) {
+          fbConsumed = true;
+          if (fb.isCharged) {
+            spawnChargedFireZone(fb.x, fb.z);
+          } else {
+            const isSanctumFoe =
+              enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
+            if (isSanctumFoe && !flags.bossAwakened) {
+              soundEngine.playArmorDeflect();
+            } else {
+              enemy.provoked = true;
+              if (enemy.kind === "boss" && enemy.state !== "stunned") {
+                soundEngine.playArmorDeflect();
+              } else {
+                enemy.hp -= fb.damage;
+                enemy.hitFlashTimer = 0.24;
+                if (enemy.kind !== "boss" && (enemy.state === "idle" || enemy.state === "recover")) {
+                  enemy.state = "aggro";
+                }
+                if (enemy.hp <= 0) {
+                  handleEnemyDeath(enemy);
+                } else {
+                  soundEngine.playEnemyHit(enemy.kind === "boss");
+                }
+              }
+            }
+          }
+          break;
+        }
+      }
+
+      if (!fbConsumed) {
+        remainingFireballs.push(fb);
+      }
+    }
+    fireballs = remainingFireballs;
+
+    // Update Burning Ground Fire Zones (from Charged Fire Rod blasts)
+    const remainingFireZones: FireZoneState[] = [];
+    for (const fz of fireZones) {
+      if (fz.zone !== zone) continue;
+      fz.timer -= dt;
+      if (fz.timer <= 0) continue;
+
+      // Also light any unlit torch touching the fire zone!
+      for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
+        const prop = mapProps[pIdx];
+        if (prop.zone !== zone || prop.prefab !== "wall_torch" || prop.lit !== false) continue;
+        if (Math.hypot(fz.x - prop.x, fz.z - prop.z) <= fz.radius + 0.65) {
+          if (!mapPropsMutated) {
+            mapProps = mapProps.map((mp) => ({ ...mp }));
+            mapPropsMutated = true;
+          }
+          mapProps[pIdx].lit = true;
+          soundEngine.playTorchLight();
+          checkTorchCombinationPuzzles();
+        }
+      }
+
+      fz.tickTimer -= dt;
+      if (fz.tickTimer <= 0) {
+        fz.tickTimer = 0.55;
+        for (const enemy of enemies) {
+          if (enemy.zone !== zone || enemy.state === "dead") continue;
+          const eRad = enemy.kind === "boss" ? 1.35 : 0.75;
+          if (Math.hypot(enemy.x - fz.x, enemy.z - fz.z) <= fz.radius + eRad * 0.5) {
+            const isSanctumFoe =
+              enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
+            if (isSanctumFoe && !flags.bossAwakened) continue;
+            enemy.provoked = true;
+            if (enemy.kind === "boss" && enemy.state !== "stunned") {
+              soundEngine.playArmorDeflect();
+            } else {
+              enemy.hp -= 1;
+              enemy.hitFlashTimer = 0.2;
+              if (enemy.kind !== "boss" && enemy.state === "idle") {
+                enemy.state = "aggro";
+              }
+              if (enemy.hp <= 0) {
+                handleEnemyDeath(enemy);
+              } else {
+                soundEngine.playEnemyHit(enemy.kind === "boss");
+              }
+            }
+          }
+        }
+      }
+      remainingFireZones.push(fz);
+    }
+    fireZones = remainingFireZones;
+
+    // Update Friendly Golden Bees (released from Glass Bottles!)
+    const remainingBees: FriendlyBeeState[] = [];
+    for (const bee of friendlyBees) {
+      if (bee.zone !== zone) continue;
+      bee.timer -= dt;
+      if (bee.timer <= 0) continue;
+      bee.stingCooldown = Math.max(0, bee.stingCooldown - dt);
+
+      let nearestEnemy: EnemyState | null = null;
+      let nearestDist = 16.0;
+      for (const enemy of enemies) {
+        if (enemy.zone !== zone || enemy.state === "dead") continue;
+        const isSanctumFoe =
+          enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
+        if (isSanctumFoe && !flags.bossAwakened) continue;
+        const d = Math.hypot(enemy.x - bee.x, enemy.z - bee.z);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestEnemy = enemy;
+        }
+      }
+
+      if (nearestEnemy) {
+        const dx = nearestEnemy.x - bee.x;
+        const dz = nearestEnemy.z - bee.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist > 0.1) {
+          bee.facing = Math.atan2(dx, dz);
+          bee.x += (dx / dist) * 10.2 * dt;
+          bee.z += (dz / dist) * 10.2 * dt;
+        }
+        if (dist <= 1.25 && bee.stingCooldown <= 0) {
+          bee.stingCooldown = 0.52;
+          soundEngine.playBeeBuzz();
+          nearestEnemy.provoked = true;
+          if (nearestEnemy.kind === "boss" && nearestEnemy.state !== "stunned") {
+            soundEngine.playArmorDeflect();
+          } else {
+            nearestEnemy.hp -= 1;
+            nearestEnemy.hitFlashTimer = 0.18;
+            if (nearestEnemy.kind !== "boss" && nearestEnemy.state === "idle") {
+              nearestEnemy.state = "aggro";
+            }
+            if (nearestEnemy.hp <= 0) {
+              handleEnemyDeath(nearestEnemy);
+            } else {
+              soundEngine.playEnemyHit(nearestEnemy.kind === "boss");
+            }
+          }
+        }
+      } else {
+        // Orbit playfully around the Hero when no enemies are nearby
+        const orbitAngle = stats.elapsedSeconds * 4.2;
+        const targetX = hero.x + Math.cos(orbitAngle) * 1.35;
+        const targetZ = hero.z + Math.sin(orbitAngle) * 1.35;
+        const dx = targetX - bee.x;
+        const dz = targetZ - bee.z;
+        const d = Math.hypot(dx, dz);
+        if (d > 0.05) {
+          bee.facing = Math.atan2(dx, dz);
+          bee.x += (dx / d) * Math.min(d, 8.5 * dt);
+          bee.z += (dz / d) * Math.min(d, 8.5 * dt);
+        }
+      }
+
+      remainingBees.push(bee);
+    }
+    friendlyBees = remainingBees;
+
     // 10. Update Enemies, Pathfinding & Weight-Balanced Combat Knockback
     for (let i = 0; i < enemies.length; i++) {
       const enemy = enemies[i];
@@ -2562,23 +3804,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
-      // Check if Hero's active sword swing hits this enemy
+      // Check if Hero's active sword swing or 360° Charged Spin Attack hits this enemy
+      const isSpin = hero.isSpinAttacking || hero.spinAttackTimer > 0;
       if (
-        hero.isAttacking &&
-        hero.attackTimer > 0.05 &&
+        (hero.isAttacking || isSpin) &&
+        (hero.attackTimer > 0.05 || hero.spinAttackTimer > 0.04) &&
         enemy.lastHitSwingId !== hero.swingId
       ) {
         const dx = enemy.x - hero.x;
         const dz = enemy.z - hero.z;
         const dist = Math.hypot(dx, dz);
-        const reach = 2.95 + enemyRadius;
+        const reach = (isSpin ? 3.55 : 2.95) + enemyRadius;
 
         if (dist <= reach) {
           const angleToEnemy = Math.atan2(dx, dz);
           const angleDiff = Math.abs(normalizeAngleDiff(angleToEnemy, hero.facing));
-          if (angleDiff <= 1.35 || dist <= 1.35) {
+          if (isSpin || angleDiff <= 1.35 || dist <= 1.35) {
             enemy.lastHitSwingId = hero.swingId;
             enemy.provoked = true;
+            const strikeDamage = (hero.swordDamage || 1) * (isSpin ? 2 : 1);
 
             if (enemy.kind === "boss") {
               // Boss has weight 100 (immovable) — zero knockback ever!
@@ -2595,7 +3839,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   );
                 }
               } else {
-                enemy.hp -= 1;
+                enemy.hp -= strikeDamage;
                 enemy.hitFlashTimer = 0.22;
 
                 if (enemy.hp <= 0) {
@@ -2613,7 +3857,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               //   Moderate knockback (~4.2 impulse, reduced to ~1.5 during poise/windup).
               // - Heavy weight (weight >= 4.0: Knights 12.0):
               //   Armored juggernaut — virtually zero knockback, and hitting him while he is ready triggers his telegraphed lunge windup!
-              enemy.hp -= 1;
+              enemy.hp -= strikeDamage;
               enemy.hitFlashTimer = 0.22;
 
               const kbDirX = dist > 0.01 ? dx / dist : Math.sin(hero.facing);
@@ -2625,7 +3869,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 kbImpulse = 0;
               } else if (w <= 0.85) {
                 // Lightweight (Slimes & Goblin Archers): easily knocked back repeatedly!
-                kbImpulse = 8.6 / w;
+                kbImpulse = (isSpin ? 10.2 : 8.6) / w;
                 enemy.knockbackImmunityTimer = 0;
                 if (enemy.state === "windup") {
                   enemy.state = "aggro";
@@ -2635,14 +3879,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
               } else if (w >= 4.0 || enemy.kind === "knight") {
                 // Heavy Sentinel Knights: shrug off knockback; if not stunned/recovering/attacking and off cooldown, begin full telegraphed windup!
                 const inAttack = enemy.state === "windup" || enemy.state === "attack";
-                kbImpulse = inAttack ? 0 : 0.22;
+                kbImpulse = inAttack ? 0 : isSpin ? 0.45 : 0.22;
                 enemy.knockbackImmunityTimer = 1.2;
                 if (
                   (enemy.state === "idle" || enemy.state === "aggro") &&
                   enemy.actionCooldown <= 0.25
                 ) {
                   enemy.state = "windup";
-                  enemy.stateTimer = 0.92;
+                  enemy.stateTimer = 0.78;
                   enemy.chargeAngle = Math.atan2(hero.x - enemy.x, hero.z - enemy.z);
                   enemy.facing = enemy.chargeAngle;
                   enemy.chargePathLength = computeEnemyChargePathLength(
@@ -2663,7 +3907,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   enemy.state === "windup" ||
                   enemy.state === "attack" ||
                   enemy.knockbackImmunityTimer > 0;
-                kbImpulse = hasPoise ? 2.4 / w : 8.4 / w;
+                kbImpulse = (hasPoise ? 2.4 : isSpin ? 10.2 : 8.4) / w;
                 enemy.knockbackImmunityTimer = 0.65;
               }
 
@@ -3221,8 +4465,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
             enemy.facing = enemy.chargeAngle;
             if (enemy.kind === "knight") {
-              // Sentinel Knight: 0.92s telegraphed windup with ground corridor so player can see the aim and dodge!
-              enemy.stateTimer = 0.92;
+              // Sentinel Knight: slightly faster 0.78s telegraphed windup with ground corridor!
+              enemy.stateTimer = 0.78;
               enemy.chargePathLength = computeEnemyChargePathLength(
                 enemy.x,
                 enemy.z,
@@ -3235,8 +4479,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 bossExitOpen
               );
             } else if (enemy.kind === "goblin") {
-              // Goblin Fighter: 0.86s telegraphed lunge windup with ground corridor!
-              enemy.stateTimer = 0.86;
+              // Goblin Fighter: slightly faster 0.72s telegraphed lunge windup with ground corridor!
+              enemy.stateTimer = 0.72;
               enemy.chargePathLength = computeEnemyChargePathLength(
                 enemy.x,
                 enemy.z,
@@ -3249,8 +4493,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 bossExitOpen
               );
             } else {
-              // Slime / Minion: 0.58s windup so charges are readable and fair
-              enemy.stateTimer = 0.58;
+              // Slime / Minion: 0.55s windup so charges are readable and fair
+              enemy.stateTimer = 0.55;
               enemy.chargePathLength = 4.2;
             }
           }
@@ -3260,8 +4504,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         moveVx = 0;
         moveVz = 0;
         if (enemy.kind === "knight") {
-          // Track player for the first 0.24s, then lock the ground telegraph corridor for a full 0.68s!
-          if (enemy.stateTimer > 0.68 && distToHero > 0.05) {
+          // Track player for the first 0.20s, then lock the ground telegraph corridor for 0.58s!
+          if (enemy.stateTimer > 0.58 && distToHero > 0.05) {
             enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
           }
           enemy.facing = enemy.chargeAngle;
@@ -3277,8 +4521,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             bossExitOpen
           );
         } else if (enemy.kind === "goblin") {
-          // Track player for the first 0.22s, then lock the ground telegraph corridor for a full 0.64s!
-          if (enemy.stateTimer > 0.64 && distToHero > 0.05) {
+          // Track player for the first 0.18s, then lock the ground telegraph corridor for 0.54s!
+          if (enemy.stateTimer > 0.54 && distToHero > 0.05) {
             enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
           }
           enemy.facing = enemy.chargeAngle;
@@ -3294,7 +4538,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             bossExitOpen
           );
         } else {
-          if (enemy.stateTimer > 0.4 && distToHero > 0.05) {
+          if (enemy.stateTimer > 0.38 && distToHero > 0.05) {
             enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
           }
           enemy.facing = enemy.chargeAngle;
@@ -3304,16 +4548,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
           enemy.state = "attack";
           enemy.chargeDistanceTraveled = 0;
           enemy.stateTimer =
-            enemy.kind === "knight" ? 0.44 : enemy.kind === "goblin" ? 0.42 : 0.34;
+            enemy.kind === "knight" ? 0.43 : enemy.kind === "goblin" ? 0.41 : 0.34;
         }
       } else if (enemy.state === "attack") {
         const lungeAngle = enemy.chargeAngle;
         enemy.facing = lungeAngle;
         const lungeSpeed =
           enemy.kind === "knight"
-            ? 13.2
+            ? 13.8
             : enemy.kind === "goblin"
-            ? 12.4
+            ? 13.0
             : 10.5;
         moveVx = Math.sin(lungeAngle) * lungeSpeed;
         moveVz = Math.cos(lungeAngle) * lungeSpeed;
@@ -3338,9 +4582,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
             // Blocking a lunge stops the monster's charge and forces them into recovery pause
             enemy.state = "recover";
             enemy.stateTimer =
-              enemy.kind === "knight" ? 1.05 : enemy.kind === "goblin" ? 0.9 : 0.72;
+              enemy.kind === "knight" ? 0.86 : enemy.kind === "goblin" ? 0.74 : 0.68;
             enemy.actionCooldown =
-              enemy.kind === "knight" ? 1.3 : enemy.kind === "goblin" ? 1.1 : 0.9;
+              enemy.kind === "knight" ? 1.1 : enemy.kind === "goblin" ? 0.92 : 0.85;
             moveVx = 0;
             moveVz = 0;
             enemy.knockbackVx = -pushDirX * (enemy.kind === "knight" ? 3.8 : 6.8);
@@ -3349,12 +4593,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
 
         if (enemy.state === "attack" && enemy.stateTimer <= 0) {
-          // Missed charge without hitting a wall: monster pauses in recovery (cannot move or attack) before chasing again!
+          // Missed charge without hitting a wall: monster pauses in recovery (slightly shorter pause) before chasing again!
           enemy.state = "recover";
           enemy.stateTimer =
-            enemy.kind === "knight" ? 1.15 : enemy.kind === "goblin" ? 0.95 : 0.78;
+            enemy.kind === "knight" ? 0.92 : enemy.kind === "goblin" ? 0.76 : 0.72;
           enemy.actionCooldown =
-            enemy.kind === "knight" ? 1.35 : enemy.kind === "goblin" ? 1.15 : 0.95;
+            enemy.kind === "knight" ? 1.12 : enemy.kind === "goblin" ? 0.96 : 0.9;
           moveVx = 0;
           moveVz = 0;
         }
@@ -3364,7 +4608,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         moveVz = 0;
         if (enemy.stateTimer <= 0) {
           enemy.state = "aggro";
-          enemy.actionCooldown = 0.95;
+          enemy.actionCooldown = 0.85;
         }
       } else if (enemy.state === "recover") {
         // Post-charge pause: monster catches its breath and cannot move or attack
@@ -3415,8 +4659,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         soundEngine.playBossWallCrash();
         enemy.state = "stunned";
         enemy.stateTimer =
-          enemy.kind === "knight" ? 2.4 : enemy.kind === "goblin" ? 2.0 : 1.65;
-        enemy.actionCooldown = 1.25;
+          enemy.kind === "knight" ? 2.1 : enemy.kind === "goblin" ? 1.78 : 1.55;
+        enemy.actionCooldown = 1.1;
         enemy.knockbackVx = -Math.sin(enemy.chargeAngle) * 3.2;
         enemy.knockbackVz = -Math.cos(enemy.chargeAngle) * 3.2;
       }
@@ -3544,6 +4788,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       enemies,
       boomerang,
       arrows,
+      fireballs,
+      fireZones,
+      friendlyBees,
       projectiles,
       hazards,
       rupees,
@@ -3560,6 +4807,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       gateNoticeCooldown,
       chestNoticeCooldown,
       armorNoticeCooldown,
+      ...(mapPropsMutated ? { mapProps } : {}),
     });
   },
 }));

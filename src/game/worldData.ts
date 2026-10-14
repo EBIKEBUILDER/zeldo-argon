@@ -7,6 +7,7 @@ export type PropPrefabId =
   | "pine_tree"
   | "bush"
   | "flower_patch"
+  | "dirt_patch"
   | "boulder"
   | "ruin_pillar"
   | "dungeon_pillar"
@@ -19,6 +20,19 @@ export type PropPrefabId =
   | "wooden_bridge"
   | "temple_arch"
   | "custom_model";
+
+export type BuriedRewardKind =
+  | "random"
+  | "rupee_green"
+  | "rupee_blue"
+  | "rupee_red"
+  | "heart"
+  | "fairy"
+  | "bee"
+  | "bottle"
+  | "blue_mail"
+  | "red_mail"
+  | "swift_boots";
 
 export interface CustomModelAsset {
   id: string;
@@ -47,6 +61,10 @@ export interface MapPropInstance {
   colliderKind: "cliff" | "wall" | "water" | "tree" | "pillar" | "ruin";
   customModelId?: string;
   colorHex?: string;
+  lit?: boolean;
+  puzzleTarget?: "lit" | "unlit";
+  dug?: boolean;
+  buriedReward?: BuriedRewardKind;
 }
 
 export interface MapPortal {
@@ -1252,6 +1270,218 @@ export function buildInitialMapProps(): MapPropInstance[] {
       colliderWidth: 0.9,
       colliderDepth: 0.9,
       colliderKind: "pillar",
+      lit: true,
+    });
+  });
+
+  // Overworld Torch Combination Shrine (Just north of the river bridge on the East Meadow)
+  // Combination: Light the 3 Golden Sun Torches (#1, #3, #4) with the Flame Rod (R / 3), leave #2 Unlit!
+  const owPuzzleTorches: Array<{
+    id: string;
+    name: string;
+    x: number;
+    z: number;
+    lit: boolean;
+    target: "lit" | "unlit";
+    tileColor: string;
+  }> = [
+    {
+      id: "prop-ow-puzzle-torch-1",
+      name: "Sun Shrine Brazier I (Light Me!)",
+      x: 7.5,
+      z: -14.8,
+      lit: false,
+      target: "lit",
+      tileColor: "#f2c14e",
+    },
+    {
+      id: "prop-ow-puzzle-torch-2",
+      name: "Eclipse Brazier II (Keep Unlit!)",
+      x: 10.0,
+      z: -14.8,
+      lit: false,
+      target: "unlit",
+      tileColor: "#2c2538",
+    },
+    {
+      id: "prop-ow-puzzle-torch-3",
+      name: "Sun Shrine Brazier III (Light Me!)",
+      x: 12.5,
+      z: -14.8,
+      lit: false,
+      target: "lit",
+      tileColor: "#f2c14e",
+    },
+    {
+      id: "prop-ow-puzzle-torch-4",
+      name: "Sun Shrine Brazier IV (Light Me!)",
+      x: 15.0,
+      z: -14.8,
+      lit: false,
+      target: "lit",
+      tileColor: "#f2c14e",
+    },
+  ];
+  owPuzzleTorches.forEach((pt) => {
+    // Rune floor marker tile beneath each puzzle torch showing the combination!
+    props.push({
+      id: `${pt.id}-rune`,
+      prefab: "path_tile",
+      name: `${pt.name} Floor Rune`,
+      zone: "overworld",
+      x: pt.x,
+      y: 0.02,
+      z: pt.z,
+      rotY: 0,
+      scaleX: 1.7,
+      scaleY: 1,
+      scaleZ: 1.7,
+      hasCollider: false,
+      colliderWidth: 1.7,
+      colliderDepth: 1.7,
+      colliderKind: "ruin",
+      colorHex: pt.tileColor,
+    });
+    props.push({
+      id: pt.id,
+      prefab: "wall_torch",
+      name: pt.name,
+      zone: "overworld",
+      x: pt.x,
+      y: 0,
+      z: pt.z,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: false,
+      colliderWidth: 0.9,
+      colliderDepth: 0.9,
+      colliderKind: "pillar",
+      lit: pt.lit,
+      puzzleTarget: pt.target,
+    });
+  });
+
+  // Dungeon Antechamber Twin Unlit Braziers Puzzle
+  [
+    { id: "prop-dg-puzzle-torch-1", name: "Antechamber West Unlit Brazier", x: -5.5, z: -24.5 },
+    { id: "prop-dg-puzzle-torch-2", name: "Antechamber East Unlit Brazier", x: 5.5, z: -24.5 },
+  ].forEach((dt) => {
+    props.push({
+      id: dt.id,
+      prefab: "wall_torch",
+      name: dt.name,
+      zone: "dungeon",
+      x: dt.x,
+      y: 0,
+      z: dt.z,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: false,
+      colliderWidth: 0.9,
+      colliderDepth: 0.9,
+      colliderKind: "pillar",
+      lit: false,
+      puzzleTarget: "lit",
+    });
+  });
+
+  // Soft Dirt Patches (Diggable with the Shovel — press G or 4!)
+  const dirtPatches: Array<{
+    id: string;
+    name: string;
+    zone: ZoneId;
+    x: number;
+    z: number;
+    reward: BuriedRewardKind;
+  }> = [
+    {
+      id: "prop-ow-dirt-1",
+      name: "South Meadow Soft Dirt (Golden Bee)",
+      zone: "overworld",
+      x: -5.8,
+      z: -29.2,
+      reward: "bee",
+    },
+    {
+      id: "prop-ow-dirt-2",
+      name: "Bazaar Clearing Soft Dirt (Red Rupee)",
+      zone: "overworld",
+      x: 5.2,
+      z: -27.8,
+      reward: "rupee_red",
+    },
+    {
+      id: "prop-ow-dirt-3",
+      name: "Riverbank Soft Dirt (Swiftwind Boots)",
+      zone: "overworld",
+      x: -11.5,
+      z: -14.5,
+      reward: "swift_boots",
+    },
+    {
+      id: "prop-ow-dirt-4",
+      name: "East Grove Soft Dirt (Bottled Fairy)",
+      zone: "overworld",
+      x: 18.5,
+      z: -6.5,
+      reward: "fairy",
+    },
+    {
+      id: "prop-ow-dirt-5",
+      name: "Ancient Watchtower Soft Dirt (Crimson Mail)",
+      zone: "overworld",
+      x: -19.5,
+      z: 15.5,
+      reward: "red_mail",
+    },
+    {
+      id: "prop-dg-dirt-1",
+      name: "Sanctum Loam Patch (Glass Bottle)",
+      zone: "dungeon",
+      x: -8.5,
+      z: -26.5,
+      reward: "bottle",
+    },
+    {
+      id: "prop-fr-dirt-1",
+      name: "Frontier West Soft Dirt",
+      zone: "frontier",
+      x: -6.5,
+      z: -16.0,
+      reward: "rupee_red",
+    },
+    {
+      id: "prop-fr-dirt-2",
+      name: "Frontier East Soft Dirt",
+      zone: "frontier",
+      x: 6.5,
+      z: -16.0,
+      reward: "fairy",
+    },
+  ];
+  dirtPatches.forEach((dp) => {
+    props.push({
+      id: dp.id,
+      prefab: "dirt_patch",
+      name: dp.name,
+      zone: dp.zone,
+      x: dp.x,
+      y: 0,
+      z: dp.z,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: false,
+      colliderWidth: 1.5,
+      colliderDepth: 1.5,
+      colliderKind: "ruin",
+      dug: false,
+      buriedReward: dp.reward,
     });
   });
 

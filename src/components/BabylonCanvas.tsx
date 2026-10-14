@@ -112,6 +112,9 @@ interface PropVisualRig {
   colorHex?: string;
   bushFoliage?: Mesh | TransformNode;
   bushStump?: TransformNode;
+  torchFlame?: Mesh;
+  dirtMound?: TransformNode;
+  dirtHole?: TransformNode;
 }
 
 interface BushLeafParticle {
@@ -916,6 +919,19 @@ export default function BabylonCanvas() {
     const propRigs = new Map<string, PropVisualRig>();
     const portalRigs = new Map<string, PortalVisualRig>();
 
+    const dirtSoilMat = makeMat(
+      "dirtSoilMat",
+      new Color3(0.46, 0.31, 0.17),
+      new Color3(0.06, 0.03, 0.01),
+      new Color3(0.08, 0.06, 0.04)
+    );
+    const dirtPitMat = makeMat(
+      "dirtPitMat",
+      new Color3(0.24, 0.16, 0.09),
+      new Color3(0.02, 0.01, 0.01),
+      new Color3(0.05, 0.04, 0.03)
+    );
+
     const buildPropRig = (
       prop: MapPropInstance,
       customModels: CustomModelAsset[]
@@ -925,6 +941,9 @@ export default function BabylonCanvas() {
 
       let bushFoliage: Mesh | TransformNode | undefined;
       let bushStump: TransformNode | undefined;
+      let torchFlame: Mesh | undefined;
+      let dirtMound: TransformNode | undefined;
+      let dirtHole: TransformNode | undefined;
 
       if (prop.prefab === "pine_tree") {
         const trunk = MeshBuilder.CreateCylinder(
@@ -1094,22 +1113,114 @@ export default function BabylonCanvas() {
       } else if (prop.prefab === "wall_torch") {
         const stand = MeshBuilder.CreateCylinder(
           `torchStand-${prop.id}`,
-          { diameterTop: 0.7, diameterBottom: 0.9, height: 1.5, tessellation: 12 },
+          { diameterTop: 0.72, diameterBottom: 0.92, height: 1.48, tessellation: 12 },
           scene
         );
-        stand.position.set(0, 0.75, 0);
+        stand.position.set(0, 0.74, 0);
         stand.material = dgPillarMat;
         stand.parent = root;
 
-        const flame = MeshBuilder.CreateSphere(
-          `torchFlame-${prop.id}`,
-          { diameter: 0.68, segments: 10 },
+        const bowl = MeshBuilder.CreateCylinder(
+          `torchBowl-${prop.id}`,
+          { diameterTop: 1.05, diameterBottom: 0.65, height: 0.28, tessellation: 12 },
           scene
         );
-        flame.scaling.set(0.85, 1.45, 0.85);
-        flame.position.set(0, 1.75, 0);
+        bowl.position.set(0, 1.44, 0);
+        bowl.material = ironGateMat;
+        bowl.parent = root;
+
+        // Puzzle pedestal ring indicator if this torch is part of a Torch Combination Puzzle!
+        if (prop.puzzleTarget === "lit" || prop.puzzleTarget === "unlit") {
+          const hintMat =
+            prop.puzzleTarget === "lit" ? goldKeyMat : darkObsidianMat;
+          const hintRing = MeshBuilder.CreateTorus(
+            `torchHintRing-${prop.id}`,
+            { diameter: 1.48, thickness: 0.12, tessellation: 20 },
+            scene
+          );
+          hintRing.position.set(0, 0.08, 0);
+          hintRing.material = hintMat;
+          hintRing.parent = root;
+        }
+
+        const flame = MeshBuilder.CreateSphere(
+          `torchFlame-${prop.id}`,
+          { diameter: 0.74, segments: 12 },
+          scene
+        );
+        flame.scaling.set(0.88, 1.52, 0.88);
+        flame.position.set(0, 1.78, 0);
         flame.material = goldKeyMat;
         flame.parent = root;
+        torchFlame = flame;
+      } else if (prop.prefab === "dirt_patch") {
+        // Soft Dirt Patch that can be dug up with the Shovel (G / 4)!
+        const moundNode = new TransformNode(`dirtMound-${prop.id}`, scene);
+        moundNode.parent = root;
+
+        const moundParts: Mesh[] = [];
+        const baseDisc = MeshBuilder.CreateCylinder(
+          `dirtBase-${prop.id}`,
+          { diameterTop: 1.45, diameterBottom: 1.68, height: 0.14, tessellation: 14 },
+          scene
+        );
+        baseDisc.position.set(0, 0.07, 0);
+        moundParts.push(baseDisc);
+
+        for (const clod of [
+          { x: 0, z: 0, s: 0.52, y: 0.16 },
+          { x: -0.34, z: 0.18, s: 0.38, y: 0.13 },
+          { x: 0.36, z: -0.14, s: 0.4, y: 0.14 },
+          { x: 0.12, z: 0.34, s: 0.34, y: 0.12 },
+          { x: -0.22, z: -0.3, s: 0.36, y: 0.12 },
+        ]) {
+          const cMesh = MeshBuilder.CreatePolyhedron(
+            `dirtClod-${prop.id}-${clod.x}`,
+            { type: 2, size: clod.s },
+            scene
+          );
+          cMesh.scaling.set(1.2, 0.62, 1.15);
+          cMesh.position.set(clod.x, clod.y, clod.z);
+          moundParts.push(cMesh);
+        }
+        mergeGroupWithMaterial(`dirtMoundMerged-${prop.id}`, moundParts, dirtSoilMat, moundNode, meta);
+
+        // Subtle golden treasure glint on soft dirt patches
+        const glint = MeshBuilder.CreatePolyhedron(
+          `dirtGlint-${prop.id}`,
+          { type: 1, size: 0.14 },
+          scene
+        );
+        glint.position.set(0.08, 0.32, -0.05);
+        glint.material = goldKeyMat;
+        glint.parent = moundNode;
+        dirtMound = moundNode;
+
+        // Excavated pit shown after digging with the Shovel!
+        const holeNode = new TransformNode(`dirtHole-${prop.id}`, scene);
+        holeNode.parent = root;
+
+        const pitRim = MeshBuilder.CreateTorus(
+          `dirtPitRim-${prop.id}`,
+          { diameter: 1.48, thickness: 0.24, tessellation: 16 },
+          scene
+        );
+        pitRim.scaling.set(1.0, 0.55, 1.0);
+        pitRim.position.set(0, 0.05, 0);
+        pitRim.material = dirtSoilMat;
+        pitRim.parent = holeNode;
+
+        const pitCenter = MeshBuilder.CreateCylinder(
+          `dirtPitCenter-${prop.id}`,
+          { diameter: 1.32, height: 0.05, tessellation: 14 },
+          scene
+        );
+        pitCenter.position.set(0, 0.025, 0);
+        pitCenter.material = dirtPitMat;
+        pitCenter.parent = holeNode;
+
+        holeNode.setEnabled(false);
+        dirtHole = holeNode;
       } else if (prop.prefab === "wooden_crate") {
         const crate = MeshBuilder.CreateBox(
           `crateBox-${prop.id}`,
@@ -1269,6 +1380,9 @@ export default function BabylonCanvas() {
         colorHex: prop.colorHex,
         bushFoliage,
         bushStump,
+        torchFlame,
+        dirtMound,
+        dirtHole,
       };
     };
 
@@ -1420,7 +1534,7 @@ export default function BabylonCanvas() {
     terrainBrushRing.setEnabled(false);
 
     // =========================================================
-    // UPGRADED HERO 3D CHARACTER RIG + SHIELD BLOCK WARD
+    // UPGRADED HERO 3D CHARACTER RIG + SHIELD BLOCK WARD + TOOLS
     // =========================================================
     const heroRoot = new TransformNode("heroRoot", scene);
 
@@ -1602,6 +1716,93 @@ export default function BabylonCanvas() {
     );
     slashArc.material = slashMat;
     slashArc.parent = heroRoot;
+
+    // 360° Charged Spin Attack Whirlwind Ring & Charge Aura Ring
+    const spinSlashRing = MeshBuilder.CreateTorus(
+      "spinSlashRing",
+      { diameter: 6.2, thickness: 0.32, tessellation: 36 },
+      scene
+    );
+    spinSlashRing.position.set(0, 0.92, 0);
+    spinSlashRing.scaling.set(1.0, 0.3, 1.0);
+    spinSlashRing.material = makeMat(
+      "spinSlashMat",
+      new Color3(1.0, 0.88, 0.26),
+      new Color3(1.0, 0.72, 0.14),
+      new Color3(1, 1, 1),
+      0.86
+    );
+    spinSlashRing.parent = heroRoot;
+    spinSlashRing.setEnabled(false);
+
+    const chargeAuraMat = makeMat(
+      "chargeAuraMat",
+      new Color3(1.0, 0.82, 0.22),
+      new Color3(0.95, 0.65, 0.12),
+      new Color3(1, 1, 1),
+      0.65
+    );
+    const chargeAuraRing = MeshBuilder.CreateTorus(
+      "chargeAuraRing",
+      { diameter: 2.35, thickness: 0.13, tessellation: 28 },
+      scene
+    );
+    chargeAuraRing.position.set(0, 0.16, 0);
+    chargeAuraRing.material = chargeAuraMat;
+    chargeAuraRing.parent = heroRoot;
+    chargeAuraRing.setEnabled(false);
+
+    // --- 3D MAGIC FIRE ROD ON HERO (SHOWN WHEN CHARGING / CASTING FIREBALLS) ---
+    const heroFireRodNode = new TransformNode("heroFireRodNode", scene);
+    heroFireRodNode.position.set(0.46, 0.96, 0.28);
+    heroFireRodNode.parent = heroRoot;
+
+    const fireRodShaft = MeshBuilder.CreateCylinder(
+      "fireRodShaft",
+      { diameterTop: 0.12, diameterBottom: 0.09, height: 1.35, tessellation: 10 },
+      scene
+    );
+    fireRodShaft.rotation.x = Math.PI / 2;
+    fireRodShaft.position.set(0, 0, 0.55);
+    fireRodShaft.material = glowingCrimsonMat;
+    fireRodShaft.parent = heroFireRodNode;
+
+    const fireRodCrown = MeshBuilder.CreatePolyhedron(
+      "fireRodCrown",
+      { type: 1, size: 0.22 },
+      scene
+    );
+    fireRodCrown.position.set(0, 0, 1.28);
+    fireRodCrown.material = goldKeyMat;
+    fireRodCrown.parent = heroFireRodNode;
+    heroFireRodNode.setEnabled(false);
+
+    // --- 3D SHOVEL ON HERO (SHOWN WHEN DIGGING SOFT DIRT PATCHES) ---
+    const heroShovelNode = new TransformNode("heroShovelNode", scene);
+    heroShovelNode.position.set(0.42, 0.88, 0.35);
+    heroShovelNode.parent = heroRoot;
+
+    const shovelHandle = MeshBuilder.CreateCylinder(
+      "shovelHandle",
+      { diameter: 0.09, height: 1.25, tessellation: 8 },
+      scene
+    );
+    shovelHandle.rotation.x = Math.PI / 2.6;
+    shovelHandle.position.set(0, 0.12, 0.42);
+    shovelHandle.material = woodMat;
+    shovelHandle.parent = heroShovelNode;
+
+    const shovelScoop = MeshBuilder.CreateCylinder(
+      "shovelScoop",
+      { diameterTop: 0.44, diameterBottom: 0.14, height: 0.48, tessellation: 6 },
+      scene
+    );
+    shovelScoop.rotation.x = Math.PI / 2.6;
+    shovelScoop.scaling.set(1.0, 1.0, 0.32);
+    shovelScoop.position.set(0, -0.34, 0.96);
+    shovelScoop.material = bladeMat;
+    shovelScoop.parent = heroShovelNode;
+    heroShovelNode.setEnabled(false);
 
     // --- 3D RANGER'S BOW ON HERO (SHOWN WHEN SHOOTING ARROWS) ---
     const heroBowNode = new TransformNode("heroBowNode", scene);
@@ -2618,195 +2819,534 @@ export default function BabylonCanvas() {
         }
         mergeGroupWithMaterial(`minionEyes-${id}`, eyeParts, glowingYellowEyeMat, body);
       } else {
+        // =====================================================
+        // MARIO RPG-INSPIRED HIGH-DEFINITION LOW-POLY BOSS MALAKOR
+        // Preserves Malakor's iconic horned Eclipse Warden silhouette while
+        // adding multi-tone enameled royal plate, polished silver trim,
+        // gilded imperial gold details, clawed sabatons, fluted greaves,
+        // segmented tassets, sculpted rib plackart, recessed eclipse core,
+        // gold-banded curved horns, orbiting halo shards & Dread Greataxe!
+        // =====================================================
         const bossArmorMat = registerMat(
           `bossMat-${id}`,
-          new Color3(0.72, 0.12, 0.18),
-          new Color3(0.26, 0.04, 0.06),
-          new Color3(0.85, 0.65, 0.65),
+          new Color3(0.76, 0.11, 0.19),
+          new Color3(0.24, 0.03, 0.06),
+          new Color3(0.92, 0.72, 0.72),
           1.0,
-          64
+          76
+        );
+        const bossSilverMat = registerMat(
+          `bossSilverMat-${id}`,
+          new Color3(0.84, 0.88, 0.96),
+          new Color3(0.08, 0.09, 0.14),
+          new Color3(1.0, 1.0, 1.0),
+          1.0,
+          96
+        );
+        const bossGoldMat = registerMat(
+          `bossGoldMat-${id}`,
+          new Color3(1.0, 0.82, 0.22),
+          new Color3(0.32, 0.2, 0.03),
+          new Color3(1.0, 0.95, 0.78),
+          1.0,
+          84
+        );
+        const bossCapeMat = registerMat(
+          `bossCapeMat-${id}`,
+          new Color3(0.34, 0.07, 0.44),
+          new Color3(0.11, 0.02, 0.16),
+          new Color3(0.45, 0.28, 0.55),
+          1.0,
+          42
         );
 
         const bossArmorParts: Mesh[] = [];
+        const bossSilverParts: Mesh[] = [];
+        const bossGoldParts: Mesh[] = [];
         const bossObsidianParts: Mesh[] = [];
+        const bossCapeParts: Mesh[] = [];
         const bossHornParts: Mesh[] = [];
         const bossCrimsonParts: Mesh[] = [];
 
-        for (const lx of [-0.62, 0.62]) {
-          const greave = MeshBuilder.CreateCylinder(
-            `bossGreave-${id}-${lx}`,
-            { diameterTop: 0.68, diameterBottom: 0.78, height: 1.15, tessellation: 14 },
+        // 1. Articulated Clawed Sabatons, Fluted Greaves, Diamond Knee Poleyns & Thigh Cuisses
+        for (const lx of [-0.64, 0.64]) {
+          const sabatonBase = MeshBuilder.CreateBox(
+            `bossSabaton-${id}-${lx}`,
+            { width: 0.76, height: 0.34, depth: 1.08 },
             scene
           );
-          greave.position.set(lx, 0.58, 0);
+          sabatonBase.position.set(lx, 0.17, 0.14);
+          bossSilverParts.push(sabatonBase);
+
+          for (const clawOff of [-0.2, 0, 0.2]) {
+            const claw = MeshBuilder.CreateCylinder(
+              `bossClaw-${id}-${lx}-${clawOff}`,
+              { diameterTop: 0.02, diameterBottom: 0.18, height: 0.32, tessellation: 8 },
+              scene
+            );
+            claw.rotation.x = Math.PI / 2;
+            claw.position.set(lx + clawOff, 0.14, 0.74);
+            bossGoldParts.push(claw);
+          }
+
+          const greave = MeshBuilder.CreateCylinder(
+            `bossGreave-${id}-${lx}`,
+            { diameterTop: 0.72, diameterBottom: 0.82, height: 1.05, tessellation: 16 },
+            scene
+          );
+          greave.position.set(lx, 0.68, 0);
           bossObsidianParts.push(greave);
+
+          const shinPlate = MeshBuilder.CreateCylinder(
+            `bossShinPlate-${id}-${lx}`,
+            { diameterTop: 0.58, diameterBottom: 0.48, height: 0.88, tessellation: 12 },
+            scene
+          );
+          shinPlate.scaling.set(0.95, 1.0, 0.65);
+          shinPlate.position.set(lx, 0.68, 0.22);
+          bossArmorParts.push(shinPlate);
 
           const kneeGuard = MeshBuilder.CreatePolyhedron(
             `bossKnee-${id}-${lx}`,
-            { type: 1, size: 0.28 },
+            { type: 1, size: 0.32 },
             scene
           );
-          kneeGuard.position.set(lx, 1.05, 0.36);
-          bossArmorParts.push(kneeGuard);
+          kneeGuard.scaling.set(1.18, 1.25, 0.78);
+          kneeGuard.position.set(lx, 1.12, 0.42);
+          bossSilverParts.push(kneeGuard);
+
+          const kneeSpike = MeshBuilder.CreateCylinder(
+            `bossKneeSpike-${id}-${lx}`,
+            { diameterTop: 0.02, diameterBottom: 0.18, height: 0.32, tessellation: 10 },
+            scene
+          );
+          kneeSpike.rotation.x = Math.PI / 2 - 0.22;
+          kneeSpike.position.set(lx, 1.16, 0.62);
+          bossGoldParts.push(kneeSpike);
         }
 
+        // 2. Armored Pelvis, Segmented Tasset Plates & Imperial Gilded War-Belt
         const pelvis = MeshBuilder.CreateCylinder(
           `bossPelvis-${id}`,
-          { diameterTop: 1.65, diameterBottom: 1.95, height: 0.75, tessellation: 14 },
+          { diameterTop: 1.72, diameterBottom: 2.02, height: 0.78, tessellation: 16 },
           scene
         );
-        pelvis.position.set(0, 1.25, 0);
+        pelvis.position.set(0, 1.28, 0);
         bossObsidianParts.push(pelvis);
 
+        for (let tIdx = -2; tIdx <= 2; tIdx++) {
+          const angle = tIdx * 0.45;
+          const tasset = MeshBuilder.CreateBox(
+            `bossTasset-${id}-${tIdx}`,
+            { width: 0.52, height: 0.56, depth: 0.16 },
+            scene
+          );
+          tasset.position.set(
+            Math.sin(angle) * 0.92,
+            1.18,
+            Math.cos(angle) * 0.78
+          );
+          tasset.rotation.y = angle;
+          tasset.rotation.x = -0.18;
+          if (Math.abs(tIdx) === 1) {
+            bossSilverParts.push(tasset);
+          } else {
+            bossArmorParts.push(tasset);
+          }
+        }
+
+        const warBelt = MeshBuilder.CreateCylinder(
+          `bossWarBelt-${id}`,
+          { diameterTop: 1.88, diameterBottom: 1.88, height: 0.24, tessellation: 18 },
+          scene
+        );
+        warBelt.scaling.set(1.08, 1.0, 0.85);
+        warBelt.position.set(0, 1.56, 0);
+        bossGoldParts.push(warBelt);
+
+        const beltBuckle = MeshBuilder.CreatePolyhedron(
+          `bossBeltBuckle-${id}`,
+          { type: 1, size: 0.34 },
+          scene
+        );
+        beltBuckle.scaling.set(1.2, 0.95, 0.55);
+        beltBuckle.position.set(0, 1.56, 0.84);
+        bossSilverParts.push(beltBuckle);
+
+        const beltGem = MeshBuilder.CreateSphere(
+          `bossBeltGem-${id}`,
+          { diameter: 0.26, segments: 12 },
+          scene
+        );
+        beltGem.position.set(0, 1.56, 0.94);
+        bossCrimsonParts.push(beltGem);
+
+        // 3. Sculpted Barrel Torso, Silver Rib Plackart, Gilded Filigree & Glowing Eclipse Chest Core
         const torso = MeshBuilder.CreateCylinder(
           `bossTorso-${id}`,
-          { diameterTop: 2.55, diameterBottom: 1.55, height: 1.65, tessellation: 18 },
+          { diameterTop: 2.62, diameterBottom: 1.62, height: 1.68, tessellation: 20 },
           scene
         );
-        torso.scaling.set(1.12, 1.0, 0.82);
-        torso.position.set(0, 2.22, 0);
+        torso.scaling.set(1.14, 1.0, 0.84);
+        torso.position.set(0, 2.26, 0);
         bossArmorParts.push(torso);
 
-        const cape = MeshBuilder.CreateBox(
-          `bossCape-${id}`,
-          { width: 2.35, height: 2.55, depth: 0.16 },
+        const plackart = MeshBuilder.CreateCylinder(
+          `bossPlackart-${id}`,
+          { diameterTop: 2.24, diameterBottom: 1.52, height: 0.98, tessellation: 16 },
           scene
         );
-        cape.position.set(0, 1.75, -0.82);
-        cape.rotation.x = 0.18;
-        bossObsidianParts.push(cape);
+        plackart.scaling.set(1.08, 1.0, 0.88);
+        plackart.position.set(0, 2.02, 0.06);
+        bossSilverParts.push(plackart);
 
+        for (const ribY of [1.88, 2.15, 2.42]) {
+          const ribBand = MeshBuilder.CreateTorus(
+            `bossRib-${id}-${ribY}`,
+            { diameter: 1.92 + (ribY - 1.88) * 0.55, thickness: 0.09, tessellation: 20 },
+            scene
+          );
+          ribBand.scaling.set(1.1, 1.0, 0.82);
+          ribBand.position.set(0, ribY, 0.05);
+          bossGoldParts.push(ribBand);
+        }
+
+        // Royal Velvet Mantle Cape with Gilded Trim & High Collar
+        const cape = MeshBuilder.CreateBox(
+          `bossCape-${id}`,
+          { width: 2.48, height: 2.65, depth: 0.16 },
+          scene
+        );
+        cape.position.set(0, 1.78, -0.86);
+        cape.rotation.x = 0.19;
+        bossCapeParts.push(cape);
+
+        const capeTrimBottom = MeshBuilder.CreateBox(
+          `bossCapeTrim-${id}`,
+          { width: 2.54, height: 0.22, depth: 0.2 },
+          scene
+        );
+        capeTrimBottom.position.set(0, 0.56, -1.09);
+        capeTrimBottom.rotation.x = 0.19;
+        bossGoldParts.push(capeTrimBottom);
+
+        const highCollar = MeshBuilder.CreateCylinder(
+          `bossCollar-${id}`,
+          { diameterTop: 1.68, diameterBottom: 1.42, height: 0.46, tessellation: 16 },
+          scene
+        );
+        highCollar.position.set(0, 3.08, -0.18);
+        highCollar.rotation.x = -0.25;
+        bossGoldParts.push(highCollar);
+
+        // 4. Multi-Tiered Floating Pauldrons with Silver Rims, Gold Trim & Ivory Spikes
         for (const sx of [-1, 1]) {
           const pauldron = MeshBuilder.CreateSphere(
             `bossPauldron-${id}-${sx}`,
-            { diameter: 1.38, segments: 16 },
+            { diameter: 1.44, segments: 18 },
             scene
           );
-          pauldron.scaling.set(1.18, 0.85, 1.05);
-          pauldron.position.set(sx * 1.48, 2.85, 0);
+          pauldron.scaling.set(1.2, 0.88, 1.08);
+          pauldron.position.set(sx * 1.52, 2.88, 0);
           bossArmorParts.push(pauldron);
+
+          const pauldronUpper = MeshBuilder.CreateSphere(
+            `bossPauldronUpper-${id}-${sx}`,
+            { diameter: 1.12, segments: 16 },
+            scene
+          );
+          pauldronUpper.scaling.set(1.15, 0.78, 1.02);
+          pauldronUpper.position.set(sx * 1.38, 3.12, 0);
+          bossSilverParts.push(pauldronUpper);
+
+          const pauldronRim = MeshBuilder.CreateTorus(
+            `bossPauldronRim-${id}-${sx}`,
+            { diameter: 1.38, thickness: 0.14, tessellation: 20 },
+            scene
+          );
+          pauldronRim.rotation.z = -sx * 0.32;
+          pauldronRim.position.set(sx * 1.52, 2.74, 0);
+          bossGoldParts.push(pauldronRim);
 
           const pSpike = MeshBuilder.CreateCylinder(
             `bossPSpike-${id}-${sx}`,
-            { diameterTop: 0.04, diameterBottom: 0.34, height: 0.95, tessellation: 12 },
+            { diameterTop: 0.04, diameterBottom: 0.36, height: 0.98, tessellation: 12 },
             scene
           );
-          pSpike.position.set(sx * 1.92, 3.32, 0);
+          pSpike.position.set(sx * 1.95, 3.36, 0);
           pSpike.rotation.z = -sx * 0.68;
           bossHornParts.push(pSpike);
 
-          const arm = MeshBuilder.CreateCylinder(
-            `bossArm-${id}-${sx}`,
-            { diameterTop: 0.56, diameterBottom: 0.48, height: 1.25, tessellation: 12 },
+          const pSubSpike = MeshBuilder.CreateCylinder(
+            `bossPSubSpike-${id}-${sx}`,
+            { diameterTop: 0.03, diameterBottom: 0.24, height: 0.58, tessellation: 10 },
             scene
           );
-          arm.position.set(sx * 1.52, 2.05, 0.28);
+          pSubSpike.position.set(sx * 1.56, 3.48, 0);
+          pSubSpike.rotation.z = -sx * 0.36;
+          bossGoldParts.push(pSubSpike);
+
+          const arm = MeshBuilder.CreateCylinder(
+            `bossArm-${id}-${sx}`,
+            { diameterTop: 0.58, diameterBottom: 0.48, height: 1.15, tessellation: 14 },
+            scene
+          );
+          arm.position.set(sx * 1.52, 2.12, 0.24);
           arm.rotation.z = -sx * 0.18;
           arm.rotation.x = -0.35;
           bossObsidianParts.push(arm);
+
+          const vambrace = MeshBuilder.CreateCylinder(
+            `bossVambrace-${id}-${sx}`,
+            { diameterTop: 0.62, diameterBottom: 0.68, height: 0.68, tessellation: 14 },
+            scene
+          );
+          vambrace.position.set(sx * 1.58, 1.72, 0.46);
+          vambrace.rotation.x = Math.PI / 3.2;
+          bossSilverParts.push(vambrace);
+
+          const gauntletCuff = MeshBuilder.CreateTorus(
+            `bossCuff-${id}-${sx}`,
+            { diameter: 0.66, thickness: 0.1, tessellation: 16 },
+            scene
+          );
+          gauntletCuff.position.set(sx * 1.58, 1.88, 0.36);
+          gauntletCuff.rotation.x = Math.PI / 3.2;
+          bossGoldParts.push(gauntletCuff);
         }
 
+        // 5. Crowned Obsidian Great-Helm, Sculpted Silver Faceplate, Gold Crown Peaks & Twin Curved Horns
         const bossHelm = MeshBuilder.CreateSphere(
           `bossHelm-${id}`,
-          { diameter: 1.18, segments: 16 },
+          { diameter: 1.24, segments: 18 },
           scene
         );
-        bossHelm.scaling.set(0.96, 1.12, 1.02);
-        bossHelm.position.set(0, 3.38, 0.12);
+        bossHelm.scaling.set(0.98, 1.14, 1.04);
+        bossHelm.position.set(0, 3.42, 0.12);
         bossObsidianParts.push(bossHelm);
 
         const faceplate = MeshBuilder.CreateCylinder(
           `bossFaceplate-${id}`,
-          { diameterTop: 0.92, diameterBottom: 0.68, height: 0.65, tessellation: 10 },
+          { diameterTop: 0.96, diameterBottom: 0.72, height: 0.68, tessellation: 12 },
           scene
         );
-        faceplate.position.set(0, 3.22, 0.25);
+        faceplate.position.set(0, 3.24, 0.26);
         bossArmorParts.push(faceplate);
+
+        const silverBevor = MeshBuilder.CreateCylinder(
+          `bossSilverBevor-${id}`,
+          { diameterTop: 0.92, diameterBottom: 0.66, height: 0.38, tessellation: 12 },
+          scene
+        );
+        silverBevor.position.set(0, 3.08, 0.31);
+        bossSilverParts.push(silverBevor);
+
+        const browGuard = MeshBuilder.CreateBox(
+          `bossBrowGuard-${id}`,
+          { width: 0.92, height: 0.14, depth: 0.32 },
+          scene
+        );
+        browGuard.position.set(0, 3.54, 0.5);
+        bossGoldParts.push(browGuard);
+
+        const helmCrownRing = MeshBuilder.CreateTorus(
+          `bossHelmCrown-${id}`,
+          { diameter: 1.14, thickness: 0.11, tessellation: 20 },
+          scene
+        );
+        helmCrownRing.position.set(0, 3.74, 0.12);
+        bossGoldParts.push(helmCrownRing);
+
+        for (let c = 0; c < 5; c++) {
+          const ca = (c / 5) * Math.PI * 2;
+          const crownSpike = MeshBuilder.CreatePolyhedron(
+            `bossCrownSpike-${id}-${c}`,
+            { type: 1, size: 0.18 },
+            scene
+          );
+          crownSpike.scaling.set(0.85, 1.6, 0.85);
+          crownSpike.position.set(
+            Math.sin(ca) * 0.54,
+            3.92,
+            0.12 + Math.cos(ca) * 0.54
+          );
+          bossGoldParts.push(crownSpike);
+        }
 
         for (const hx of [-1, 1]) {
           const hornPath = [
-            new Vector3(hx * 0.42, 3.55, 0.08),
-            new Vector3(hx * 0.95, 3.72, 0.18),
-            new Vector3(hx * 1.32, 4.08, 0.42),
-            new Vector3(hx * 1.18, 4.52, 0.68),
+            new Vector3(hx * 0.44, 3.58, 0.08),
+            new Vector3(hx * 0.98, 3.76, 0.18),
+            new Vector3(hx * 1.36, 4.12, 0.44),
+            new Vector3(hx * 1.2, 4.58, 0.72),
           ];
           const horn = MeshBuilder.CreateTube(
             `bossHorn-${id}-${hx}`,
             {
               path: hornPath,
-              radiusFunction: (idx) => 0.24 * (1 - idx * 0.28),
-              tessellation: 12,
+              radiusFunction: (idx) => 0.26 * (1 - idx * 0.27),
+              tessellation: 14,
               cap: Mesh.CAP_ALL,
             },
             scene
           );
           bossHornParts.push(horn);
+
+          // Golden Horn Collar Ring at base of each horn
+          const hornCollar = MeshBuilder.CreateTorus(
+            `bossHornCollar-${id}-${hx}`,
+            { diameter: 0.54, thickness: 0.1, tessellation: 14 },
+            scene
+          );
+          hornCollar.position.set(hx * 0.56, 3.62, 0.12);
+          hornCollar.rotation.z = hx * 1.15;
+          bossGoldParts.push(hornCollar);
         }
+
+        // 6. Recessed Eclipse Core Frame, Glowing Chest Crystal, Fierce Slanted Eyes & Spiked Eclipse Halo
+        const coreBezel = MeshBuilder.CreateTorus(
+          `bossCoreBezel-${id}`,
+          { diameter: 0.86, thickness: 0.14, tessellation: 18 },
+          scene
+        );
+        coreBezel.rotation.x = Math.PI / 2;
+        coreBezel.position.set(0, 2.38, 0.82);
+        bossGoldParts.push(coreBezel);
 
         const chestCore = MeshBuilder.CreatePolyhedron(
           `bossChestCore-${id}`,
-          { type: 1, size: 0.36 },
+          { type: 1, size: 0.39 },
           scene
         );
-        chestCore.position.set(0, 2.35, 0.85);
+        chestCore.position.set(0, 2.38, 0.88);
         bossCrimsonParts.push(chestCore);
 
-        for (const ex of [-0.22, 0.22]) {
+        for (const ex of [-0.23, 0.23]) {
           const eye = MeshBuilder.CreateBox(
             `bossEye-${id}-${ex}`,
-            { width: 0.24, height: 0.1, depth: 0.14 },
+            { width: 0.26, height: 0.11, depth: 0.16 },
             scene
           );
-          eye.position.set(ex, 3.42, 0.62);
-          eye.rotation.z = ex > 0 ? -0.25 : 0.25;
+          eye.position.set(ex, 3.43, 0.64);
+          eye.rotation.z = ex > 0 ? -0.26 : 0.26;
           bossCrimsonParts.push(eye);
         }
 
         const eclipseHalo = MeshBuilder.CreateTorus(
           `bossEclipseHalo-${id}`,
-          { diameter: 1.95, thickness: 0.16, tessellation: 24 },
+          { diameter: 2.1, thickness: 0.17, tessellation: 28 },
           scene
         );
         eclipseHalo.rotation.x = Math.PI / 2;
-        eclipseHalo.position.set(0, 3.65, -0.45);
+        eclipseHalo.position.set(0, 3.68, -0.48);
         bossCrimsonParts.push(eclipseHalo);
 
+        for (let hIdx = 0; hIdx < 6; hIdx++) {
+          const ha = (hIdx / 6) * Math.PI * 2;
+          const haloRay = MeshBuilder.CreatePolyhedron(
+            `bossHaloRay-${id}-${hIdx}`,
+            { type: 1, size: 0.2 },
+            scene
+          );
+          haloRay.position.set(
+            Math.cos(ha) * 1.18,
+            3.68 + Math.sin(ha) * 1.18,
+            -0.48
+          );
+          bossGoldParts.push(haloRay);
+        }
+
+        // Merge Malakor body groups by material to keep draw calls ultra-fast!
         mergeGroupWithMaterial(`bossArmorMerged-${id}`, bossArmorParts, bossArmorMat, body);
+        mergeGroupWithMaterial(`bossSilverMerged-${id}`, bossSilverParts, bossSilverMat, body);
+        mergeGroupWithMaterial(`bossGoldMerged-${id}`, bossGoldParts, bossGoldMat, body);
         mergeGroupWithMaterial(`bossObsidianMerged-${id}`, bossObsidianParts, darkObsidianMat, body);
+        mergeGroupWithMaterial(`bossCapeMerged-${id}`, bossCapeParts, bossCapeMat, body);
         mergeGroupWithMaterial(`bossHornsMerged-${id}`, bossHornParts, boneHornMat, body);
         mergeGroupWithMaterial(`bossCrimsonMerged-${id}`, bossCrimsonParts, glowingCrimsonMat, body);
 
-        const axeParts: Mesh[] = [];
+        // 7. Ornate Dread Cleaver Greataxe (Gilded Shaft, Polished Silver Twin Crescent Blades & Crimson Core)
+        const axeGoldParts: Mesh[] = [];
+        const axeSilverParts: Mesh[] = [];
+        const axeCrimsonParts: Mesh[] = [];
+
         const axeShaft = MeshBuilder.CreateCylinder(
           `bossAxeShaft-${id}`,
-          { diameter: 0.22, height: 3.4, tessellation: 12 },
+          { diameter: 0.22, height: 3.55, tessellation: 14 },
           scene
         );
         axeShaft.rotation.x = Math.PI / 2;
-        axeShaft.position.set(1.55, 1.95, 0.85);
-        axeParts.push(axeShaft);
+        axeShaft.position.set(1.55, 1.95, 0.88);
+        axeShaft.material = darkObsidianMat;
+        axeShaft.parent = weapon;
 
-        for (const bx of [-0.55, 0.55]) {
-          const crescentBlade = MeshBuilder.CreateCylinder(
-            `bossAxeBlade-${id}-${bx}`,
-            { diameterTop: 1.45, diameterBottom: 0.45, height: 0.14, tessellation: 16 },
+        for (const gz of [-0.55, 0.35, 1.35, 2.25]) {
+          const gripRing = MeshBuilder.CreateTorus(
+            `bossAxeRing-${id}-${gz}`,
+            { diameter: 0.34, thickness: 0.08, tessellation: 14 },
             scene
           );
-          crescentBlade.scaling.set(1.15, 1.0, 0.65);
-          crescentBlade.position.set(1.55 + bx, 1.95, 1.85);
-          axeParts.push(crescentBlade);
+          gripRing.rotation.x = Math.PI / 2;
+          gripRing.position.set(1.55, 1.95, gz);
+          axeGoldParts.push(gripRing);
+        }
+
+        const axeCollar = MeshBuilder.CreateBox(
+          `bossAxeCollar-${id}`,
+          { width: 0.56, height: 0.42, depth: 0.68 },
+          scene
+        );
+        axeCollar.position.set(1.55, 1.95, 1.88);
+        axeGoldParts.push(axeCollar);
+
+        const axeCoreGem = MeshBuilder.CreatePolyhedron(
+          `bossAxeGem-${id}`,
+          { type: 1, size: 0.24 },
+          scene
+        );
+        axeCoreGem.position.set(1.55, 2.18, 1.88);
+        axeCrimsonParts.push(axeCoreGem);
+
+        for (const bx of [-0.62, 0.62]) {
+          const innerBlade = MeshBuilder.CreateCylinder(
+            `bossAxeInner-${id}-${bx}`,
+            { diameterTop: 1.24, diameterBottom: 0.42, height: 0.16, tessellation: 16 },
+            scene
+          );
+          innerBlade.scaling.set(1.12, 1.0, 0.64);
+          innerBlade.position.set(1.55 + bx * 0.82, 1.95, 1.88);
+          axeGoldParts.push(innerBlade);
+
+          const crescentBlade = MeshBuilder.CreateCylinder(
+            `bossAxeBlade-${id}-${bx}`,
+            { diameterTop: 1.56, diameterBottom: 0.48, height: 0.12, tessellation: 18 },
+            scene
+          );
+          crescentBlade.scaling.set(1.22, 1.0, 0.68);
+          crescentBlade.position.set(1.55 + bx, 1.95, 1.88);
+          axeSilverParts.push(crescentBlade);
         }
 
         const axeSpike = MeshBuilder.CreateCylinder(
           `bossAxeSpike-${id}`,
-          { diameterTop: 0.03, diameterBottom: 0.34, height: 0.75, tessellation: 12 },
+          { diameterTop: 0.03, diameterBottom: 0.36, height: 0.82, tessellation: 12 },
           scene
         );
         axeSpike.rotation.x = Math.PI / 2;
-        axeSpike.position.set(1.55, 1.95, 2.75);
-        axeParts.push(axeSpike);
+        axeSpike.position.set(1.55, 1.95, 2.82);
+        axeSilverParts.push(axeSpike);
 
-        mergeGroupWithMaterial(`bossGreataxeMerged-${id}`, axeParts, goldKeyMat, weapon);
+        const pommelCrystal = MeshBuilder.CreatePolyhedron(
+          `bossAxePommel-${id}`,
+          { type: 1, size: 0.24 },
+          scene
+        );
+        pommelCrystal.position.set(1.55, 1.95, -0.95);
+        axeGoldParts.push(pommelCrystal);
+
+        mergeGroupWithMaterial(`bossAxeGold-${id}`, axeGoldParts, bossGoldMat, weapon);
+        mergeGroupWithMaterial(`bossAxeSilver-${id}`, axeSilverParts, bladeMat, weapon);
+        mergeGroupWithMaterial(`bossAxeCrimson-${id}`, axeCrimsonParts, glowingCrimsonMat, weapon);
 
         // Ground Lunge Path Telegraph Corridor for Boss Malakor (with +Z aligned arrowhead!)
         buildCorridorRig(2.7, 1.35);
@@ -3049,7 +3589,179 @@ export default function BabylonCanvas() {
     };
 
     // =========================================================
-    // 3D BUSH CHOP LEAF & GRASS PARTICLE BURST BUILDER
+    // 3D MAGIC FIREBALL, BURNING GROUND FIRE ZONE & GOLDEN BEE BUILDERS
+    // =========================================================
+    const fireballRigs = new Map<string, TransformNode>();
+    const fireZoneRigs = new Map<
+      string,
+      { root: TransformNode; disc: Mesh; ring: Mesh; flames: Mesh[] }
+    >();
+    const beeRigs = new Map<
+      string,
+      { root: TransformNode; wingL: Mesh; wingR: Mesh }
+    >();
+
+    const fireballCoreMat = makeMat(
+      "fireballCoreMat",
+      new Color3(1.0, 0.92, 0.28),
+      new Color3(1.0, 0.78, 0.18)
+    );
+    const fireballCoronaMat = makeMat(
+      "fireballCoronaMat",
+      new Color3(1.0, 0.36, 0.12),
+      new Color3(0.95, 0.25, 0.06),
+      new Color3(0, 0, 0),
+      0.68
+    );
+
+    const buildFireballRig = (id: string, isCharged: boolean): TransformNode => {
+      const root = new TransformNode(`fireball-${id}`, scene);
+      const scale = isCharged ? 1.55 : 1.0;
+
+      const core = MeshBuilder.CreateSphere(
+        `fbCore-${id}`,
+        { diameter: 0.56 * scale, segments: 12 },
+        scene
+      );
+      core.material = fireballCoreMat;
+      core.isPickable = false;
+      core.parent = root;
+
+      const corona = MeshBuilder.CreateSphere(
+        `fbCorona-${id}`,
+        { diameter: 0.88 * scale, segments: 12 },
+        scene
+      );
+      corona.scaling.set(0.95, 0.95, 1.35);
+      corona.position.set(0, 0, -0.14 * scale);
+      corona.material = fireballCoronaMat;
+      corona.isPickable = false;
+      corona.parent = root;
+
+      const ring = MeshBuilder.CreateTorus(
+        `fbRing-${id}`,
+        { diameter: 0.92 * scale, thickness: 0.1 * scale, tessellation: 18 },
+        scene
+      );
+      ring.rotation.x = Math.PI / 2;
+      ring.material = goldKeyMat;
+      ring.isPickable = false;
+      ring.parent = root;
+
+      return root;
+    };
+
+    const buildFireZoneRig = (id: string, radius: number) => {
+      const root = new TransformNode(`fireZoneRoot-${id}`, scene);
+
+      const disc = MeshBuilder.CreateCylinder(
+        `fzDisc-${id}`,
+        { diameter: radius * 2, height: 0.06, tessellation: 28 },
+        scene
+      );
+      disc.position.set(0, 0.035, 0);
+      disc.material = makeMat(
+        `fzDiscMat-${id}`,
+        new Color3(1.0, 0.34, 0.08),
+        new Color3(0.92, 0.22, 0.04),
+        new Color3(0, 0, 0),
+        0.58
+      );
+      disc.isPickable = false;
+      disc.parent = root;
+
+      const ring = MeshBuilder.CreateTorus(
+        `fzRing-${id}`,
+        { diameter: radius * 2, thickness: 0.16, tessellation: 28 },
+        scene
+      );
+      ring.position.set(0, 0.08, 0);
+      ring.material = fireballCoreMat;
+      ring.isPickable = false;
+      ring.parent = root;
+
+      const flames: Mesh[] = [];
+      for (let f = 0; f < 7; f++) {
+        const tongue = MeshBuilder.CreateCylinder(
+          `fzTongue-${id}-${f}`,
+          { diameterTop: 0.04, diameterBottom: 0.56, height: 1.05, tessellation: 10 },
+          scene
+        );
+        tongue.material = f % 2 === 0 ? fireballCoreMat : fireballCoronaMat;
+        tongue.isPickable = false;
+        tongue.parent = root;
+        flames.push(tongue);
+      }
+
+      return { root, disc, ring, flames };
+    };
+
+    const buildBeeRig = (id: string) => {
+      const root = new TransformNode(`beeRoot-${id}`, scene);
+
+      const abdomen = MeshBuilder.CreateSphere(
+        `beeBody-${id}`,
+        { diameter: 0.42, segments: 12 },
+        scene
+      );
+      abdomen.scaling.set(0.88, 0.82, 1.32);
+      abdomen.material = goldKeyMat;
+      abdomen.isPickable = false;
+      abdomen.parent = root;
+
+      const stripe = MeshBuilder.CreateTorus(
+        `beeStripe-${id}`,
+        { diameter: 0.38, thickness: 0.09, tessellation: 14 },
+        scene
+      );
+      stripe.rotation.x = Math.PI / 2;
+      stripe.material = darkObsidianMat;
+      stripe.isPickable = false;
+      stripe.parent = root;
+
+      const stinger = MeshBuilder.CreateCylinder(
+        `beeStinger-${id}`,
+        { diameterTop: 0.01, diameterBottom: 0.12, height: 0.22, tessellation: 8 },
+        scene
+      );
+      stinger.rotation.x = -Math.PI / 2;
+      stinger.position.set(0, 0, -0.32);
+      stinger.material = darkObsidianMat;
+      stinger.isPickable = false;
+      stinger.parent = root;
+
+      const wingMat = makeMat(
+        `beeWingMat-${id}`,
+        new Color3(0.88, 0.96, 1.0),
+        new Color3(0.45, 0.65, 0.85),
+        new Color3(1, 1, 1),
+        0.72
+      );
+      const wingL = MeshBuilder.CreateBox(
+        `beeWingL-${id}`,
+        { width: 0.36, height: 0.03, depth: 0.22 },
+        scene
+      );
+      wingL.position.set(-0.22, 0.16, 0.04);
+      wingL.material = wingMat;
+      wingL.isPickable = false;
+      wingL.parent = root;
+
+      const wingR = MeshBuilder.CreateBox(
+        `beeWingR-${id}`,
+        { width: 0.36, height: 0.03, depth: 0.22 },
+        scene
+      );
+      wingR.position.set(0.22, 0.16, 0.04);
+      wingR.material = wingMat;
+      wingR.isPickable = false;
+      wingR.parent = root;
+
+      return { root, wingL, wingR };
+    };
+
+    // =========================================================
+    // 3D BUSH CHOP LEAF & SHOVEL DIRT CLOD PARTICLE BURST BUILDER
     // =========================================================
     const bushBurstRigs = new Map<string, BushBurstVisualRig>();
     const leafBrightMat = makeMat(
@@ -3076,7 +3788,11 @@ export default function BabylonCanvas() {
     );
     leafDeepMat.backFaceCulling = false;
 
-    const buildBushBurstRig = (id: string, seed: number): BushBurstVisualRig => {
+    const buildBushBurstRig = (
+      id: string,
+      seed: number,
+      isDirt = false
+    ): BushBurstVisualRig => {
       const root = new TransformNode(`bushBurstRoot-${id}`, scene);
       const particles: BushLeafParticle[] = [];
       const count = 22;
@@ -3087,7 +3803,7 @@ export default function BabylonCanvas() {
       };
 
       for (let i = 0; i < count; i++) {
-        const isGrassBlade = i % 3 === 0;
+        const isGrassBlade = !isDirt && i % 3 === 0;
         let mesh: Mesh;
         let baseScale: Vector3;
 
@@ -3105,15 +3821,24 @@ export default function BabylonCanvas() {
         } else {
           mesh = MeshBuilder.CreatePolyhedron(
             `leafPart-${id}-${i}`,
-            { type: 1, size: 0.22 },
+            { type: isDirt ? 2 : 1, size: isDirt ? 0.18 : 0.22 },
             scene
           );
           const s = 0.8 + pseudoRand(i * 7 + 1) * 0.55;
-          baseScale = new Vector3(1.25 * s, 0.22 * s, 0.72 * s);
+          baseScale = isDirt
+            ? new Vector3(0.95 * s, 0.78 * s, 0.9 * s)
+            : new Vector3(1.25 * s, 0.22 * s, 0.72 * s);
         }
 
-        mesh.material =
-          i % 3 === 0 ? leafBrightMat : i % 3 === 1 ? leafEmeraldMat : leafDeepMat;
+        mesh.material = isDirt
+          ? i % 3 === 0
+            ? dirtPitMat
+            : dirtSoilMat
+          : i % 3 === 0
+          ? leafBrightMat
+          : i % 3 === 1
+          ? leafEmeraldMat
+          : leafDeepMat;
         mesh.isPickable = false;
         mesh.parent = root;
 
@@ -3149,6 +3874,10 @@ export default function BabylonCanvas() {
     let attackTriggeredOnce = false;
     let boomerangTriggeredOnce = false;
     let bowTriggeredOnce = false;
+    let fireRodTriggeredOnce = false;
+    let shovelTriggeredOnce = false;
+    let bottleTriggeredOnce = false;
+    let leftMouseHeldInPlay = false;
     let rightMouseHeld = false;
     let leftMouseHeldInEditor = false;
     let isDraggingEntityInEditor = false;
@@ -3220,6 +3949,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // C or I toggles Character Equipment & Glass Bottles Screen
+      if ((code === "KeyC" || code === "KeyI") && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setCharacterOpen(!store.characterOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -3243,6 +3979,15 @@ export default function BabylonCanvas() {
         !pressedKeys.has(code)
       ) {
         bowTriggeredOnce = true;
+      }
+      if ((code === "KeyR" || code === "Digit3") && !pressedKeys.has(code)) {
+        fireRodTriggeredOnce = true;
+      }
+      if ((code === "KeyG" || code === "Digit4") && !pressedKeys.has(code)) {
+        shovelTriggeredOnce = true;
+      }
+      if ((code === "KeyV" || code === "Digit5") && !pressedKeys.has(code)) {
+        bottleTriggeredOnce = true;
       }
       pressedKeys.add(code);
     };
@@ -3295,6 +4040,7 @@ export default function BabylonCanvas() {
 
       if (e.button === 0) {
         attackTriggeredOnce = true;
+        leftMouseHeldInPlay = true;
       } else if (e.button === 2) {
         rightMouseHeld = true;
       }
@@ -3333,6 +4079,7 @@ export default function BabylonCanvas() {
         rightMouseHeld = false;
       }
       if (e.button === 0) {
+        leftMouseHeldInPlay = false;
         leftMouseHeldInEditor = false;
         isDraggingEntityInEditor = false;
       }
@@ -3405,31 +4152,49 @@ export default function BabylonCanvas() {
         attackTriggeredOnce = false;
         boomerangTriggeredOnce = false;
         bowTriggeredOnce = false;
+        fireRodTriggeredOnce = false;
+        shovelTriggeredOnce = false;
+        bottleTriggeredOnce = false;
       } else {
-        const attackPressed =
-          attackTriggeredOnce ||
+        const attackPressed = attackTriggeredOnce;
+        const attackHeld =
+          leftMouseHeldInPlay ||
           pressedKeys.has("Space") ||
           pressedKeys.has("KeyJ") ||
-          pressedKeys.has("KeyZ");
+          pressedKeys.has("KeyZ") ||
+          pressedKeys.has("Enter");
         const blockHeld =
           rightMouseHeld ||
           pressedKeys.has("ShiftLeft") ||
           pressedKeys.has("ShiftRight");
         const boomerangPressed = boomerangTriggeredOnce;
         const bowPressed = bowTriggeredOnce;
+        const fireRodPressed = fireRodTriggeredOnce;
+        const fireRodHeld =
+          pressedKeys.has("KeyR") || pressedKeys.has("Digit3");
+        const shovelPressed = shovelTriggeredOnce;
+        const bottlePressed = bottleTriggeredOnce;
 
         attackTriggeredOnce = false;
         boomerangTriggeredOnce = false;
         bowTriggeredOnce = false;
+        fireRodTriggeredOnce = false;
+        shovelTriggeredOnce = false;
+        bottleTriggeredOnce = false;
 
         if (store.phase === "playing") {
           store.tick(dt, {
             moveX,
             moveZ,
             attackPressed,
+            attackHeld,
             blockHeld,
             boomerangPressed,
             bowPressed,
+            fireRodPressed,
+            fireRodHeld,
+            shovelPressed,
+            bottlePressed,
           });
         }
       }
@@ -3498,6 +4263,19 @@ export default function BabylonCanvas() {
             const isCut = !snap.editorMode && snap.cutBushIds.includes(prop.id);
             if (pRig.bushFoliage) pRig.bushFoliage.setEnabled(!isCut);
             if (pRig.bushStump) pRig.bushStump.setEnabled(isCut);
+          } else if (prop.prefab === "wall_torch") {
+            const isLit = prop.lit !== false;
+            if (pRig.torchFlame) {
+              pRig.torchFlame.setEnabled(isLit);
+              if (isLit) {
+                const flicker = 1 + Math.sin(t * 14 + prop.x) * 0.14;
+                pRig.torchFlame.scaling.set(flicker, 1.45 + Math.cos(t * 18) * 0.18, flicker);
+              }
+            }
+          } else if (prop.prefab === "dirt_patch") {
+            const isDug = Boolean(prop.dug) && !snap.editorMode;
+            if (pRig.dirtMound) pRig.dirtMound.setEnabled(!isDug);
+            if (pRig.dirtHole) pRig.dirtHole.setEnabled(isDug);
           }
         }
       }
@@ -3536,19 +4314,55 @@ export default function BabylonCanvas() {
         }
       });
 
-      // 4. Sync Hero 3D Model, Shield Block Posture & Sword Swing
+      // 4. Sync Hero 3D Model, Equipped Armor/Gear Colors, Shield Block, Spin Attack & Tools
+      if (snap.hero.equippedTunic === "red_mail") {
+        tunicMat.diffuseColor.set(0.84, 0.14, 0.18);
+        tunicMat.emissiveColor.set(0.18, 0.03, 0.04);
+      } else if (snap.hero.equippedTunic === "blue_mail") {
+        tunicMat.diffuseColor.set(0.16, 0.44, 0.88);
+        tunicMat.emissiveColor.set(0.04, 0.1, 0.24);
+      } else {
+        tunicMat.diffuseColor.set(0.15, 0.68, 0.32);
+        tunicMat.emissiveColor.set(0.03, 0.12, 0.05);
+      }
+
+      if (snap.hero.equippedOffhand === "mirror_shield") {
+        shieldMat.diffuseColor.set(0.85, 0.9, 0.98);
+        shieldMat.emissiveColor.set(0.18, 0.24, 0.35);
+      } else {
+        shieldMat.diffuseColor.set(0.2, 0.42, 0.8);
+        shieldMat.emissiveColor.set(0.05, 0.1, 0.22);
+      }
+
+      if (snap.hero.equippedBoots === "swift_boots") {
+        bootMat.diffuseColor.set(0.18, 0.65, 0.88);
+        bootMat.emissiveColor.set(0.04, 0.14, 0.22);
+      } else if (snap.hero.equippedBoots === "titan_greaves") {
+        bootMat.diffuseColor.set(0.54, 0.58, 0.66);
+        bootMat.emissiveColor.set(0.08, 0.09, 0.12);
+      } else {
+        bootMat.diffuseColor.set(0.38, 0.24, 0.14);
+        bootMat.emissiveColor.set(0, 0, 0);
+      }
+
       const stride = Math.sin(snap.hero.walkCycle);
       const heroGroundY = sampleTerrainHeight(activeCells, snap.hero.x, snap.hero.z);
       const kbLock = snap.hero.knockbackLockTimer ?? 0;
       const launchProgress = kbLock > 0 ? 1 - Math.min(1, kbLock / 0.65) : 0;
       const launchArcY = kbLock > 0 ? Math.sin(launchProgress * Math.PI) * 1.15 : 0;
 
+      const spinTimer = snap.hero.spinAttackTimer ?? 0;
+      const isSpinning = spinTimer > 0;
+      const spinProgress = isSpinning ? 1 - spinTimer / 0.38 : 0;
+
       heroRoot.position.set(
         snap.hero.x,
         heroGroundY + (kbLock > 0 ? launchArcY : Math.abs(stride) * 0.11),
         snap.hero.z
       );
-      heroRoot.rotation.y = snap.hero.facing;
+      heroRoot.rotation.y = isSpinning
+        ? snap.hero.facing + spinProgress * Math.PI * 4
+        : snap.hero.facing;
       heroRoot.rotation.x = kbLock > 0 ? -Math.sin(launchProgress * Math.PI) * 0.42 : 0;
       heroLeftBoot.position.z = kbLock > 0 ? 0.16 : stride * 0.22;
       heroRightBoot.position.z = kbLock > 0 ? -0.16 : -stride * 0.22;
@@ -3572,14 +4386,64 @@ export default function BabylonCanvas() {
 
       const isBowPose = (snap.hero.bowAnimTimer ?? 0) > 0;
       const isThrowPose = (snap.hero.throwAnimTimer ?? 0) > 0;
-      heroBowNode.setEnabled(isBowPose);
-      swordPivot.setEnabled(!isBowPose && !isThrowPose);
+      const isFireRodPose =
+        (snap.hero.fireRodCooldown ?? 0) > 0.12 || (snap.hero.fireRodChargeTimer ?? 0) > 0;
+      const isShovelPose = (snap.hero.digAnimTimer ?? 0) > 0;
 
-      if (snap.hero.isAttacking && !isBowPose && !isThrowPose) {
+      heroBowNode.setEnabled(isBowPose);
+      heroFireRodNode.setEnabled(isFireRodPose);
+      heroShovelNode.setEnabled(isShovelPose);
+      if (isShovelPose) {
+        const digProg = 1 - (snap.hero.digAnimTimer ?? 0) / 0.34;
+        heroShovelNode.rotation.x = 0.35 + Math.sin(digProg * Math.PI) * 0.85;
+      }
+
+      const showSword = !isBowPose && !isThrowPose && !isFireRodPose && !isShovelPose;
+      swordPivot.setEnabled(showSword);
+
+      // Sync Charged Spin Attack Aura & Whirlwind Ring
+      spinSlashRing.setEnabled(isSpinning);
+      if (isSpinning) {
+        spinSlashRing.rotation.y = t * 22;
+        spinSlashRing.scaling.set(1.0 + spinProgress * 0.18, 0.32, 1.0 + spinProgress * 0.18);
+      }
+
+      const swordCharge = snap.hero.swordChargeTimer ?? 0;
+      const fireCharge = snap.hero.fireRodChargeTimer ?? 0;
+      const showChargeAura = swordCharge > 0.12 || fireCharge > 0.12;
+      chargeAuraRing.setEnabled(showChargeAura);
+      if (showChargeAura) {
+        const isReady = swordCharge >= 0.62 || fireCharge >= 0.55;
+        const pulseScale = isReady ? 1.15 + Math.sin(t * 20) * 0.16 : 0.65 + Math.min(1, Math.max(swordCharge, fireCharge)) * 0.45;
+        chargeAuraRing.scaling.setAll(pulseScale);
+        if (fireCharge > 0.12) {
+          chargeAuraMat.diffuseColor.set(1.0, 0.45, 0.12);
+          chargeAuraMat.emissiveColor.set(1.0, 0.32, 0.05);
+        } else {
+          chargeAuraMat.diffuseColor.set(0.35, 0.92, 1.0);
+          chargeAuraMat.emissiveColor.set(0.25, 0.8, 1.0);
+        }
+      }
+
+      if (snap.hero.equippedPrimary === "tempered_blade") {
+        slashMat.diffuseColor.set(1.0, 0.85, 0.28);
+        slashMat.emissiveColor.set(1.0, 0.72, 0.18);
+      } else {
+        slashMat.diffuseColor.set(0.55, 0.95, 1.0);
+        slashMat.emissiveColor.set(0.45, 0.85, 1.0);
+      }
+
+      if (isSpinning && showSword) {
+        swordPivot.rotation.y = 1.15;
+        slashArc.setEnabled(false);
+      } else if (snap.hero.isAttacking && showSword) {
         const progress = 1 - snap.hero.attackTimer / 0.24;
         swordPivot.rotation.y = -1.25 + progress * 2.5;
         slashArc.setEnabled(true);
         slashArc.rotation.y = -0.8 + progress * 1.6;
+      } else if (swordCharge > 0.12 && showSword) {
+        swordPivot.rotation.y = -1.35 + Math.sin(t * 24) * 0.06;
+        slashArc.setEnabled(false);
       } else {
         swordPivot.rotation.y = 0.2;
         slashArc.setEnabled(false);
@@ -3720,7 +4584,7 @@ export default function BabylonCanvas() {
               rig.chargeCorridorBody.scaling.z = bodyLen;
               rig.chargeCorridorTip.position.z = bodyLen;
 
-              const lockThreshold = enemy.kind === "knight" ? 0.68 : 0.64;
+              const lockThreshold = enemy.kind === "knight" ? 0.58 : 0.54;
               const lockedAim = enemy.stateTimer <= lockThreshold;
               const pulse = Math.floor(t * 15) % 2 === 0;
               rig.chargeCorridorMat.emissiveColor.set(
@@ -3932,6 +4796,103 @@ export default function BabylonCanvas() {
         }
       });
 
+      // 7c. Sync Magic Fire Rod Fireballs (`snap.fireballs`)
+      const activeFireballIds = new Set<string>();
+      for (const fb of snap.fireballs) {
+        activeFireballIds.add(fb.id);
+        let fbRig = fireballRigs.get(fb.id);
+        if (!fbRig) {
+          fbRig = buildFireballRig(fb.id, fb.isCharged);
+          fireballRigs.set(fb.id, fbRig);
+        }
+        const showFb = fb.zone === snap.zone;
+        fbRig.setEnabled(showFb);
+        if (showFb) {
+          const fbGroundY = sampleTerrainHeight(activeCells, fb.x, fb.z);
+          fbRig.position.set(fb.x, fbGroundY + 1.15, fb.z);
+          fbRig.rotation.y = fb.angle;
+          fbRig.rotation.z = t * 14.0;
+          const pulse = 1.0 + Math.sin(t * 22) * 0.14;
+          fbRig.scaling.setAll(pulse);
+        }
+      }
+      fireballRigs.forEach((fbRig, id) => {
+        if (!activeFireballIds.has(id)) {
+          fbRig.dispose();
+          fireballRigs.delete(id);
+        }
+      });
+
+      // 7d. Sync Charged Fireball Burning Ground Patches (`snap.fireZones`)
+      const activeFireZoneIds = new Set<string>();
+      for (const fz of snap.fireZones) {
+        activeFireZoneIds.add(fz.id);
+        let fzRig = fireZoneRigs.get(fz.id);
+        if (!fzRig) {
+          fzRig = buildFireZoneRig(fz.id, fz.radius);
+          fireZoneRigs.set(fz.id, fzRig);
+        }
+        const showFz = fz.zone === snap.zone && fz.timer > 0;
+        fzRig.root.setEnabled(showFz);
+        if (!showFz) continue;
+
+        const fzGroundY = sampleTerrainHeight(activeCells, fz.x, fz.z);
+        const fade = fz.timer < 0.7 ? Math.max(0.05, fz.timer / 0.7) : 1.0;
+        fzRig.disc.position.set(fz.x, fzGroundY + 0.05, fz.z);
+        fzRig.disc.scaling.set(fade, 1, fade);
+        fzRig.ring.position.set(fz.x, fzGroundY + 0.09, fz.z);
+        fzRig.ring.scaling.setAll(fade * (1 + Math.sin(t * 14) * 0.06));
+
+        fzRig.flames.forEach((fl, idx) => {
+          const ang = idx * 0.92 + t * 3.4;
+          const rad = (0.22 + ((idx * 0.21) % 0.58)) * fz.radius * fade;
+          const flickH = 0.8 + Math.sin(t * 18 + idx * 1.7) * 0.35;
+          fl.position.set(
+            fz.x + Math.cos(ang) * rad,
+            fzGroundY + 0.38 * flickH,
+            fz.z + Math.sin(ang) * rad
+          );
+          fl.scaling.set(fade, flickH * fade, fade);
+        });
+      }
+      fireZoneRigs.forEach((fzRig, id) => {
+        if (!activeFireZoneIds.has(id)) {
+          fzRig.root.dispose();
+          fireZoneRigs.delete(id);
+        }
+      });
+
+      // 7e. Sync Friendly Bottled Golden Bees (`snap.friendlyBees`)
+      const activeBeeIds = new Set<string>();
+      for (const bee of snap.friendlyBees) {
+        activeBeeIds.add(bee.id);
+        let bRig = beeRigs.get(bee.id);
+        if (!bRig) {
+          bRig = buildBeeRig(bee.id);
+          beeRigs.set(bee.id, bRig);
+        }
+        const showBee = bee.zone === snap.zone && bee.timer > 0;
+        bRig.root.setEnabled(showBee);
+        if (showBee) {
+          const bGroundY = sampleTerrainHeight(activeCells, bee.x, bee.z);
+          bRig.root.position.set(
+            bee.x,
+            bGroundY + 1.45 + Math.sin(t * 18) * 0.22,
+            bee.z
+          );
+          bRig.root.rotation.y = bee.facing;
+          const wingFlap = Math.sin(t * 52) * 0.42;
+          bRig.wingL.rotation.z = 0.25 + wingFlap;
+          bRig.wingR.rotation.z = -0.25 - wingFlap;
+        }
+      }
+      beeRigs.forEach((bRig, id) => {
+        if (!activeBeeIds.has(id)) {
+          bRig.root.dispose();
+          beeRigs.delete(id);
+        }
+      });
+
       // 8. Sync Boss Arcing Projectiles & Landing AOE Telegraphs
       const activeProjIds = new Set<string>();
       for (const proj of snap.projectiles) {
@@ -4011,13 +4972,13 @@ export default function BabylonCanvas() {
         }
       });
 
-      // 9b. Sync 3D Bush Chop Leaf & Grass Particle Bursts
+      // 9b. Sync 3D Bush Chop Leaf & Shovel Dirt Clod Particle Bursts
       const activeBurstIds = new Set<string>();
       for (const burst of snap.bushBursts) {
         activeBurstIds.add(burst.id);
         let bRig = bushBurstRigs.get(burst.id);
         if (!bRig) {
-          bRig = buildBushBurstRig(burst.id, burst.seed);
+          bRig = buildBushBurstRig(burst.id, burst.seed, Boolean(burst.isDirt));
           bushBurstRigs.set(burst.id, bRig);
         }
 

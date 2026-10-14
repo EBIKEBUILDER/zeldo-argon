@@ -1299,3 +1299,351 @@ body {
   font-weight: 700;
   color: #cbd5e1;
 }
+
+/* =========================================================
+   MAGIC POWER BAR, ARMOR PILL & CHARACTER EQUIPMENT MODAL
+   ========================================================= */
+.hud-vitals-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tunic-armor-pill {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(82, 182, 255, 0.16);
+  border: 1px solid rgba(114, 196, 255, 0.45);
+  color: #b8e4ff;
+}
+
+.mp-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.mp-label {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #79f2a0;
+}
+
+.mp-track {
+  flex: 1;
+  height: 9px;
+  background: rgba(10, 20, 16, 0.85);
+  border: 1px solid rgba(107, 255, 156, 0.48);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.mp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1dd168 0%, #6bffa8 100%);
+  box-shadow: 0 0 10px rgba(74, 255, 146, 0.6);
+  transition: width 0.12s ease;
+}
+
+.mp-val {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  color: #a6ffc5;
+  min-width: 24px;
+  text-align: right;
+}
+
+.gear-slot-btn {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.gear-slot-btn:hover {
+  transform: translateY(-1px);
+  border-color: #ffd978;
+}
+
+.char-toggle-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  background: linear-gradient(180deg, #5ec2ff 0%, #2478d6 100%);
+  border: 1px solid #bce4ff;
+  color: #06182c;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 12px;
+  border-radius: 9px;
+  box-shadow: 0 0 14px rgba(94, 194, 255, 0.4);
+  transition: transform 0.12s ease;
+}
+
+.char-toggle-btn:hover,
+.char-toggle-btn.active {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #8bd5ff 0%, #318ef0 100%);
+}
+
+.char-sheet-card {
+  max-width: 860px;
+  max-height: 86vh;
+  overflow-y: auto;
+}
+
+.shop-panel-wrapper:has(.char-sheet-card) {
+  max-width: 860px;
+}
+
+.char-summary-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.char-stat-badge {
+  font-size: 11px;
+  color: #d6e2f0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(229, 185, 78, 0.38);
+  padding: 5px 10px;
+  border-radius: 9px;
+}
+
+.char-stat-badge strong {
+  color: #ffe28a;
+}
+
+.char-equip-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 10px;
+  margin-bottom: 14px;
+}
+
+.char-slot-panel {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(229, 185, 78, 0.32);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.char-slot-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.char-slot-title {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #ffd978;
+}
+
+.char-slot-sub {
+  font-size: 10px;
+  color: #9fb0c7;
+}
+
+.char-options-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.char-option-btn {
+  cursor: pointer;
+  text-align: left;
+  background: rgba(14, 19, 29, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: #dce6f2;
+  transition: all 0.14s ease;
+}
+
+.char-option-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 217, 120, 0.45);
+}
+
+.char-option-btn.active {
+  background: linear-gradient(135deg, rgba(35, 78, 54, 0.78), rgba(18, 44, 32, 0.88));
+  border-color: #6bff9c;
+  box-shadow: 0 0 12px rgba(107, 255, 156, 0.25);
+}
+
+.char-option-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.char-option-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.char-option-stat {
+  font-size: 10px;
+  font-weight: 800;
+  color: #ffe28a;
+  background: rgba(255, 226, 138, 0.14);
+  border: 1px solid rgba(255, 226, 138, 0.35);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+.char-option-desc {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #b3c2d6;
+}
+
+.bottles-section {
+  background: rgba(14, 20, 32, 0.75);
+  border: 1px solid rgba(114, 196, 255, 0.36);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.bottles-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.bottle-add-btn {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(107, 255, 156, 0.16);
+  border: 1px solid rgba(107, 255, 156, 0.5);
+  color: #9effc4;
+}
+
+.bottles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  gap: 10px;
+}
+
+.bottle-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 10px 11px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.bottle-card-filled {
+  border-color: rgba(114, 196, 255, 0.48);
+  background: rgba(20, 34, 54, 0.55);
+}
+
+.bottle-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.bottle-slot-num {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #9fb0c7;
+}
+
+.bottle-badge {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.bottle-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.bottle-desc {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #b8c7da;
+}
+
+.bottle-actions-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.bottle-use-btn {
+  flex: 1;
+  padding: 7px 8px;
+  font-size: 11px;
+}
+
+.bottle-empty-btn {
+  cursor: pointer;
+  padding: 6px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #cbd5e1;
+}
+
+.bottle-fill-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.bottle-fill-chip {
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #dce6f2;
+}
+
+.bottle-fill-chip:hover {
+  background: rgba(255, 217, 120, 0.22);
+  border-color: #ffd978;
+  color: #ffffff;
+}
+

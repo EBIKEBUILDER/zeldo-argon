@@ -2,11 +2,22 @@
 
 import React, { useRef, useState } from "react";
 import {
+  BootsId,
+  BottleContentId,
   EditorPlaceCategory,
+  OffhandId,
+  PrimaryHandId,
   TerrainBrushMode,
+  TunicId,
   useGameStore,
 } from "@/store/gameStore";
-import { EnemyKind, PropPrefabId, RupeeTier, ZoneId } from "@/game/worldData";
+import {
+  BuriedRewardKind,
+  EnemyKind,
+  PropPrefabId,
+  RupeeTier,
+  ZoneId,
+} from "@/game/worldData";
 
 function HeartIcon({ state, index }: { state: "full" | "half" | "empty"; index: number }) {
   const clipId = `half-heart-clip-${index}`;
@@ -113,6 +124,7 @@ const PROP_PALETTE: Array<{ id: PropPrefabId; label: string; tag: string }> = [
   { id: "pine_tree", label: "Pine Tree", tag: "Nature" },
   { id: "bush", label: "Meadow Bush", tag: "Nature" },
   { id: "flower_patch", label: "Wildflowers", tag: "Nature" },
+  { id: "dirt_patch", label: "Soft Dirt Patch (Dig)", tag: "Secret" },
   { id: "boulder", label: "Mossy Boulder", tag: "Nature" },
   { id: "water_tile", label: "Water Stream", tag: "Terrain" },
   { id: "path_tile", label: "Cobblestone Path", tag: "Terrain" },
@@ -122,7 +134,7 @@ const PROP_PALETTE: Array<{ id: PropPrefabId; label: string; tag: string }> = [
   { id: "wooden_bridge", label: "Wooden Bridge", tag: "Structure" },
   { id: "temple_arch", label: "Temple Archway", tag: "Structure" },
   { id: "dungeon_pillar", label: "Sanctum Pillar", tag: "Dungeon" },
-  { id: "wall_torch", label: "Flame Brazier", tag: "Dungeon" },
+  { id: "wall_torch", label: "Flame Brazier / Torch", tag: "Puzzle" },
   { id: "wooden_crate", label: "Supply Crate", tag: "Dungeon" },
 ];
 
@@ -147,6 +159,48 @@ const TERRAIN_SWATCHES = [
   { label: "Mystic Water", hex: "#2989d8" },
 ];
 
+const BOTTLE_META: Record<
+  BottleContentId,
+  { name: string; badge: string; color: string; desc: string }
+> = {
+  empty: {
+    name: "Empty Glass Bottle",
+    badge: "EMPTY",
+    color: "#8fa4bf",
+    desc: "Ready to store a Red/Green/Blue Potion, a Healing Fairy, or a Golden Attack Bee.",
+  },
+  red_potion: {
+    name: "Crimson Life Potion",
+    badge: "RED POTION",
+    color: "#ff4769",
+    desc: "Drink to immediately restore 100% of your Life Hearts. Leaves an empty bottle.",
+  },
+  green_potion: {
+    name: "Emerald Magic Potion",
+    badge: "GREEN POTION",
+    color: "#2ee675",
+    desc: "Drink to immediately restore 100% Magic Power (MP) for your Flame Rod.",
+  },
+  blue_potion: {
+    name: "Sapphire Sovereign Elixir",
+    badge: "BLUE POTION",
+    color: "#3aa0ff",
+    desc: "Rare alchemical brew that restores ALL Life Hearts AND 100% Magic Power!",
+  },
+  fairy: {
+    name: "Captured Spring Fairy",
+    badge: "FAIRY",
+    color: "#ff7be5",
+    desc: "Heals 7 Full Hearts on use — OR automatically revives you if your Hearts hit zero!",
+  },
+  bee: {
+    name: "Golden Attack Bee",
+    badge: "GOLDEN BEE",
+    color: "#ffd23f",
+    desc: "Unleash a friendly 3D Golden Bee that chases and stings nearby monsters for 15s!",
+  },
+};
+
 export default function GameOverlay() {
   const phase = useGameStore((s) => s.phase);
   const zone = useGameStore((s) => s.zone);
@@ -164,6 +218,7 @@ export default function GameOverlay() {
   const fps = useGameStore((s) => s.fps);
   const nearShop = useGameStore((s) => s.nearShop);
   const shopOpen = useGameStore((s) => s.shopOpen);
+  const characterOpen = useGameStore((s) => s.characterOpen);
   const boomerang = useGameStore((s) => s.boomerang);
 
   // Map Editor Store Slice
@@ -181,6 +236,11 @@ export default function GameOverlay() {
   const restartGame = useGameStore((s) => s.restartGame);
   const toggleMute = useGameStore((s) => s.toggleMute);
   const setShopOpen = useGameStore((s) => s.setShopOpen);
+  const setCharacterOpen = useGameStore((s) => s.setCharacterOpen);
+  const equipHeroItem = useGameStore((s) => s.equipHeroItem);
+  const useBottleSlot = useGameStore((s) => s.useBottleSlot);
+  const fillBottleSlot = useGameStore((s) => s.fillBottleSlot);
+  const addEmptyBottle = useGameStore((s) => s.addEmptyBottle);
   const buyShopItem = useGameStore((s) => s.buyShopItem);
 
   const setEditorMode = useGameStore((s) => s.setEditorMode);
@@ -209,13 +269,14 @@ export default function GameOverlay() {
 
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Escape" && shopOpen) {
-        setShopOpen(false);
+      if (e.code === "Escape") {
+        if (shopOpen) setShopOpen(false);
+        if (characterOpen) setCharacterOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [shopOpen, setShopOpen]);
+  }, [shopOpen, characterOpen, setShopOpen, setCharacterOpen]);
 
   const showEditorToast = (msg: string) => {
     setEditorStatusMsg(msg);
@@ -268,16 +329,26 @@ export default function GameOverlay() {
     else hearts.push("empty");
   }
 
+  const mpPercent = Math.max(0, Math.min(100, ((hero.mp ?? 100) / (hero.maxMp || 100)) * 100));
+  const tunicMitigationLabel =
+    hero.equippedTunic === "red_mail"
+      ? "Crimson Mail (-75% DMG)"
+      : hero.equippedTunic === "blue_mail"
+      ? "Sapphire Mail (-50% DMG)"
+      : "Green Tunic (0% Red.)";
+
+  const filledBottlesCount = (hero.bottles ?? []).filter((b) => b !== "empty").length;
+
   const bossEnemy = enemies.find((e) => e.kind === "boss" && e.zone === zone);
   const activeMinions = enemies.filter(
     (e) => e.kind === "minion" && e.zone === zone && e.state !== "dead"
   ).length;
 
   let currentObjective =
-    "Visit Bramble's Shop in the East Clearing or find the Sanctum Key in the West";
+    "Light the East Sun Shrine Torches (R), Dig Dirt Patches (G), or find the Sanctum Key";
   if (zone === "frontier") {
     currentObjective =
-      "Explore the Elderwood Frontier — press Tab / Map Editor anytime to build & customize!";
+      "Explore the Elderwood Frontier — dig soft dirt patches (G) or open Map Editor (Tab)!";
   } else if (flags.chestUnlocked) {
     currentObjective =
       "Zeldo Crest Restored! Walk North through the Sanctum Exit to the Elderwood Frontier!";
@@ -343,26 +414,85 @@ export default function GameOverlay() {
 
       {/* TOP HUD BAR */}
       <header className="hud-top-bar">
-        {/* Left: Life Hearts, Zone Location & Gear Slots */}
+        {/* Left: Life Hearts, Magic Meter, Zone Location & Gear Slots */}
         <div className="hud-panel hud-left">
-          <div className="hud-section-label">LIFE</div>
+          <div className="hud-vitals-header">
+            <span className="hud-section-label">LIFE</span>
+            <span className="tunic-armor-pill" title="Equipped Chest Armor Damage Reduction">
+              {tunicMitigationLabel}
+            </span>
+          </div>
           <div className="hearts-row">
             {hearts.map((st, idx) => (
               <HeartIcon key={idx} state={st} index={idx} />
             ))}
           </div>
+
+          {/* Magic Power (MP) Bar */}
+          <div className="mp-bar-row" title="Magic Power (MP) — used by the Flame Rod (R / 3). Regenerates slowly or via Green/Blue Potions.">
+            <span className="mp-label">MAGIC</span>
+            <div className="mp-track">
+              <div className="mp-fill" style={{ width: `${mpPercent}%` }} />
+            </div>
+            <span className="mp-val">{Math.round(hero.mp ?? 100)}</span>
+          </div>
+
           <div className="zone-badge">{zoneLabel}</div>
 
           {/* Equipment / Action Bar */}
           <div className="gear-slots-row">
             <div
+              className={`gear-slot ${
+                (hero.swordChargeTimer ?? 0) >= 0.62
+                  ? "gear-slot-active"
+                  : "gear-slot-owned"
+              }`}
+              title="Tap Space/LMB to slash, or HOLD Space/LMB to charge a 360° Spin Attack (2x Damage)!"
+            >
+              <span className="gear-key">SPC</span>
+              <span className="gear-name">
+                {(hero.swordChargeTimer ?? 0) >= 0.62
+                  ? "SPIN READY!"
+                  : `Sword (${hero.swordDamage ?? 1} DMG)`}
+              </span>
+            </div>
+
+            <div
               className={`gear-slot ${hero.isBlocking ? "gear-slot-blocking" : "gear-slot-owned"}`}
-              title={`Hold Right-Click or Shift to Block (-${hero.shieldBlock ?? 1} Physical Damage)`}
+              title={`Hold Right-Click or Shift to Block (-${hero.shieldBlock ?? 1} Damage)`}
             >
               <span className="gear-key">RMB</span>
               <span className="gear-name">
                 {hero.isBlocking ? "GUARDING" : `Shield (-${hero.shieldBlock ?? 1})`}
               </span>
+            </div>
+
+            <div
+              className={`gear-slot ${
+                (hero.fireRodChargeTimer ?? 0) >= 0.55
+                  ? "gear-slot-active"
+                  : (hero.mp ?? 100) >= 12
+                  ? "gear-slot-owned"
+                  : "gear-slot-warn"
+              }`}
+              title="Tap R or 3 for a quick fireball (lights torches, 1 DMG). HOLD R or 3 to charge a heavy explosive fireball (2 DMG + burning ground fire)!"
+            >
+              <span className="gear-key">R</span>
+              <span className="gear-name">
+                {(hero.fireRodChargeTimer ?? 0) >= 0.55
+                  ? "FLAME MAX!"
+                  : (hero.fireRodChargeTimer ?? 0) > 0.1
+                  ? "Charging..."
+                  : "Flame Rod"}
+              </span>
+            </div>
+
+            <div
+              className="gear-slot gear-slot-owned"
+              title="Press G or 4 on soft dirt patches to dig up buried Rupees, Hearts, Bottles & Gear!"
+            >
+              <span className="gear-key">G</span>
+              <span className="gear-name">Shovel</span>
             </div>
 
             <div
@@ -385,7 +515,7 @@ export default function GameOverlay() {
                     : hero.boomerangCooldown > 0
                     ? `Boomerang (${hero.boomerangCooldown.toFixed(1)}s)`
                     : "Boomerang"
-                  : "No Boomerang"}
+                  : "Boomerang"}
               </span>
             </div>
 
@@ -404,6 +534,20 @@ export default function GameOverlay() {
                 {hero.hasBow ? `Bow (${hero.arrows})` : `Arrows: ${hero.arrows}`}
               </span>
             </div>
+
+            <button
+              type="button"
+              onClick={() => useBottleSlot((hero.bottles ?? []).findIndex((b) => b !== "empty"))}
+              className={`gear-slot gear-slot-btn ${
+                filledBottlesCount > 0 ? "gear-slot-owned" : "gear-slot-warn"
+              }`}
+              title="Press V or 5 to use your first filled Glass Bottle (Potion, Fairy, or Golden Bee)"
+            >
+              <span className="gear-key">V</span>
+              <span className="gear-name">
+                Bottles ({filledBottlesCount}/{(hero.bottles ?? []).length})
+              </span>
+            </button>
           </div>
         </div>
 
@@ -472,7 +616,7 @@ export default function GameOverlay() {
             )}
         </div>
 
-        {/* Right: Rupees, Sanctum Key, Shop Toggle, FPS, Objective, Mute */}
+        {/* Right: Rupees, Sanctum Key, Character Sheet Button, Shop Toggle, FPS, Objective, Mute */}
         <div className="hud-panel hud-right">
           <div className="hud-counters">
             <div className="counter-chip" title="Collected Rupees">
@@ -524,6 +668,17 @@ export default function GameOverlay() {
                   : "No Key"}
               </span>
             </div>
+
+            {phase === "playing" && !editorMode && (
+              <button
+                type="button"
+                onClick={() => setCharacterOpen(!characterOpen)}
+                className={`char-toggle-btn ${characterOpen ? "active" : ""}`}
+                title="Open Character Equipment, Tunics, Boots & Glass Bottles (Shortcut: C or I)"
+              >
+                ⚔ Gear &amp; Bottles (C)
+              </button>
+            )}
 
             {phase === "playing" && !editorMode && nearShop && (
               <button
@@ -1077,6 +1232,77 @@ export default function GameOverlay() {
                   <span>Solid Collision Obstacle in Play Mode</span>
                 </label>
 
+                {selectedProp.prefab === "wall_torch" && (
+                  <>
+                    <label className="inspector-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={selectedProp.lit !== false}
+                        onChange={(e) =>
+                          updatePropInstance(selectedProp.id, {
+                            lit: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Torch Currently Lit (Shoot with Flame Rod R to Light)</span>
+                    </label>
+                    <label className="inspector-field">
+                      <span>Torch Combination Puzzle Target</span>
+                      <select
+                        value={selectedProp.puzzleTarget ?? "none"}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          updatePropInstance(selectedProp.id, {
+                            puzzleTarget:
+                              val === "lit" || val === "unlit" ? val : undefined,
+                          });
+                        }}
+                      >
+                        <option value="none">None (Decorative Brazier)</option>
+                        <option value="lit">Puzzle Torch: MUST BE LIT</option>
+                        <option value="unlit">Puzzle Torch: MUST BE UNLIT</option>
+                      </select>
+                    </label>
+                  </>
+                )}
+
+                {selectedProp.prefab === "dirt_patch" && (
+                  <>
+                    <label className="inspector-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedProp.dug)}
+                        onChange={(e) =>
+                          updatePropInstance(selectedProp.id, {
+                            dug: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Already Dug Up</span>
+                    </label>
+                    <label className="inspector-field">
+                      <span>Buried Treasure (Dig with Shovel G)</span>
+                      <select
+                        value={selectedProp.buriedReward ?? "random"}
+                        onChange={(e) =>
+                          updatePropInstance(selectedProp.id, {
+                            buriedReward: e.target.value as BuriedRewardKind,
+                          })
+                        }
+                      >
+                        <option value="random">Random Loot Roll (Rupees / Hearts)</option>
+                        <option value="blue_rupee">Blue Rupee (+5 Rupees)</option>
+                        <option value="red_rupee">Red Rupee (+20 Rupees)</option>
+                        <option value="heart">Recovery Heart (+1 Heart)</option>
+                        <option value="bottle">Empty Glass Bottle</option>
+                        <option value="red_mail">Crimson Dragon Mail (-75% DMG)</option>
+                        <option value="tempered_blade">Tempered Sun-Blade (2 DMG)</option>
+                        <option value="swift_boots">Swiftwind Boots (+25% Speed)</option>
+                      </select>
+                    </label>
+                  </>
+                )}
+
                 <div className="inspector-actions-row">
                   <button
                     type="button"
@@ -1500,6 +1726,363 @@ export default function GameOverlay() {
       )}
 
       {/* =========================================================
+          HERO CHARACTER EQUIPMENT, ARMOR TUNICS, BOOTS & GLASS BOTTLES MODAL
+         ========================================================= */}
+      {phase === "playing" && !editorMode && characterOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card char-sheet-card">
+            <div className="shop-header">
+              <div>
+                <div className="shop-pill">CHAMPION LOADOUT &amp; ALCHEMY BELT</div>
+                <h2 className="shop-title">CHARACTER EQUIPMENT &amp; BOTTLES</h2>
+              </div>
+              <div className="char-summary-badges">
+                <span className="char-stat-badge">
+                  Sword: <strong>{hero.swordDamage ?? 1} DMG</strong> (Spin:{" "}
+                  <strong>{(hero.swordDamage ?? 1) * 2} DMG</strong>)
+                </span>
+                <span className="char-stat-badge">
+                  Armor:{" "}
+                  <strong>
+                    {hero.equippedTunic === "red_mail"
+                      ? "-75% All DMG"
+                      : hero.equippedTunic === "blue_mail"
+                      ? "-50% All DMG"
+                      : "0% Reduction"}
+                  </strong>
+                </span>
+                <span className="char-stat-badge">
+                  Boots:{" "}
+                  <strong>
+                    {hero.equippedBoots === "swift_boots"
+                      ? "+25% Speed"
+                      : hero.equippedBoots === "titan_greaves"
+                      ? "+12% Spd / Poise"
+                      : "1.0x Speed"}
+                  </strong>
+                </span>
+              </div>
+            </div>
+
+            <div className="char-equip-grid">
+              {/* 1. PRIMARY HAND */}
+              <div className="char-slot-panel">
+                <div className="char-slot-header">
+                  <span className="char-slot-title">PRIMARY HAND (SWORD)</span>
+                  <span className="char-slot-sub">Hold Space/LMB for 2x Spin Attack</span>
+                </div>
+                <div className="char-options-col">
+                  {(
+                    [
+                      {
+                        id: "traveler_blade" as PrimaryHandId,
+                        name: "Traveler's Broadsword",
+                        stats: "1 Base DMG • 2 Spin DMG",
+                        desc: "Balanced steel blade forged for swift slashes and 360° spin attacks.",
+                      },
+                      {
+                        id: "tempered_blade" as PrimaryHandId,
+                        name: "Tempered Sun-Blade",
+                        stats: "2 Base DMG • 4 Spin DMG",
+                        desc: "Masterwork golden blade unearthed with the Shovel or equipped here.",
+                      },
+                    ] as const
+                  ).map((item) => {
+                    const active = hero.equippedPrimary === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => equipHeroItem("primary", item.id)}
+                        className={`char-option-btn ${active ? "active" : ""}`}
+                      >
+                        <div className="char-option-top">
+                          <span className="char-option-name">{item.name}</span>
+                          <span className="char-option-stat">{item.stats}</span>
+                        </div>
+                        <div className="char-option-desc">{item.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 2. OFFHAND SHIELD */}
+              <div className="char-slot-panel">
+                <div className="char-slot-header">
+                  <span className="char-slot-title">OFFHAND (SHIELD)</span>
+                  <span className="char-slot-sub">Hold RMB or Shift to Guard</span>
+                </div>
+                <div className="char-options-col">
+                  {(
+                    [
+                      {
+                        id: "wooden_buckler" as OffhandId,
+                        name: "Traveler's Kite Shield",
+                        stats: "Blocks 1 Physical DMG",
+                        desc: "Sturdy iron-rimmed shield that catches arrows and absorbs melee strikes.",
+                      },
+                      {
+                        id: "mirror_shield" as OffhandId,
+                        name: "Aegis Mirror Shield",
+                        stats: "Blocks 2 Physical & Magic DMG",
+                        desc: "Polished silver-gold ward that halves heavy impacts and arcane bolts.",
+                      },
+                    ] as const
+                  ).map((item) => {
+                    const active = hero.equippedOffhand === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => equipHeroItem("offhand", item.id)}
+                        className={`char-option-btn ${active ? "active" : ""}`}
+                      >
+                        <div className="char-option-top">
+                          <span className="char-option-name">{item.name}</span>
+                          <span className="char-option-stat">{item.stats}</span>
+                        </div>
+                        <div className="char-option-desc">{item.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 3. CHEST ARMOR (TUNICS — 0% / 50% / 75% MITIGATION) */}
+              <div className="char-slot-panel">
+                <div className="char-slot-header">
+                  <span className="char-slot-title">CHEST ARMOR (TUNICS)</span>
+                  <span className="char-slot-sub">Physical &amp; Magical Damage Mitigation</span>
+                </div>
+                <div className="char-options-col">
+                  {(
+                    [
+                      {
+                        id: "green_tunic" as TunicId,
+                        name: "Forest Green Tunic (Default)",
+                        stats: "0% Damage Reduction",
+                        desc: "Classic emerald adventurer's tunic. Takes standard baseline 1.0x damage.",
+                      },
+                      {
+                        id: "blue_mail" as TunicId,
+                        name: "Sapphire Mail",
+                        stats: "-50% Physical & Magic DMG",
+                        desc: "Enchanted cerulean chainmail (also unlocked by the Sun Shrine Torch Puzzle!).",
+                      },
+                      {
+                        id: "red_mail" as TunicId,
+                        name: "Crimson Dragon Mail",
+                        stats: "-75% Physical & Magic DMG",
+                        desc: "Legendary ruby-woven mail that reduces all incoming damage by 75%!",
+                      },
+                    ] as const
+                  ).map((item) => {
+                    const active = hero.equippedTunic === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => equipHeroItem("tunic", item.id)}
+                        className={`char-option-btn ${active ? "active" : ""}`}
+                      >
+                        <div className="char-option-top">
+                          <span className="char-option-name">{item.name}</span>
+                          <span className="char-option-stat">{item.stats}</span>
+                        </div>
+                        <div className="char-option-desc">{item.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 4. BOOTS SLOT */}
+              <div className="char-slot-panel">
+                <div className="char-slot-header">
+                  <span className="char-slot-title">BOOTS &amp; FOOTWEAR</span>
+                  <span className="char-slot-sub">Movement Speed &amp; Stance Poise</span>
+                </div>
+                <div className="char-options-col">
+                  {(
+                    [
+                      {
+                        id: "leather_boots" as BootsId,
+                        name: "Traveler's Leather Boots",
+                        stats: "1.0x Base Speed",
+                        desc: "Supple calfskin boots for everyday overland trekking.",
+                      },
+                      {
+                        id: "swift_boots" as BootsId,
+                        name: "Swiftwind Pegasus Boots",
+                        stats: "+25% Run Speed",
+                        desc: "Wing-stitched boots that boost your movement speed by 25% to dodge charges!",
+                      },
+                      {
+                        id: "titan_greaves" as BootsId,
+                        name: "Titan Iron Greaves",
+                        stats: "+12% Speed • -50% Knockback",
+                        desc: "Heavy steel greaves that anchor your footing when blocking heavy attacks.",
+                      },
+                    ] as const
+                  ).map((item) => {
+                    const active = hero.equippedBoots === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => equipHeroItem("boots", item.id)}
+                        className={`char-option-btn ${active ? "active" : ""}`}
+                      >
+                        <div className="char-option-top">
+                          <span className="char-option-name">{item.name}</span>
+                          <span className="char-option-stat">{item.stats}</span>
+                        </div>
+                        <div className="char-option-desc">{item.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* GLASS BOTTLES BELT SECTION */}
+            <div className="bottles-section">
+              <div className="bottles-header-row">
+                <div>
+                  <span className="char-slot-title">
+                    GLASS BOTTLES BELT ({(hero.bottles ?? []).length} / 6 BOTTLES)
+                  </span>
+                  <span className="char-slot-sub" style={{ marginLeft: 10 }}>
+                    Press <strong>V</strong> or <strong>5</strong> during battle to use your first
+                    filled bottle, or click any bottle below!
+                  </span>
+                </div>
+                {(hero.bottles ?? []).length < 6 && (
+                  <button
+                    type="button"
+                    onClick={addEmptyBottle}
+                    className="bottle-add-btn"
+                  >
+                    ＋ Add Empty Bottle
+                  </button>
+                )}
+              </div>
+
+              <div className="bottles-grid">
+                {(hero.bottles ?? []).map((content, idx) => {
+                  const meta = BOTTLE_META[content] ?? BOTTLE_META.empty;
+                  const isEmpty = content === "empty";
+                  return (
+                    <div
+                      key={idx}
+                      className={`bottle-card ${isEmpty ? "bottle-card-empty" : "bottle-card-filled"}`}
+                    >
+                      <div className="bottle-card-top">
+                        <span className="bottle-slot-num">BOTTLE #{idx + 1}</span>
+                        <span
+                          className="bottle-badge"
+                          style={{
+                            borderColor: meta.color,
+                            color: meta.color,
+                          }}
+                        >
+                          {meta.badge}
+                        </span>
+                      </div>
+                      <div className="bottle-name">{meta.name}</div>
+                      <p className="bottle-desc">{meta.desc}</p>
+
+                      {!isEmpty ? (
+                        <div className="bottle-actions-row">
+                          <button
+                            type="button"
+                            onClick={() => useBottleSlot(idx)}
+                            className="shop-buy-btn bottle-use-btn"
+                          >
+                            {content === "bee"
+                              ? "Unleash Golden Bee!"
+                              : content === "fairy"
+                              ? "Release Fairy (+7 Hearts)"
+                              : "Drink Potion Now"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => fillBottleSlot(idx, "empty")}
+                            className="bottle-empty-btn"
+                            title="Pour out bottle contents"
+                          >
+                            Empty
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="bottle-fill-grid">
+                          <button
+                            type="button"
+                            onClick={() => fillBottleSlot(idx, "red_potion")}
+                            className="bottle-fill-chip"
+                            title="Fill with Crimson Life Potion (Restores All Hearts)"
+                          >
+                            + Red Potion
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => fillBottleSlot(idx, "green_potion")}
+                            className="bottle-fill-chip"
+                            title="Fill with Emerald Magic Potion (Restores All Magic)"
+                          >
+                            + Green Potion
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => fillBottleSlot(idx, "blue_potion")}
+                            className="bottle-fill-chip"
+                            title="Fill with Sapphire Elixir (Restores All Hearts & Magic)"
+                          >
+                            + Blue Potion
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => fillBottleSlot(idx, "fairy")}
+                            className="bottle-fill-chip"
+                            title="Capture a Spring Fairy (Heals 7 Hearts or Auto-Revives on Death)"
+                          >
+                            + Fairy
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => fillBottleSlot(idx, "bee")}
+                            className="bottle-fill-chip"
+                            title="Capture a Golden Bee (Unleash to Sting Enemies)"
+                          >
+                            + Golden Bee
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="shop-footer">
+              <span className="shop-footer-hint">
+                Tip: Hold <strong>Space/LMB</strong> to charge Spin Attack (2x DMG) • Tap/Hold{" "}
+                <strong>R</strong> for Flame Rod • Press <strong>G</strong> to Dig Soft Dirt Patches
+              </span>
+              <button
+                type="button"
+                onClick={() => setCharacterOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Character Sheet (C / Esc)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
           MERCHANT BRAMBLE'S CURIO SHOP MODAL (FIXED CENTER OVERLAY!)
          ========================================================= */}
       {phase === "playing" && !editorMode && shopOpen && (
@@ -1516,8 +2099,8 @@ export default function GameOverlay() {
               </div>
             </div>
             <p className="shop-greeting">
-              &ldquo;Welcome, traveler! Spend your hard-earned Rupees on fine weapons and
-              supplies. Remember — the Ranger&apos;s Bow and Arrows are sold separately!&rdquo;
+              &ldquo;Welcome, traveler! Stock up on weapons, arrows, Glass Bottles, and
+              alchemical potions for your journey!&rdquo;
             </p>
 
             <div className="shop-items-grid">
@@ -1588,26 +2171,76 @@ export default function GameOverlay() {
 
               <div className="shop-item-card">
                 <div className="shop-item-top">
-                  <span className="shop-item-name">Crimson Heart Elixir</span>
+                  <span className="shop-item-name">Empty Glass Bottle</span>
                   <span className="shop-item-hotkey">
-                    HP: {(hero.hp / 2).toFixed(1)}/{(hero.maxHp / 2).toFixed(1)}
+                    Belt: {(hero.bottles ?? []).length}/6
                   </span>
                 </div>
                 <p className="shop-item-desc">
-                  A warm alchemical draught brewed from sun-berries. Immediately restores
-                  2 full Hearts.
+                  Adds an extra Glass Bottle to your belt for storing Potions, Fairies, or
+                  Golden Attack Bees.
                 </p>
                 <button
                   type="button"
-                  disabled={hero.hp >= hero.maxHp || hero.rupees < 10}
-                  onClick={() => buyShopItem("heart")}
+                  disabled={(hero.bottles ?? []).length >= 6 || hero.rupees < 20}
+                  onClick={() => buyShopItem("bottle")}
                   className="shop-buy-btn"
                 >
-                  {hero.hp >= hero.maxHp
-                    ? "Full Health"
-                    : hero.rupees >= 10
-                    ? "Drink — 10 Rupees"
-                    : "Need 10 Rupees"}
+                  {(hero.bottles ?? []).length >= 6
+                    ? "Max 6 Bottles"
+                    : hero.rupees >= 20
+                    ? "Buy — 20 Rupees"
+                    : "Need 20 Rupees"}
+                </button>
+              </div>
+
+              <div className="shop-item-card">
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Bottled Red Potion</span>
+                  <span className="shop-item-hotkey">Requires Empty Bottle</span>
+                </div>
+                <p className="shop-item-desc">
+                  Fills an Empty Bottle with Crimson Life Potion. Drink anytime (V) to
+                  restore 100% of your Hearts!
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    !(hero.bottles ?? []).includes("empty") || hero.rupees < 15
+                  }
+                  onClick={() => buyShopItem("red_potion")}
+                  className="shop-buy-btn"
+                >
+                  {!(hero.bottles ?? []).includes("empty")
+                    ? "No Empty Bottle"
+                    : hero.rupees >= 15
+                    ? "Fill — 15 Rupees"
+                    : "Need 15 Rupees"}
+                </button>
+              </div>
+
+              <div className="shop-item-card">
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Bottled Blue Elixir</span>
+                  <span className="shop-item-hotkey">Requires Empty Bottle</span>
+                </div>
+                <p className="shop-item-desc">
+                  Fills an Empty Bottle with Sapphire Elixir. Restores ALL Hearts and 100%
+                  Magic Power when drunk!
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    !(hero.bottles ?? []).includes("empty") || hero.rupees < 25
+                  }
+                  onClick={() => buyShopItem("blue_potion")}
+                  className="shop-buy-btn"
+                >
+                  {!(hero.bottles ?? []).includes("empty")
+                    ? "No Empty Bottle"
+                    : hero.rupees >= 25
+                    ? "Fill — 25 Rupees"
+                    : "Need 25 Rupees"}
                 </button>
               </div>
             </div>
@@ -1666,27 +2299,31 @@ export default function GameOverlay() {
           ) : (
             <>
               <span>
-                <strong>WASD / Arrows</strong> Move
+                <strong>WASD</strong> Move
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>Left-Click / Space</strong> Sword
+                <strong>Tap/Hold Space/LMB</strong> Slash / 2x Spin Attack
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>Right-Click / Shift</strong> Shield Block
+                <strong>Tap/Hold R</strong> Flame Rod
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>Q</strong> Boomerang
+                <strong>G</strong> Dig Shovel
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>E</strong> Bow
+                <strong>V</strong> Use Bottle
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>Tab / F2</strong> Map Editor
+                <strong>C / I</strong> Gear &amp; Bottles
+              </span>
+              <span className="dot-sep">•</span>
+              <span>
+                <strong>Tab</strong> Map Editor
               </span>
             </>
           )}
@@ -1707,27 +2344,28 @@ export default function GameOverlay() {
             <p className="story-blurb">
               Darkness stirs beneath the northern cliffs. Dread Warden Malakor has stolen
               the radiant <strong>Zeldo Crest</strong> and sealed it within the Sunken
-              Sanctum. Visit <strong>Bramble&apos;s Shop</strong> in the South Clearing,
-              recover the <strong>Sanctum Key</strong> from the Western Ruins, or open the{" "}
-              <strong>3D Map Editor</strong> to customize the world!
+              Sanctum. Wield your <strong>Charged Spin Attack</strong>, light combination
+              torches with the <strong>Flame Rod (R)</strong>, unearth buried treasures
+              with the <strong>Shovel (G)</strong>, and customize your Tunics, Boots &amp;
+              Glass Bottles in the <strong>Character Sheet (C)</strong>!
             </p>
 
             <div className="controls-grid">
               <div className="control-box">
-                <span className="control-key">WASD / Arrows</span>
-                <span className="control-desc">Move Hero</span>
+                <span className="control-key">Tap / Hold Space or LMB</span>
+                <span className="control-desc">Sword Slash / 2x Spin Attack</span>
               </div>
               <div className="control-box">
-                <span className="control-key">Left-Click / Space</span>
-                <span className="control-desc">Sword Slash</span>
+                <span className="control-key">Tap / Hold R (or 3)</span>
+                <span className="control-desc">Flame Rod &amp; Explosive Fireball</span>
               </div>
               <div className="control-box">
-                <span className="control-key">Right-Click / Shift</span>
-                <span className="control-desc">Hold Shield Block</span>
+                <span className="control-key">G (Shovel) • V (Bottle)</span>
+                <span className="control-desc">Dig Dirt Patches &amp; Drink Potions</span>
               </div>
               <div className="control-box">
-                <span className="control-key">Q (Boomerang) • E (Bow)</span>
-                <span className="control-desc">Use Shop Weapons</span>
+                <span className="control-key">C / I (Character) • RMB (Block)</span>
+                <span className="control-desc">Equip Tunics, Boots &amp; Shield</span>
               </div>
             </div>
 
