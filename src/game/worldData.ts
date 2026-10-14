@@ -1,5 +1,5 @@
-export type ZoneId = "overworld" | "dungeon" | "frontier";
-export type DungeonRoomId = "entry" | "hall" | "sanctum";
+export type ZoneId = "overworld" | "grove" | "dungeon" | "frontier";
+export type DungeonRoomId = "entry" | "hall" | "arena" | "sanctum";
 export type EnemyKind =
   | "slime"
   | "goblin"
@@ -160,7 +160,7 @@ export interface EnemySpawn {
   shieldArmor?: EnemyShieldArmor; // "wood" (Wooden Shield) or "ice" (Ice Armor) — blocks Sword/Arrows until burned/melted with Flame Rod (R)!
   shockArmor?: boolean; // Electrified/spiked shell that hurts on contact or melee unless stunned for 2s by the Boomerang (Q)!
   isBounty?: boolean; // Gold/Crimson Bounty Monster variant that drops 5x Rupees when killed!
-  questGroup?: "heirloom"; // Marks monsters belonging to the Map 1 Heirloom Recovery NPC sub-quest
+  questGroup?: "heirloom" | "grove_ambush"; // Marks monsters belonging to the Heirloom NPC sub-quest or West Grove Ambush Trial
 }
 
 export interface WorldRupeeSpawn {
@@ -220,9 +220,22 @@ export const HEIRLOOM_NPC_POS = {
   z: -29.2,
 };
 
+// Map 1 Central Crossroads Hub Guide NPC (Scout Lyra — gives directions for the 4 Hub Exits!)
+export const GUIDE_NPC_POS = {
+  x: -4.2,
+  z: -5.2,
+};
+
+// Dungeon Entry Key & Flame Rod Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
-  x: -28,
-  z: 11,
+  x: 0,
+  z: 15.5,
+};
+
+// Locked Gate guarding the North Exit of Map 1 into Map 2 (First Dungeon — requires Key from West Map 1B!)
+export const DUNGEON_ENTRY_GATE_POS = {
+  x: 0,
+  z: 31.8,
 };
 
 export const OVERWORLD_PORTAL_POS = {
@@ -242,7 +255,7 @@ export const DUNGEON_ENTRY_SPAWN = {
 
 export const OVERWORLD_RETURN_SPAWN = {
   x: 0,
-  z: 30.5,
+  z: 28.5,
 };
 
 export const LOCKED_GATE_POS = {
@@ -278,6 +291,7 @@ export const FRONTIER_EXIT_PORTAL_POS = {
 export const BOSS_MAX_LUNGE_RANGE = 14.5;
 
 export const INITIAL_PORTALS: MapPortal[] = [
+  // NORTH EXIT: Map 1 (Central Hub) -> Map 2 (The First Dungeon: Sunken Sanctum)
   {
     id: "portal-ow-sanctum",
     zone: "overworld",
@@ -288,8 +302,8 @@ export const INITIAL_PORTALS: MapPortal[] = [
     targetX: DUNGEON_ENTRY_SPAWN.x,
     targetZ: DUNGEON_ENTRY_SPAWN.z,
     targetFacing: 0,
-    label: "The Sunken Sanctum",
-    sublabel: "Room I: Torchlit Antechamber — Watch out for the pack of Dungeon Porings!",
+    label: "Map 2: The Sunken Sanctum",
+    sublabel: "Room I: Push-Block Antechamber — 4 Rooms await on the path to Warden Malakor!",
     color: "cyan",
   },
   {
@@ -302,23 +316,68 @@ export const INITIAL_PORTALS: MapPortal[] = [
     targetX: OVERWORLD_RETURN_SPAWN.x,
     targetZ: OVERWORLD_RETURN_SPAWN.z,
     targetFacing: Math.PI,
-    label: "Whispering Vale",
-    sublabel: "Returned to the sunlit overworld.",
+    label: "Map 1: Whispering Crossroads",
+    sublabel: "Returned to the Central Hub from the Sunken Sanctum.",
     color: "cyan",
   },
+  // DUNGEON BACK DOOR: Returns the victorious Hero from Map 2 Boss Room to the Map 1 Crossroads Hub to head East!
   {
     id: "portal-dg-frontier",
     zone: "dungeon",
     x: BOSS_EXIT_PORTAL_POS.x,
     z: BOSS_EXIT_PORTAL_POS.z,
     radius: 2.1,
+    targetZone: "overworld",
+    targetX: 0,
+    targetZ: 2.5,
+    targetFacing: Math.PI / 2,
+    label: "Map 1: Central Crossroads Hub",
+    sublabel: "Sanctum Conquered! Head EAST along the Crossroads and burn the Dry Vines [R] to enter Map 3!",
+    color: "gold",
+  },
+  // WEST EXIT: Map 1 (Central Hub West) -> Map 1B (The Mini-Cave / Forest Grove)
+  {
+    id: "portal-ow-grove",
+    zone: "overworld",
+    x: -34.8,
+    z: -2.5,
+    radius: 2.2,
+    targetZone: "grove",
+    targetX: 0,
+    targetZ: -24.5,
+    targetFacing: 0,
+    label: "Map 1B: Whispering Forest Grove",
+    sublabel: "Hit the Crystal Switch with your Boomerang [Q] or defeat the 3 Ambush Monsters for the Dungeon Key & Flame Rod!",
+    color: "emerald",
+  },
+  {
+    id: "portal-gr-overworld",
+    zone: "grove",
+    x: 0,
+    z: -28.5,
+    radius: 2.1,
+    targetZone: "overworld",
+    targetX: -30.5,
+    targetZ: -2.5,
+    targetFacing: Math.PI / 2,
+    label: "Map 1: Whispering Crossroads",
+    sublabel: "Returned to the West Crossroads of the Central Hub.",
+    color: "emerald",
+  },
+  // EAST EXIT: Map 1 (Central Hub East, blocked by Dry Vines & Unlit Torches) -> Map 3 (The Burned Pass / Next Biome)
+  {
+    id: "portal-ow-frontier",
+    zone: "overworld",
+    x: 34.8,
+    z: -2.5,
+    radius: 2.2,
     targetZone: "frontier",
     targetX: FRONTIER_ENTRY_SPAWN.x,
     targetZ: FRONTIER_ENTRY_SPAWN.z,
     targetFacing: 0,
-    label: "Elderwood Frontier",
-    sublabel: "Beyond the Sunken Sanctum — Explore the highlands or press Tab to customize with the Map Editor!",
-    color: "emerald",
+    label: "Map 3: The Burned Pass (Elderwood Frontier)",
+    sublabel: "You burned the Eastern Vine Barrier and stepped into Map 3 with more Hearts and your full toolkit!",
+    color: "crimson",
   },
   {
     id: "portal-fr-dungeon",
@@ -326,13 +385,13 @@ export const INITIAL_PORTALS: MapPortal[] = [
     x: FRONTIER_EXIT_PORTAL_POS.x,
     z: FRONTIER_EXIT_PORTAL_POS.z,
     radius: 2.0,
-    targetZone: "dungeon",
-    targetX: 0,
-    targetZ: 31.0,
-    targetFacing: Math.PI,
-    label: "The Sunken Sanctum",
-    sublabel: "Returned to Room III: Dread Sanctum.",
-    color: "emerald",
+    targetZone: "overworld",
+    targetX: 29.0,
+    targetZ: -2.5,
+    targetFacing: -Math.PI / 2,
+    label: "Map 1: Whispering Crossroads (East Pass)",
+    sublabel: "Returned to the East Gate of the Central Hub.",
+    color: "crimson",
   },
   {
     id: "portal-ow-secret-cave",
@@ -973,6 +1032,77 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     rupeeDrop: "red",
     shieldArmor: "ice",
   },
+  // Map 1 Central Crossroads Weak Slimes (right near the Hub intersection & bushes!)
+  {
+    id: "ow-crossroads-slime-1",
+    kind: "slime",
+    zone: "overworld",
+    x: -5.5,
+    z: -1.2,
+    hp: 2,
+    weight: 0.5,
+    aggroRadius: 7.5,
+    speed: 4.4,
+    damage: 1,
+    rupeeDrop: "green",
+  },
+  {
+    id: "ow-crossroads-slime-2",
+    kind: "slime",
+    zone: "overworld",
+    x: 5.8,
+    z: -1.2,
+    hp: 2,
+    weight: 0.5,
+    aggroRadius: 7.5,
+    speed: 4.4,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  // Map 1B (West Exit: The Mini-Cave / Forest Grove) — 3 Ambush Monsters (`questGroup: "grove_ambush"`)
+  // Defeating all 3 ambush monsters OR hitting the Grove Crystal Switch with the Boomerang [Q] unseals the Dungeon Entry Key & Flame Rod!
+  {
+    id: "gr-ambush-slime-1",
+    kind: "slime",
+    zone: "grove",
+    x: -5.8,
+    z: -9.5,
+    hp: 3,
+    weight: 0.5,
+    aggroRadius: 9.0,
+    speed: 4.8,
+    damage: 1,
+    rupeeDrop: "blue",
+    questGroup: "grove_ambush",
+  },
+  {
+    id: "gr-ambush-goblin-1",
+    kind: "goblin",
+    zone: "grove",
+    x: 5.8,
+    z: -7.5,
+    hp: 4,
+    weight: 2.0,
+    aggroRadius: 9.0,
+    speed: 5.3,
+    damage: 1,
+    rupeeDrop: "blue",
+    questGroup: "grove_ambush",
+  },
+  {
+    id: "gr-ambush-goblin-2",
+    kind: "goblin",
+    zone: "grove",
+    x: 0,
+    z: -2.0,
+    hp: 4,
+    weight: 2.0,
+    aggroRadius: 9.2,
+    speed: 5.4,
+    damage: 1,
+    rupeeDrop: "red",
+    questGroup: "grove_ambush",
+  },
 ];
 
 export const INITIAL_WORLD_RUPEES: WorldRupeeSpawn[] = [
@@ -983,10 +1113,20 @@ export const INITIAL_WORLD_RUPEES: WorldRupeeSpawn[] = [
   { id: "rupee-ow-start-4", zone: "overworld", x: 18, z: -26, tier: "blue", value: 5 },
   // Big Red Rupee (+20) perched in the middle of the River Stream — unreachable on foot, fetch with Boomerang [Q]!
   { id: "rupee-ow-river-gap", zone: "overworld", x: 7.5, z: -20.5, tier: "red", value: 20 },
+  // Western Ruins Water Moat Big Red Rupee (+20) — fetch across the moat with Boomerang [Q]!
+  { id: "rupee-ow-west-moat", zone: "overworld", x: -28.0, z: 11.0, tier: "red", value: 20 },
+  // Central Crossroads Locked Ledge Treasure Cache (unreachable until Briar/Boulder barrier is cleared!)
+  { id: "rupee-ow-ledge-1", zone: "overworld", x: -13.2, z: 17.8, tier: "red", value: 20 },
+  { id: "rupee-ow-ledge-2", zone: "overworld", x: -10.8, z: 17.8, tier: "red", value: 20 },
+  { id: "rupee-ow-ledge-heart", zone: "overworld", x: -12.0, z: 19.0, tier: "heart", value: 2 },
   // Overworld scenic pickups
   { id: "rupee-ow-3", zone: "overworld", x: 31, z: -12, tier: "red", value: 20 },
   { id: "rupee-ow-4", zone: "overworld", x: 29, z: 16, tier: "red", value: 20 },
   { id: "rupee-ow-5", zone: "overworld", x: -32, z: -10, tier: "blue", value: 5 },
+  // Map 1B (West Exit: Whispering Forest Grove) pickups
+  { id: "rupee-gr-1", zone: "grove", x: -12.5, z: -4.0, tier: "blue", value: 5 },
+  { id: "rupee-gr-2", zone: "grove", x: 12.5, z: -4.0, tier: "blue", value: 5 },
+  { id: "rupee-gr-3", zone: "grove", x: 9.5, z: 5.5, tier: "red", value: 20 },
   // Dungeon Room 1 Big Red Rupee (+20) behind low water blocks — fetch with Boomerang [Q]!
   { id: "rupee-dg-water-gap", zone: "dungeon", x: 12.4, z: -28.5, tier: "red", value: 20 },
   // Dungeon alcove pickups
@@ -1004,19 +1144,20 @@ export const INITIAL_WORLD_RUPEES: WorldRupeeSpawn[] = [
 ];
 
 /**
- * Generates the initial individual 3D environment props for both Overworld and Dungeon
+ * Generates the initial individual 3D environment props for Overworld (Map 1 Hub),
+ * Forest Grove (Map 1B West), Sunken Sanctum (Map 2 North 4-Room Dungeon), and Burned Pass (Map 3 East)
  * so that every tree, bush, boulder, pillar, torch, crate, bridge, road, cliff, and wall
  * can be individually selected, moved, scaled, duplicated, or deleted in the Map Editor!
  */
 export function buildInitialMapProps(): MapPropInstance[] {
   const props: MapPropInstance[] = [];
 
-  // 1. Overworld Roads & Courtyards
+  // 1. Overworld Roads & 4-Exit Hub Courtyards (North, South, East, West)
   props.push(
     {
       id: "prop-ow-main-road",
       prefab: "path_tile",
-      name: "Main North-South Road",
+      name: "Main North-South Hub Road",
       zone: "overworld",
       x: 0,
       y: 0,
@@ -1033,18 +1174,18 @@ export function buildInitialMapProps(): MapPropInstance[] {
     {
       id: "prop-ow-cross-road",
       prefab: "path_tile",
-      name: "East-West Crossroads",
+      name: "East-West Hub Crossroads (West Grove <-> East Burned Pass)",
       zone: "overworld",
       x: 0,
       y: 0,
       z: -2.5,
       rotY: 0,
-      scaleX: 54,
+      scaleX: 70,
       scaleY: 1,
-      scaleZ: 4.4,
+      scaleZ: 4.6,
       hasCollider: false,
-      colliderWidth: 54,
-      colliderDepth: 4.4,
+      colliderWidth: 70,
+      colliderDepth: 4.6,
       colliderKind: "ruin",
     },
     {
@@ -1084,7 +1225,7 @@ export function buildInitialMapProps(): MapPropInstance[] {
     {
       id: "prop-ow-temple-arch",
       prefab: "temple_arch",
-      name: "Sanctum Temple Facade",
+      name: "North Exit: Sanctum Temple Facade (Map 2)",
       zone: "overworld",
       x: 0,
       y: 0,
@@ -1096,6 +1237,40 @@ export function buildInitialMapProps(): MapPropInstance[] {
       hasCollider: false,
       colliderWidth: 10,
       colliderDepth: 3.2,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-ow-west-exit-arch",
+      prefab: "temple_arch",
+      name: "West Exit: Forest Grove Archway (Map 1B)",
+      zone: "overworld",
+      x: -35.2,
+      y: 0,
+      z: -2.5,
+      rotY: Math.PI / 2,
+      scaleX: 0.92,
+      scaleY: 0.92,
+      scaleZ: 0.92,
+      hasCollider: false,
+      colliderWidth: 9.2,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-ow-east-exit-arch",
+      prefab: "temple_arch",
+      name: "East Exit: Burned Pass Archway (Map 3)",
+      zone: "overworld",
+      x: 35.2,
+      y: 0,
+      z: -2.5,
+      rotY: -Math.PI / 2,
+      scaleX: 0.92,
+      scaleY: 0.92,
+      scaleZ: 0.92,
+      hasCollider: false,
+      colliderWidth: 9.2,
+      colliderDepth: 3.0,
       colliderKind: "ruin",
     }
   );
@@ -1138,14 +1313,18 @@ export function buildInitialMapProps(): MapPropInstance[] {
     }
   );
 
-  // 3. Overworld Perimeter Cliff Ridges
+  // 3. Overworld Perimeter Cliff Ridges (with West Exit & East Exit gaps at z = -2.5!)
   const cliffDefs = [
     { id: "ow-border-s", name: "South Cliff Ridge", minX: -40, maxX: 40, minZ: -40, maxZ: -37.5, h: 4.5 },
     { id: "ow-border-n-w", name: "North-West Cliff Ridge", minX: -40, maxX: -8, minZ: 36, maxZ: 40, h: 5.5 },
     { id: "ow-border-n-e", name: "North-East Cliff Ridge", minX: 8, maxX: 40, minZ: 36, maxZ: 40, h: 5.5 },
     { id: "ow-border-n-back", name: "Sanctum Cliff Backdrop", minX: -8, maxX: 8, minZ: 36.5, maxZ: 40, h: 6.5 },
-    { id: "ow-border-w", name: "West Cliff Wall", minX: -40, maxX: -36.5, minZ: -40, maxZ: 40, h: 4.5 },
-    { id: "ow-border-e", name: "East Cliff Wall", minX: 36.5, maxX: 40, minZ: -40, maxZ: 40, h: 4.5 },
+    { id: "ow-border-w-s", name: "West Cliff Wall South", minX: -40, maxX: -36.5, minZ: -40, maxZ: -6.5, h: 4.5 },
+    { id: "ow-border-w-n", name: "West Cliff Wall North", minX: -40, maxX: -36.5, minZ: 1.5, maxZ: 40, h: 4.5 },
+    { id: "ow-border-w-back", name: "West Grove Exit Backdrop", minX: -40, maxX: -37.2, minZ: -6.5, maxZ: 1.5, h: 5.2 },
+    { id: "ow-border-e-s", name: "East Cliff Wall South", minX: 36.5, maxX: 40, minZ: -40, maxZ: -6.5, h: 4.5 },
+    { id: "ow-border-e-n", name: "East Cliff Wall North", minX: 36.5, maxX: 40, minZ: 1.5, maxZ: 40, h: 4.5 },
+    { id: "ow-border-e-back", name: "East Burned Pass Backdrop", minX: 37.2, maxX: 40, minZ: -6.5, maxZ: 1.5, h: 5.2 },
   ];
   cliffDefs.forEach((c) => {
     const w = c.maxX - c.minX;
@@ -1169,12 +1348,16 @@ export function buildInitialMapProps(): MapPropInstance[] {
     });
   });
 
-  // 4. Western Watchtower Ruin Walls
+  // 4. Western Watchtower Ruin Walls & Central Crossroads Locked Ledge
   const ruinWalls = [
     { id: "ow-ruin-w-south", name: "Ruins South Wall", minX: -34, maxX: -17, minZ: -14, maxZ: -11.5, h: 3.2 },
     { id: "ow-ruin-w-east-low", name: "Ruins East Gate South", minX: -18.5, maxX: -16.5, minZ: -14, maxZ: -6.5, h: 3.2 },
     { id: "ow-ruin-w-east-high", name: "Ruins East Gate North", minX: -18.5, maxX: -16.5, minZ: 1.5, maxZ: 16, h: 3.4 },
     { id: "ow-ruin-w-north", name: "Ruins North Wall", minX: -34, maxX: -16.5, minZ: 14.5, maxZ: 16.5, h: 3.8 },
+    // Central Crossroads Locked Ledge Enclosure (x: -15.5..-8.5, z: 13.5..20.5 — blocked on the south by Briar & Cracked Rock!)
+    { id: "ow-ledge-n", name: "Locked Ledge North Cliff", minX: -15.5, maxX: -8.5, minZ: 19.5, maxZ: 21.0, h: 3.5 },
+    { id: "ow-ledge-w", name: "Locked Ledge West Cliff", minX: -15.5, maxX: -14.0, minZ: 13.5, maxZ: 20.5, h: 3.5 },
+    { id: "ow-ledge-e", name: "Locked Ledge East Cliff", minX: -10.0, maxX: -8.5, minZ: 13.5, maxZ: 20.5, h: 3.5 },
   ];
   ruinWalls.forEach((rw) => {
     const w = rw.maxX - rw.minX;
@@ -1206,9 +1389,9 @@ export function buildInitialMapProps(): MapPropInstance[] {
     { x: 15.8, z: 6.5 },
     { x: 15.8, z: 9.8 },
     { x: 15.8, z: 13.2 },
-    { x: -14.2, z: 20.5 },
-    { x: -14.2, z: 23.5 },
-    { x: -14.2, z: 26.2 },
+    { x: -14.2, z: 22.5 },
+    { x: -14.2, z: 25.0 },
+    { x: -14.2, z: 27.2 },
     { x: 14.2, z: 20.5 },
     { x: 14.2, z: 23.5 },
     { x: 14.2, z: 26.2 },
@@ -1254,6 +1437,11 @@ export function buildInitialMapProps(): MapPropInstance[] {
     { x: -11.6, z: -15.0 },
     { x: 10.0, z: -14.2 },
     { x: 11.6, z: -14.2 },
+    // Central Crossroads Bushes (right at the Hub intersection!)
+    { x: -3.8, z: 1.5 },
+    { x: -5.2, z: 1.5 },
+    { x: 3.8, z: 1.5 },
+    { x: 5.2, z: 1.5 },
     // Central Meadow & Crossroads Clusters
     { x: -11.0, z: 8.0 },
     { x: -12.6, z: 8.2 },
@@ -1289,7 +1477,7 @@ export function buildInitialMapProps(): MapPropInstance[] {
   const boulderCoords = [
     { x: -15, z: -24 },
     { x: 22, z: -15 },
-    { x: 31, z: -4 },
+    { x: 31, z: -9 },
     { x: -31, z: -17 },
     { x: -21, z: 22 },
     { x: 21, z: 22 },
@@ -1381,21 +1569,24 @@ export function buildInitialMapProps(): MapPropInstance[] {
     }
   );
 
-  // 7. Dungeon Walls, Carved Pillars, Flickering Torches & Crates
+  // 7. Dungeon Walls (4 Rooms: Room I Push-Block -> Room II Dark Lanterns -> Room III Mini-Arena -> Room IV Boss!), Carved Pillars, Flickering Torches & Crates
   const dgWallDefs = [
-    { id: "dg-r1-south", name: "Antechamber South Wall", minX: -15, maxX: 15, minZ: -37.5, maxZ: -35.5, h: 5.0 },
-    { id: "dg-r1-west", name: "Antechamber West Wall", minX: -15.5, maxX: -13.5, minZ: -37, maxZ: -13.5, h: 5.0 },
-    { id: "dg-r1-east", name: "Antechamber East Wall", minX: 13.5, maxX: 15.5, minZ: -37, maxZ: -13.5, h: 5.0 },
-    { id: "dg-r1-north-w", name: "Antechamber Divider W", minX: -19.5, maxX: -3.8, minZ: -15, maxZ: -13, h: 5.0 },
-    { id: "dg-r1-north-e", name: "Antechamber Divider E", minX: 3.8, maxX: 19.5, minZ: -15, maxZ: -13, h: 5.0 },
-    { id: "dg-r2-west", name: "Hall of Pillars West Wall", minX: -19.5, maxX: -17.5, minZ: -14, maxZ: 12.5, h: 5.0 },
-    { id: "dg-r2-east", name: "Hall of Pillars East Wall", minX: 17.5, maxX: 19.5, minZ: -14, maxZ: 12.5, h: 5.0 },
-    { id: "dg-r2-north-w", name: "Sanctum Gate Wall W", minX: -19.5, maxX: -3.5, minZ: 11, maxZ: 13, h: 5.2 },
-    { id: "dg-r2-north-e", name: "Sanctum Gate Wall E", minX: 3.5, maxX: 19.5, minZ: 11, maxZ: 13, h: 5.2 },
-    { id: "dg-r3-west", name: "Boss Sanctum West Wall", minX: -18.5, maxX: -16.5, minZ: 12, maxZ: 37, h: 5.5 },
-    { id: "dg-r3-east", name: "Boss Sanctum East Wall", minX: 16.5, maxX: 18.5, minZ: 12, maxZ: 37, h: 5.5 },
-    { id: "dg-r3-north-w", name: "Boss Sanctum North Wall W", minX: -18.5, maxX: -3.5, minZ: 35.5, maxZ: 37.5, h: 5.5 },
-    { id: "dg-r3-north-e", name: "Boss Sanctum North Wall E", minX: 3.5, maxX: 18.5, minZ: 35.5, maxZ: 37.5, h: 5.5 },
+    { id: "dg-r1-south", name: "Room I (Push-Block) South Wall", minX: -15, maxX: 15, minZ: -37.5, maxZ: -35.5, h: 5.0 },
+    { id: "dg-r1-west", name: "Room I (Push-Block) West Wall", minX: -15.5, maxX: -13.5, minZ: -37, maxZ: -13.5, h: 5.0 },
+    { id: "dg-r1-east", name: "Room I (Push-Block) East Wall", minX: 13.5, maxX: 15.5, minZ: -37, maxZ: -13.5, h: 5.0 },
+    { id: "dg-r1-north-w", name: "Room I / Room II Divider W", minX: -19.5, maxX: -3.8, minZ: -15, maxZ: -13, h: 5.0 },
+    { id: "dg-r1-north-e", name: "Room I / Room II Divider E", minX: 3.8, maxX: 19.5, minZ: -15, maxZ: -13, h: 5.0 },
+    { id: "dg-r2-west", name: "Room II & III West Wall", minX: -19.5, maxX: -17.5, minZ: -14, maxZ: 12.5, h: 5.0 },
+    { id: "dg-r2-east", name: "Room II & III East Wall", minX: 17.5, maxX: 19.5, minZ: -14, maxZ: 12.5, h: 5.0 },
+    // Divider between Room II (Dark Lantern Puzzle Room) and Room III (Mini-Arena Room) at z = -1.5
+    { id: "dg-r2-mid-w", name: "Room II / Room III Arena Divider W", minX: -18.5, maxX: -4.2, minZ: -2.2, maxZ: -0.8, h: 4.8 },
+    { id: "dg-r2-mid-e", name: "Room II / Room III Arena Divider E", minX: 4.2, maxX: 18.5, minZ: -2.2, maxZ: -0.8, h: 4.8 },
+    { id: "dg-r2-north-w", name: "Room III / Boss Sanctum Gate Wall W", minX: -19.5, maxX: -3.5, minZ: 11, maxZ: 13, h: 5.2 },
+    { id: "dg-r2-north-e", name: "Room III / Boss Sanctum Gate Wall E", minX: 3.5, maxX: 19.5, minZ: 11, maxZ: 13, h: 5.2 },
+    { id: "dg-r3-west", name: "Room IV (Boss Sanctum) West Wall", minX: -18.5, maxX: -16.5, minZ: 12, maxZ: 37, h: 5.5 },
+    { id: "dg-r3-east", name: "Room IV (Boss Sanctum) East Wall", minX: 16.5, maxX: 18.5, minZ: 12, maxZ: 37, h: 5.5 },
+    { id: "dg-r3-north-w", name: "Room IV (Boss Sanctum) North Wall W", minX: -18.5, maxX: -3.5, minZ: 35.5, maxZ: 37.5, h: 5.5 },
+    { id: "dg-r3-north-e", name: "Room IV (Boss Sanctum) North Wall E", minX: 3.5, maxX: 18.5, minZ: 35.5, maxZ: 37.5, h: 5.5 },
   ];
   dgWallDefs.forEach((dw) => {
     const w = dw.maxX - dw.minX;
@@ -2764,8 +2955,336 @@ export function buildInitialMapProps(): MapPropInstance[] {
       colliderWidth: 7.8,
       colliderDepth: 2.8,
       colliderKind: "ruin",
+    },
+
+    // =========================================================
+    // 18. HUB STRUCTURE — EAST EXIT BARRIER (DRY VINES + UNLIT TORCHES) & LOCKED LEDGE
+    // =========================================================
+    // East Exit (Map 1 -> Map 3 The Burned Pass): Blocked initially by Dry Vines & Unlit Torches at (31.2, -2.5)!
+    {
+      id: "prop-ow-east-exit-briar-1",
+      prefab: "briar_barrier",
+      name: "East Exit Dry Vines N (Burn with Flame Rod [R] after Dungeon!)",
+      zone: "overworld",
+      x: 31.2,
+      y: 0,
+      z: -1.1,
+      rotY: Math.PI / 2,
+      scaleX: 1.25,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 3.2,
+      colliderDepth: 2.0,
+      colliderKind: "tree",
+      smashed: false,
+    },
+    {
+      id: "prop-ow-east-exit-briar-2",
+      prefab: "briar_barrier",
+      name: "East Exit Dry Vines S (Burn with Flame Rod [R] after Dungeon!)",
+      zone: "overworld",
+      x: 31.2,
+      y: 0,
+      z: -3.9,
+      rotY: Math.PI / 2,
+      scaleX: 1.25,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 3.2,
+      colliderDepth: 2.0,
+      colliderKind: "tree",
+      smashed: false,
+    },
+    {
+      id: "prop-ow-east-exit-torch-1",
+      prefab: "wall_torch",
+      name: "East Pass Gate Torch N (Light with Flame Rod [R]!)",
+      zone: "overworld",
+      x: 29.8,
+      y: 0,
+      z: 0.8,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: false,
+      colliderWidth: 0.9,
+      colliderDepth: 0.9,
+      colliderKind: "pillar",
+      lit: false,
+    },
+    {
+      id: "prop-ow-east-exit-torch-2",
+      prefab: "wall_torch",
+      name: "East Pass Gate Torch S (Light with Flame Rod [R]!)",
+      zone: "overworld",
+      x: 29.8,
+      y: 0,
+      z: -5.8,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: false,
+      colliderWidth: 0.9,
+      colliderDepth: 0.9,
+      colliderKind: "pillar",
+      lit: false,
+    },
+    // Central Crossroads Locked Ledge Barrier (blocks the NW treasure ledge until burned with Flame Rod [R]!)
+    {
+      id: "prop-ow-ledge-briar",
+      prefab: "briar_barrier",
+      name: "Locked Ledge Dry Vines (Return with Flame Rod [R] to Reach Ledge!)",
+      zone: "overworld",
+      x: -12.0,
+      y: 0,
+      z: 14.0,
+      rotY: 0,
+      scaleX: 1.35,
+      scaleY: 1.15,
+      scaleZ: 1.1,
+      hasCollider: true,
+      colliderWidth: 3.8,
+      colliderDepth: 1.8,
+      colliderKind: "tree",
+      smashed: false,
     }
   );
+
+  // =========================================================
+  // 19. MAP 1B (WEST EXIT: WHISPERING FOREST GROVE & TRIAL CAVE — `zone: "grove"`)
+  // Rewards the Dungeon Entry Key & Flame Rod when the player hits the Crystal Switch with Boomerang [Q] or defeats the 3 Ambush Monsters!
+  // =========================================================
+  const grCliffDefs = [
+    { id: "gr-border-s-w", name: "Grove South-West Cliff", minX: -28, maxX: -6, minZ: -33, maxZ: -29.5, h: 4.8 },
+    { id: "gr-border-s-e", name: "Grove South-East Cliff", minX: 6, maxX: 28, minZ: -33, maxZ: -29.5, h: 4.8 },
+    { id: "gr-border-s-back", name: "Grove Exit Backdrop", minX: -6, maxX: 6, minZ: -33, maxZ: -30.5, h: 5.4 },
+    { id: "gr-border-n", name: "Grove North Shrine Cliff", minX: -28, maxX: 28, minZ: 22.5, maxZ: 26, h: 5.2 },
+    { id: "gr-border-w", name: "Grove West Cliff", minX: -28, maxX: -24.5, minZ: -33, maxZ: 26, h: 4.8 },
+    { id: "gr-border-e", name: "Grove East Cliff", minX: 24.5, maxX: 28, minZ: -33, maxZ: 26, h: 4.8 },
+  ];
+  grCliffDefs.forEach((gc) => {
+    const w = gc.maxX - gc.minX;
+    const d = gc.maxZ - gc.minZ;
+    props.push({
+      id: `prop-${gc.id}`,
+      prefab: "cliff_block",
+      name: gc.name,
+      zone: "grove",
+      x: (gc.minX + gc.maxX) / 2,
+      y: 0,
+      z: (gc.minZ + gc.maxZ) / 2,
+      rotY: 0,
+      scaleX: w,
+      scaleY: gc.h,
+      scaleZ: d,
+      hasCollider: true,
+      colliderWidth: w,
+      colliderDepth: d,
+      colliderKind: "cliff",
+    });
+  });
+
+  props.push(
+    {
+      id: "prop-gr-entry-arch",
+      prefab: "temple_arch",
+      name: "Forest Grove Entrance Arch",
+      zone: "grove",
+      x: 0,
+      y: 0,
+      z: -29.0,
+      rotY: 0,
+      scaleX: 0.9,
+      scaleY: 0.9,
+      scaleZ: 0.9,
+      hasCollider: false,
+      colliderWidth: 9.0,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-gr-main-road",
+      prefab: "path_tile",
+      name: "Forest Grove Shrine Trail",
+      zone: "grove",
+      x: 0,
+      y: 0,
+      z: -4.0,
+      rotY: 0,
+      scaleX: 4.8,
+      scaleY: 1,
+      scaleZ: 44,
+      hasCollider: false,
+      colliderWidth: 4.8,
+      colliderDepth: 44,
+      colliderKind: "ruin",
+    },
+    // Low Water Stream across the Grove (with central bridge gap gated by the Retractable Crystal Barrier!)
+    {
+      id: "prop-gr-water-w",
+      prefab: "water_tile",
+      name: "Grove West Stream (Throw Boomerang [Q] Across to Hit Switch!)",
+      zone: "grove",
+      x: -13.5,
+      y: 0,
+      z: 3.0,
+      rotY: 0,
+      scaleX: 21.0,
+      scaleY: 1,
+      scaleZ: 2.6,
+      hasCollider: true,
+      colliderWidth: 21.0,
+      colliderDepth: 2.6,
+      colliderKind: "water",
+    },
+    {
+      id: "prop-gr-water-e",
+      prefab: "water_tile",
+      name: "Grove East Stream",
+      zone: "grove",
+      x: 13.5,
+      y: 0,
+      z: 3.0,
+      rotY: 0,
+      scaleX: 21.0,
+      scaleY: 1,
+      scaleZ: 2.6,
+      hasCollider: true,
+      colliderWidth: 21.0,
+      colliderDepth: 2.6,
+      colliderKind: "water",
+    },
+    // Grove Crystal Orb Switch across the West Stream (Hit with Boomerang [Q] or Bow [E] to lower the Shrine Barrier!)
+    {
+      id: "prop-gr-crystal-switch",
+      prefab: "crystal_switch",
+      name: "Grove Trial Crystal Orb Switch (Hit with Boomerang [Q]!)",
+      zone: "grove",
+      x: -6.5,
+      y: 0,
+      z: 6.2,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.3,
+      colliderDepth: 1.3,
+      colliderKind: "pillar",
+      switchState: "blue",
+      switchTarget: "orange",
+    },
+    {
+      id: "prop-gr-crystal-barrier",
+      prefab: "crystal_barrier",
+      name: "Grove Shrine Crystal Barrier (Hit Switch w/ Boomerang [Q] or Clear 3 Ambush Monsters!)",
+      zone: "grove",
+      x: 0,
+      y: 0,
+      z: 6.5,
+      rotY: 0,
+      scaleX: 1.35,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 3.2,
+      colliderDepth: 2.2,
+      colliderKind: "wall",
+      switchState: "blue",
+    },
+    {
+      id: "prop-gr-pillar-w",
+      prefab: "ruin_pillar",
+      name: "Grove Shrine Pillar W",
+      zone: "grove",
+      x: -4.5,
+      y: 0,
+      z: 14.5,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 2.0,
+      colliderDepth: 2.0,
+      colliderKind: "pillar",
+    },
+    {
+      id: "prop-gr-pillar-e",
+      prefab: "ruin_pillar",
+      name: "Grove Shrine Pillar E",
+      zone: "grove",
+      x: 4.5,
+      y: 0,
+      z: 14.5,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 2.0,
+      colliderDepth: 2.0,
+      colliderKind: "pillar",
+    }
+  );
+
+  const grTrees = [
+    { x: -16, z: -18 },
+    { x: 16, z: -18 },
+    { x: -18, z: -4 },
+    { x: 18, z: -4 },
+    { x: -15, z: 14 },
+    { x: 15, z: 14 },
+  ];
+  grTrees.forEach((gt, idx) => {
+    props.push({
+      id: `prop-gr-tree-${idx + 1}`,
+      prefab: "pine_tree",
+      name: `Grove Pine #${idx + 1}`,
+      zone: "grove",
+      x: gt.x,
+      y: 0,
+      z: gt.z,
+      rotY: idx * 1.2,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 2.1,
+      colliderDepth: 2.1,
+      colliderKind: "tree",
+    });
+  });
+
+  const grBushes = [
+    { x: -4.5, z: -16 },
+    { x: 4.5, z: -16 },
+    { x: -8.5, z: -1 },
+    { x: 8.5, z: -1 },
+  ];
+  grBushes.forEach((gb, idx) => {
+    props.push({
+      id: `prop-gr-bush-${idx + 1}`,
+      prefab: "bush",
+      name: `Grove Bush #${idx + 1}`,
+      zone: "grove",
+      x: gb.x,
+      y: 0,
+      z: gb.z,
+      rotY: idx * 0.8,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: false,
+      colliderWidth: 1.4,
+      colliderDepth: 1.4,
+      colliderKind: "tree",
+    });
+  });
 
   return props;
 }
@@ -2785,6 +3304,17 @@ export function buildObstaclesFromMapProps(mapProps: MapPropInstance[]): RectObs
       maxZ: SHOP_STALL_POS.z + 1.4,
       kind: "pedestal",
       height: 1.3,
+    },
+    // Locked North Exit Gate in Map 1 (requires the Dungeon Entry Key from West Map 1B to enter Map 2!)
+    {
+      id: "ow-dungeon-entry-gate",
+      zone: "overworld",
+      minX: DUNGEON_ENTRY_GATE_POS.x - 3.6,
+      maxX: DUNGEON_ENTRY_GATE_POS.x + 3.6,
+      minZ: DUNGEON_ENTRY_GATE_POS.z - 0.8,
+      maxZ: DUNGEON_ENTRY_GATE_POS.z + 0.8,
+      kind: "gate",
+      height: 4.6,
     },
     // Locked Gate in Dungeon (South Boss Sanctum Entrance)
     {
@@ -2887,6 +3417,7 @@ export function resolveWorldCollisions(
   const list = dynamicObstacles ?? [];
   for (const obs of list) {
     if (obs.zone !== zone) continue;
+    if (obs.id === "ow-dungeon-entry-gate" && gateUnlocked) continue;
     if (obs.id === "dg-locked-gate" && gateUnlocked) continue;
     if (obs.id === "dg-boss-exit-gate" && bossExitUnlocked) continue;
     const res = resolveCircleRectCollision(curX, curZ, radius, obs);

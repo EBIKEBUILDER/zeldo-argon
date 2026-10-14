@@ -8,13 +8,15 @@ import {
   BuriedRewardKind,
   computeBossChargePathLength,
   computeEnemyChargePathLength,
-  computePathfindingMoveDir,
+   computePathfindingMoveDir,
   CustomModelAsset,
+  DUNGEON_ENTRY_GATE_POS,
   DUNGEON_KEY_POS,
   DungeonRoomId,
   EnemyKind,
   EnemyShieldArmor,
   getDefaultEnemyWeight,
+  GUIDE_NPC_POS,
   HEIRLOOM_NPC_POS,
   HERO_SPAWN,
   INITIAL_ENEMIES,
@@ -216,9 +218,9 @@ export interface EnemyState {
   initialShieldArmor?: EnemyShieldArmor;
   shockArmor?: boolean;
   initialShockArmor?: boolean;
-  isBounty?: boolean;
+   isBounty?: boolean;
   initialIsBounty?: boolean;
-  questGroup?: "heirloom";
+  questGroup?: "heirloom" | "grove_ambush";
   provoked?: boolean;
   // Boss & Goblin Lunge combat state
   chargeAngle: number;
@@ -363,11 +365,15 @@ export interface GameFlags {
   dungeonCrystalPuzzleSolved?: boolean;
   frontierCrystalPuzzleSolved?: boolean;
   dungeonEyeStatuesSolved?: boolean;
-  secretStashClaimed?: boolean;
+   secretStashClaimed?: boolean;
   heirloomQuestStarted?: boolean;
   heirloomMonstersCleared?: boolean;
   heirloomQuestClaimed?: boolean;
   shopProgressionBought?: boolean;
+  dungeonEntryUnlocked?: boolean;
+  grovePuzzleSolved?: boolean;
+  bossHeartAwarded?: boolean;
+  eastExitBurned?: boolean;
 }
 
 export interface GameStats {
@@ -827,8 +833,9 @@ function createInitialState(
     mapProps: buildInitialMapProps(),
     portals: INITIAL_PORTALS.map((p) => ({ ...p })),
     customModels: createBuiltInCustomModels(),
-    terrainCells: {
+     terrainCells: {
       overworld: {},
+      grove: {},
       dungeon: {},
       frontier: {},
     },
@@ -853,6 +860,10 @@ function createInitialState(
       heirloomMonstersCleared: false,
       heirloomQuestClaimed: false,
       shopProgressionBought: false,
+      dungeonEntryUnlocked: false,
+      grovePuzzleSolved: false,
+      bossHeartAwarded: false,
+      eastExitBurned: false,
     },
     stats: {
       enemiesDefeated: 0,
@@ -863,9 +874,9 @@ function createInitialState(
       phase === "playing"
         ? {
             id: 1,
-            text: "Whispering Vale",
+            text: "Map 1: Starting Crossroads Hub",
             subtext:
-              "Explore Map 1 for Rupees (Secret SW Cave +50 • Elder Rowan's SE Quest +50 • Gold Bounty Monsters 5x) to buy the 100-Rupee Shop Upgrade!",
+              "West Exit -> Map 1B Grove (Key & Flame Rod) • North -> Map 2 Dungeon • East -> Map 3 Burned Pass • South -> Shop!",
             timer: 6.5,
           }
         : null,
@@ -890,7 +901,7 @@ function createInitialState(
   };
 }
 
-const MAP_STORAGE_KEY = "zeldo-authored-map-v6";
+const MAP_STORAGE_KEY = "zeldo-authored-map-v7";
 
 function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   if (p.prefab === "dirt_patch") {
@@ -961,7 +972,7 @@ function persistAuthoredMapToStorage(state: {
       .map((r) => ({ ...r, collected: false, spawnBounceTimer: 0 }));
 
     const payload = {
-      version: 5,
+      version: 6,
       mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: cleanEnemies,
       rupees: cleanRupees,
@@ -969,6 +980,7 @@ function persistAuthoredMapToStorage(state: {
       customModels: state.customModels,
       terrainCells: {
         overworld: state.terrainCells.overworld ?? {},
+        grove: state.terrainCells.grove ?? {},
         dungeon: state.terrainCells.dungeon ?? {},
         frontier: state.terrainCells.frontier ?? {},
       },
@@ -1350,12 +1362,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
-  setEditorZone: (zone: ZoneId, teleportHero = false, targetX?: number, targetZ?: number) => {
+   setEditorZone: (zone: ZoneId, teleportHero = false, targetX?: number, targetZ?: number) => {
     set((state) => {
       const hero = { ...state.hero };
       if (teleportHero) {
         hero.x = targetX ?? 0;
-        hero.z = targetZ ?? (zone === "overworld" ? -28 : -30.5);
+        hero.z =
+          targetZ ??
+          (zone === "overworld" ? -28 : zone === "grove" ? -24.5 : -30.5);
       }
       return {
         zone,
@@ -1921,8 +1935,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         },
       ],
       boomerang: null,
-      flags: {
+       flags: {
         ...state.flags,
+        keyPickedUp: false,
+        gateUnlocked: false,
         bossAwakened: false,
         bossPhase2: false,
         bossDefeated: false,
@@ -1940,6 +1956,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         heirloomMonstersCleared: false,
         heirloomQuestClaimed: false,
         shopProgressionBought: false,
+        dungeonEntryUnlocked: false,
+        grovePuzzleSolved: false,
+        bossHeartAwarded: false,
+        eastExitBurned: false,
       },
       hero: {
         ...state.hero,
@@ -1997,6 +2017,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set((state) => {
         const nextTerrain = {
           overworld: data.terrainCells?.overworld ?? state.terrainCells.overworld ?? {},
+          grove: data.terrainCells?.grove ?? state.terrainCells.grove ?? {},
           dungeon: data.terrainCells?.dungeon ?? state.terrainCells.dungeon ?? {},
           frontier: data.terrainCells?.frontier ?? state.terrainCells.frontier ?? {},
         };
@@ -2042,6 +2063,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           : state.customModels,
         terrainCells: {
           overworld: data.terrainCells?.overworld ?? {},
+          grove: data.terrainCells?.grove ?? {},
           dungeon: data.terrainCells?.dungeon ?? {},
           frontier: data.terrainCells?.frontier ?? {},
         },
@@ -2069,6 +2091,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       customModels: createBuiltInCustomModels(),
       terrainCells: {
         overworld: {},
+        grove: {},
         dungeon: {},
         frontier: {},
       },
@@ -2715,16 +2738,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       );
       if (zoneSwitches.length === 0) return false;
 
-      const allMatchTarget = zoneSwitches.every(
-        (s) => (s.switchState ?? "blue") === (s.switchTarget ?? "orange")
-      );
+       const allMatchTarget =
+        (targetZone === "grove" && Boolean(flags.grovePuzzleSolved)) ||
+        zoneSwitches.every(
+          (s) => (s.switchState ?? "blue") === (s.switchTarget ?? "orange")
+        );
       ensureMutableMapProps();
       for (let i = 0; i < mapProps.length; i++) {
         const prop = mapProps[i];
         if (prop.zone !== targetZone || prop.prefab !== "crystal_barrier") continue;
         if (allMatchTarget) {
           prop.hasCollider = false;
-          prop.y = -2.05;
+          prop.y = targetZone === "grove" ? -2.45 : -2.05;
         } else {
           prop.hasCollider = true;
           prop.y = 0;
@@ -2733,6 +2758,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
       dynamicObstacles = buildObstaclesFromMapProps(mapProps);
 
       if (allMatchTarget) {
+        if (targetZone === "grove" && !flags.grovePuzzleSolved) {
+          flags.grovePuzzleSolved = true;
+          soundEngine.playSecretSolve();
+          rupees.push(
+            {
+              id: `crystal-gr-reward-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "grove",
+              x: -1.4,
+              z: 11.2,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `crystal-gr-reward-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "grove",
+              x: 1.4,
+              z: 11.2,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            }
+          );
+          pushBanner(
+            "Grove Crystal Switch Activated! (Shrine Barrier Lowered!)",
+            "The Forest Grove Shrine is unsealed — claim the Sanctum Entry Key & Flame Rod at the northern pedestal!",
+            5.2
+          );
+          return true;
+        }
         if (targetZone === "overworld" && !flags.overworldCrystalPuzzleSolved) {
           flags.overworldCrystalPuzzleSolved = true;
           soundEngine.playSecretSolve();
@@ -3179,10 +3236,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
         hero.bombs = Math.max(0, (hero.bombs ?? 0) - 1);
         hero.isBlocking = false;
         soundEngine.playBombPlace();
-        const placeX = hero.x + Math.sin(hero.facing) * 0.85;
+         const placeX = hero.x + Math.sin(hero.facing) * 0.85;
         const placeZ = hero.z + Math.cos(hero.facing) * 0.85;
         const gatePassableNow =
-          flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated);
+          zone === "overworld"
+            ? Boolean(flags.dungeonEntryUnlocked || flags.keyPickedUp || hero.hasDungeonKey)
+            : Boolean(flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated));
         const resB = resolveWorldCollisions(
           placeX,
           placeZ,
@@ -3639,8 +3698,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     hero.knockbackVx *= kbDecay;
     hero.knockbackVz *= kbDecay;
 
-    const initialGatePassable =
-      flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated);
+     const initialGatePassable =
+      zone === "overworld"
+        ? Boolean(flags.dungeonEntryUnlocked || flags.keyPickedUp || hero.hasDungeonKey)
+        : Boolean(flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated));
     const clampedNextHeroZ =
       zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated
         ? Math.max(13.55, nextHeroZ)
@@ -3863,12 +3924,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       shopDismissedOnRug = false;
     }
 
-    // Update Dungeon Room indicator
+     // Update Dungeon Room indicator (4 Rooms: Room I Entry, Room II Dark Hall, Room III Mini-Arena, Room IV Boss Sanctum)
     if (zone === "dungeon") {
-      if (hero.z < -13.5) {
+      if (hero.z < -14.5) {
         dungeonRoom = "entry";
-      } else if (hero.z < 12.2) {
+      } else if (hero.z < -1.5) {
         dungeonRoom = "hall";
+      } else if (hero.z < 12.2) {
+        dungeonRoom = "arena";
       } else {
         dungeonRoom = "sanctum";
       }
@@ -3885,8 +3948,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
               gateNoticeCooldown = 3.2;
               soundEngine.playGateLocked();
               pushBanner(
-                "The Northern Sanctum Exit is Sealed!",
-                "Vanquish Malakor and his minions to unseal the passage to the Elderwood Frontier.",
+                "The Sanctum Back Door is Sealed!",
+                "Vanquish Malakor and his minions to unseal the Back Door Portal to Map 1 Crossroads.",
                 3.6
               );
             }
@@ -3894,7 +3957,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
           zone = portal.targetZone;
           if (zone === "dungeon") {
-            dungeonRoom = portal.targetZ < -13.5 ? "entry" : portal.targetZ < 12.2 ? "hall" : "sanctum";
+            dungeonRoom =
+              portal.targetZ < -14.5
+                ? "entry"
+                : portal.targetZ < -1.5
+                ? "hall"
+                : portal.targetZ < 12.2
+                ? "arena"
+                : "sanctum";
           }
           hero.x = portal.targetX;
           hero.z = portal.targetZ;
@@ -3917,25 +3987,54 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 4. Check Sanctum Key Pickup in Overworld
-    if (zone === "overworld" && !flags.keyPickedUp) {
+    // 4a. Check North Exit Locked Dungeon Entrance Gate in Map 1 (`DUNGEON_ENTRY_GATE_POS = 0, 31.8` in `overworld`)
+    if (zone === "overworld" && !flags.dungeonEntryUnlocked) {
+      const distToEntryGate = Math.hypot(
+        hero.x - DUNGEON_ENTRY_GATE_POS.x,
+        hero.z - DUNGEON_ENTRY_GATE_POS.z
+      );
+      if (distToEntryGate < 3.4) {
+        if (flags.keyPickedUp || hero.hasDungeonKey) {
+          flags.dungeonEntryUnlocked = true;
+          soundEngine.playGateUnlock();
+          pushBanner(
+            "North Dungeon Entrance Unlocked!",
+            "The Key from the West Forest Grove unsealed Map 2 — step into the Sunken Sanctum!",
+            4.8
+          );
+        } else if (gateNoticeCooldown <= 0) {
+          gateNoticeCooldown = 3.2;
+          soundEngine.playGateLocked();
+          pushBanner(
+            "North Exit Locked! (Map 2: Sunken Sanctum)",
+            "Explore the West Exit (Map 1B: Whispering Forest Grove) first to win the Dungeon Entry Key!",
+            4.5
+          );
+        }
+      }
+    }
+
+    // 4b. Check Sanctum Entry Key & Flame Rod Pedestal Pickup in Map 1B (`grove`)
+    if (zone === "grove" && !flags.keyPickedUp) {
       const distToKey = Math.hypot(
         hero.x - DUNGEON_KEY_POS.x,
         hero.z - DUNGEON_KEY_POS.z
       );
-      if (distToKey < 1.85) {
+      if (distToKey < 1.95) {
         flags.keyPickedUp = true;
         hero.hasDungeonKey = true;
+        hero.hasFireRod = true;
+        hero.mp = hero.maxMp;
         soundEngine.playKeyPickup();
         pushBanner(
-          "Acquired the Sanctum Key!",
-          "Journey to the Northern Temple Portal and unlock the Sanctum Gate.",
-          5.0
+          "Acquired the Sanctum Entry Key & Flame Rod!",
+          "Return East to Map 1 Crossroads and take the North Exit to unlock Map 2 (Sunken Sanctum)!",
+          5.8
         );
       }
     }
 
-    // 5. Check Locked Gate in Dungeon
+    // 5. Check Locked Boss Sanctum Gate in Dungeon
     if (zone === "dungeon" && !flags.gateUnlocked) {
       const distToGate = Math.hypot(
         hero.x - LOCKED_GATE_POS.x,
@@ -3948,7 +4047,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           soundEngine.playGateUnlock();
           pushBanner(
             "Sanctum Gate Unlocked!",
-            "The iron bars descend. Enter the Sanctum of the Dread Warden!",
+            "The iron bars descend. Enter Room IV: Sanctum of the Dread Warden!",
             4.5
           );
         } else if (gateNoticeCooldown <= 0) {
@@ -3982,7 +4081,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 6. Check Boss Awakening immediately when stepping past the doorway threshold into Room 3
+    // 6. Check Boss Awakening immediately when stepping past the doorway threshold into Room IV
     if (zone === "dungeon" && flags.gateUnlocked && !flags.bossAwakened && hero.z > 13.05) {
       flags.bossAwakened = true;
       hero.z = Math.max(13.58, hero.z);
@@ -3996,7 +4095,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     const gatePassable =
-      flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated);
+      zone === "overworld"
+        ? Boolean(flags.dungeonEntryUnlocked || flags.keyPickedUp || hero.hasDungeonKey)
+        : Boolean(flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated));
     const bossExitOpen = flags.bossDefeated;
 
     // 7. Update Arcing Boss Projectiles & Toxic Ground Hazards (Magical Damage!)
@@ -4114,11 +4215,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
             if (boomerang.carryingKey && !flags.keyPickedUp) {
               flags.keyPickedUp = true;
               hero.hasDungeonKey = true;
+              hero.hasFireRod = true;
+              hero.mp = hero.maxMp;
               soundEngine.playKeyPickup();
               pushBanner(
-                "Boomerang Fetched the Sanctum Key Across the Moat!",
-                "Journey to the Northern Temple Portal and unlock the Sanctum Gate.",
-                5.2
+                "Boomerang Fetched the Sanctum Key & Flame Rod!",
+                "Return East to Map 1 Crossroads and take the North Exit to unlock Map 2 (Sunken Sanctum)!",
+                5.5
               );
             }
             for (const cId of boomerang.carriedRupeeIds) {
@@ -4148,10 +4251,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
         }
 
-        // Boomerang snags & drags the Overworld Sanctum Key and Rupees/Recovery Hearts in flight!
+        // Boomerang snags & drags the Map 1B Grove Sanctum Key and Rupees/Recovery Hearts in flight!
         if (boomerang) {
           if (
-            zone === "overworld" &&
+            zone === "grove" &&
             !flags.keyPickedUp &&
             !boomerang.carryingKey &&
             Math.hypot(DUNGEON_KEY_POS.x - boomerang.x, DUNGEON_KEY_POS.z - boomerang.z) < 1.65
@@ -4161,7 +4264,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             soundEngine.playLift();
             pushBanner(
               "Boomerang Snagged the Sanctum Key!",
-              "Pulling the golden key across the sunken water moat...",
+              "Pulling the golden key from the Grove Shrine pedestal...",
               3.2
             );
           }
@@ -4431,7 +4534,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
-      // Check if all Eastern Bandit Cave monsters (`questGroup === "heirloom"`) are now cleared!
+       // Check if all Eastern Bandit Cave monsters (`questGroup === "heirloom"`) are now cleared!
       if (enemy.questGroup === "heirloom" && !flags.heirloomMonstersCleared) {
         const remainingHeirloomFoes = enemies.filter(
           (e) => e.questGroup === "heirloom" && e.state !== "dead"
@@ -4443,6 +4546,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
             "Recovered Elder Rowan's Golden Heirloom!",
             "You cleared out the Eastern Bandit Cave! Return to Elder Rowan outside the cave for your 50-Rupee reward!",
             5.8
+          );
+        }
+      }
+
+      // Check if all 3 Map 1B Grove Ambush Monsters (`questGroup === "grove_ambush"`) are defeated!
+      if (enemy.questGroup === "grove_ambush" && !flags.grovePuzzleSolved) {
+        const remainingAmbushFoes = enemies.filter(
+          (e) => e.questGroup === "grove_ambush" && e.state !== "dead"
+        );
+        if (remainingAmbushFoes.length === 0) {
+          flags.grovePuzzleSolved = true;
+          ensureMutableMapProps();
+          for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
+            const mp = mapProps[pIdx];
+            if (mp.zone === "grove" && mp.prefab === "crystal_switch") {
+              mp.switchState = "orange";
+            } else if (mp.zone === "grove" && mp.prefab === "crystal_barrier") {
+              mp.hasCollider = false;
+              mp.y = -2.45;
+            }
+          }
+          dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+          soundEngine.playSecretSolve();
+          pushBanner(
+            "Grove Ambush Cleared! (Shrine Barrier Lowered!)",
+            "All 3 Forest Grove ambush monsters vanquished — claim the Sanctum Entry Key & Flame Rod at the pedestal!",
+            5.5
           );
         }
       }
@@ -5098,11 +5228,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
             seed: Math.floor(Math.abs(mp.x * 53 + mp.z * 89) + stats.elapsedSeconds * 120),
             isDirt: mp.prefab === "briar_barrier",
           });
-          if (mp.prefab === "spiderweb_barrier") {
+           if (mp.prefab === "spiderweb_barrier") {
             pushBanner(
               "Thick Spiderwebs Incinerated!",
               "The Flame Rod burned away the web barrier — the path to the Elderwood Frontier is open!",
               4.8
+            );
+          } else if (mp.id.startsWith("prop-ow-east-exit-briar")) {
+            flags.eastExitBurned = true;
+            pushBanner(
+              "East Exit Barrier Burned! (Map 3: Burned Pass Open!)",
+              "The dry vines blocking the East Exit crumbled to ash — step through the portal into Map 3!",
+              5.0
+            );
+          } else if (mp.id === "prop-ow-ledge-briar") {
+            pushBanner(
+              "Locked Ledge Vines Burned! (+40 Rupees & Heart)",
+              "The Flame Rod cleared the high ledge brambles — claim the hidden Rupees & Heart!",
+              4.5
             );
           } else {
             pushBanner(
@@ -5180,6 +5323,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
       if (wasUnlit) {
         soundEngine.playTorchLight();
+      }
+      // Lighting both East Exit Torches on the East edge of Map 1 also burns away the East Exit Dry Vines!
+      if (prop.zone === "overworld" && prop.id.startsWith("prop-ow-east-exit-torch")) {
+        const eastTorches = mapProps.filter(
+          (mp) => mp.zone === "overworld" && mp.id.startsWith("prop-ow-east-exit-torch")
+        );
+        if (eastTorches.length > 0 && eastTorches.every((mp) => mp.lit !== false)) {
+          for (let bIdx = 0; bIdx < mapProps.length; bIdx++) {
+            if (mapProps[bIdx].id.startsWith("prop-ow-east-exit-briar")) {
+              igniteBurnableBarrier(bIdx);
+            }
+          }
+        }
       }
       checkTorchCombinationPuzzles();
       checkTimedTorchPuzzles();
@@ -7007,7 +7163,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return true;
     });
 
-    // 11. Check if Boss and all Sanctum Minions are defeated
+     // 11. Check if Boss and all Sanctum Minions are defeated -> Drops +1 Full Heart Container & Opens Back Door Portal!
     if (!flags.bossDefeated) {
       const bossEnemy = enemies.find((e) => e.kind === "boss");
       const aliveSanctumMinions = enemies.filter(
@@ -7015,11 +7171,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       );
       if (bossEnemy && bossEnemy.state === "dead" && aliveSanctumMinions.length === 0) {
         flags.bossDefeated = true;
+        if (!flags.bossHeartAwarded) {
+          flags.bossHeartAwarded = true;
+          hero.maxHp += 2;
+          hero.hp = hero.maxHp;
+          hero.damageFractionAcc = 0;
+        }
+        soundEngine.playVictoryFanfare();
         soundEngine.playGateUnlock();
         pushBanner(
-          "Dread Warden Malakor Vanquished!",
-          "The Northern Sanctum Exit unseals to the Elderwood Frontier, and the Golden Chest is unlocked!",
-          6.0
+          "Malakor Vanquished! (+1 Full Heart Container & Back Door Opened!)",
+          "Max HP permanently increased! Claim the Relic Chest or take the Back Door Portal to Map 1 Crossroads and burn the East Exit to Map 3!",
+          6.8
         );
       }
     }
@@ -7038,7 +7201,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (dist < 1.25) {
         rupee.collected = true;
         if (rupee.tier === "heart") {
-          hero.hp = Math.min(hero.maxHp, hero.hp + (rupee.value || 2));
+          hero.hp = Math.min(hero.maxHp, hero.hp + (rValue(rupee.value)));
         } else {
           hero.rupees += rupee.value;
         }
@@ -7046,7 +7209,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 13. Boss Chest Unlock → Rewards Zeldo Crest (+1 Heart Container & +50 Rupees) while keeping gameplay active so player can explore the Elderwood Frontier!
+    function rValue(v: number | undefined): number {
+      return v || 2;
+    }
+
+    // 13. Boss Chest Unlock → Rewards Zeldo Crest Relic (+50 Rupees & Full Restore) while directing player through the Back Door Portal to Map 1 Crossroads!
     if (zone === "dungeon" && !flags.chestUnlocked) {
       const distToChest = Math.hypot(
         hero.x - BOSS_CHEST_POS.x,
@@ -7055,13 +7222,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (distToChest < 2.5) {
         if (flags.bossDefeated) {
           flags.chestUnlocked = true;
-          hero.maxHp += 2;
+          if (!flags.bossHeartAwarded) {
+            flags.bossHeartAwarded = true;
+            hero.maxHp += 2;
+          }
           hero.hp = hero.maxHp;
+          hero.mp = hero.maxMp;
           hero.rupees += 50;
           soundEngine.playVictoryFanfare();
           pushBanner(
-            "The Zeldo Crest is Yours! (+1 Heart & +50 Rupees)",
-            "Journey through the open Northern Sanctum Gate into the Elderwood Frontier!",
+            "Claimed the Zeldo Crest Relic! (+50 Rupees & Full Restore)",
+            "Step through the open North Back Door Portal to return to Map 1 Crossroads, burn the East Exit vines [R], and enter Map 3!",
             7.5
           );
         } else if (chestNoticeCooldown <= 0) {
@@ -7069,15 +7240,40 @@ export const useGameStore = create<GameStore>((set, get) => ({
           soundEngine.playGateLocked();
           pushBanner(
             "Sealed by the Warden's Curse!",
-            "Defeat Malakor and his minions to unlock the Sanctum Chest.",
+            "Defeat Malakor and his minions to unlock the Sanctum Relic Chest.",
             3.5
           );
         }
       }
     }
 
+    // 13a. Map 1B (`grove`) Ambush Fallback Check (in case ambush monsters were killed by bombs or vessels)
+    if (zone === "grove" && !flags.grovePuzzleSolved) {
+      const ambushEnemies = enemies.filter((e) => e.questGroup === "grove_ambush");
+      if (ambushEnemies.length > 0 && ambushEnemies.every((e) => e.state === "dead")) {
+        flags.grovePuzzleSolved = true;
+        ensureMutableMapProps();
+        for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
+          const mp = mapProps[pIdx];
+          if (mp.zone === "grove" && mp.prefab === "crystal_switch") {
+            mp.switchState = "orange";
+          } else if (mp.zone === "grove" && mp.prefab === "crystal_barrier") {
+            mp.hasCollider = false;
+            mp.y = -2.45;
+          }
+        }
+        dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+        soundEngine.playSecretSolve();
+        pushBanner(
+          "Grove Ambush Cleared! (Shrine Barrier Lowered!)",
+          "All 3 Forest Grove ambush monsters vanquished — claim the Sanctum Entry Key & Flame Rod at the pedestal!",
+          5.5
+        );
+      }
+    }
+
     // =========================================================
-    // 13b. MAP 1 ECONOMY LOOP: SECRET RUPEE STASH CAVE (+50 RUPEES) & ELDER ROWAN NPC SUB-QUEST (+50 RUPEES)
+    // 13b. MAP 1 HUB & ECONOMY LOOP: SECRET RUPEE STASH CAVE (+50), ELDER ROWAN QUEST (+50) & SCOUT LYRA HUB GUIDE NPC
     // =========================================================
     if (zone === "overworld") {
       // A. South-West Corner Secret Rupee Stash Cave Chest (`SECRET_STASH_POS = -30.5, -33.2`)
@@ -7103,7 +7299,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const npcDz = hero.z - HEIRLOOM_NPC_POS.z;
       const distToNpc = Math.hypot(npcDx, npcDz);
 
-      // Soft personal-space collision so the Hero doesn't walk directly through Elder Rowan
       if (distToNpc < 1.05) {
         const pushX = distToNpc > 0.01 ? npcDx / distToNpc : 0;
         const pushZ = distToNpc > 0.01 ? npcDz / distToNpc : 1;
@@ -7111,7 +7306,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         hero.z = HEIRLOOM_NPC_POS.z + pushZ * 1.05;
       }
 
-      // Also check if all Heirloom Cave monsters are already dead (in case edited or killed via other means)
       if (!flags.heirloomMonstersCleared) {
         const heirloomEnemies = enemies.filter((e) => e.questGroup === "heirloom");
         if (
@@ -7156,6 +7350,41 @@ export const useGameStore = create<GameStore>((set, get) => ({
             "Elder Rowan: \"Thank you again for saving my family heirloom!\"",
             "Spend those 50 Rupees on the 100-Rupee Progression Upgrade at Merchant Bramble's Shop!",
             4.2
+          );
+        }
+      }
+
+      // C. Center Crossroads Hub Guide NPC: Scout Lyra (`GUIDE_NPC_POS = -4.2, -5.2`)
+      const guideDx = hero.x - GUIDE_NPC_POS.x;
+      const guideDz = hero.z - GUIDE_NPC_POS.z;
+      const distToGuide = Math.hypot(guideDx, guideDz);
+
+      if (distToGuide < 1.05) {
+        const pushX = distToGuide > 0.01 ? guideDx / distToGuide : 0;
+        const pushZ = distToGuide > 0.01 ? guideDz / distToGuide : 1;
+        hero.x = GUIDE_NPC_POS.x + pushX * 1.05;
+        hero.z = GUIDE_NPC_POS.z + pushZ * 1.05;
+      }
+
+      if (distToGuide <= 2.85 && input.interactPressed) {
+        soundEngine.playKeyPickup();
+        if (!flags.keyPickedUp) {
+          pushBanner(
+            "Scout Lyra: \"Take the WEST EXIT (Map 1B: Forest Grove) first!\"",
+            "Hit the Crystal Switch with your Boomerang [Q] or defeat the 3 ambush monsters to claim the Dungeon Key & Flame Rod!",
+            6.0
+          );
+        } else if (!flags.bossDefeated) {
+          pushBanner(
+            "Scout Lyra: \"You have the Key! Take the NORTH EXIT (Map 2: Sunken Sanctum)!\"",
+            "Unlock the North Gate, conquer the 4 Dungeon Rooms, and defeat Malakor for +1 Full Heart Container!",
+            6.0
+          );
+        } else {
+          pushBanner(
+            "Scout Lyra: \"Now burn the EAST EXIT vines [R] to enter Map 3 (The Burned Pass)!\"",
+            "Use your Flame Rod [R] on the East Exit Dry Vines / Torches — and don't forget the Locked Ledge in the NW!",
+            6.0
           );
         }
       }
@@ -7235,10 +7464,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
           e.isBounty &&
           Math.hypot(e.x - hero.x, e.z - hero.z) <= 5.5
       );
-      const nearMoatKey =
-        zone === "overworld" &&
+      const nearGroveKey =
+        zone === "grove" &&
         !flags.keyPickedUp &&
-        Math.hypot(DUNGEON_KEY_POS.x - hero.x, DUNGEON_KEY_POS.z - hero.z) <= 7.5;
+        Math.hypot(DUNGEON_KEY_POS.x - hero.x, DUNGEON_KEY_POS.z - hero.z) <= 8.5;
+      const nearGroveSwitch =
+        zone === "grove" &&
+        !flags.grovePuzzleSolved &&
+        Math.hypot(-6.5 - hero.x, 6.2 - hero.z) <= 8.0;
+      const nearLockedEntryGate =
+        zone === "overworld" &&
+        !flags.dungeonEntryUnlocked &&
+        Math.hypot(DUNGEON_ENTRY_GATE_POS.x - hero.x, DUNGEON_ENTRY_GATE_POS.z - hero.z) <= 5.5;
       const nearWaterGapRupee = rupees.find(
         (r) =>
           r.zone === zone &&
@@ -7253,6 +7490,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const nearElderRowan =
         zone === "overworld" &&
         Math.hypot(HEIRLOOM_NPC_POS.x - hero.x, HEIRLOOM_NPC_POS.z - hero.z) <= 4.5;
+      const nearScoutLyra =
+        zone === "overworld" &&
+        Math.hypot(GUIDE_NPC_POS.x - hero.x, GUIDE_NPC_POS.z - hero.z) <= 3.8;
 
       if (nearGroundBomb) {
         hero.interactPrompt = "Press [F] or [B] to Lift & Throw Bomb";
@@ -7270,12 +7510,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
           : flags.heirloomMonstersCleared
           ? "Elder Rowan — Step Closer to Claim Your +50 Rupee Quest Reward!"
           : "Elder Rowan (NPC Quest) — Clear the Eastern Bandit Cave for +50 Rupees! [Press F]";
+      } else if (nearScoutLyra) {
+        hero.interactPrompt =
+          "Scout Lyra (Crossroads Hub Guide) — Press [F] for West / North / East Exit Hints!";
+      } else if (nearLockedEntryGate) {
+        hero.interactPrompt =
+          flags.keyPickedUp || hero.hasDungeonKey
+            ? "North Dungeon Entrance Gate — Walk Forward to Unlock Map 2!"
+            : "North Dungeon Entrance Gate (Locked) — Get the Key from West Exit (Map 1B: Forest Grove)!";
       } else if (nearBridgeTurret) {
         hero.interactPrompt =
           "Bridge Stone Turret — Hold Shield [RMB / Shift] and walk forward to deflect rocks!";
-      } else if (nearMoatKey) {
+      } else if (nearGroveKey) {
         hero.interactPrompt =
-          "Sanctum Key Across Water Moat — Throw Boomerang [Q / 1] to Snag & Fetch It!";
+          "Sanctum Entry Key & Flame Rod Pedestal — Walk Up or Throw Boomerang [Q / 1] to Claim!";
+      } else if (nearGroveSwitch) {
+        hero.interactPrompt =
+          "Grove Crystal Switch — Throw Boomerang [Q / 1] Across the Stream (or Clear 3 Ambush Monsters) to Open Shrine!";
       } else if (nearWaterGapRupee) {
         hero.interactPrompt =
           "Red Rupee (+20) Across Water — Throw Boomerang [Q / 1] to Snag & Pull It Back!";
@@ -7297,11 +7548,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
         hero.interactPrompt =
           nearBurnableBarrier.prefab === "spiderweb_barrier"
             ? "Thick Spiderwebs — Shoot with Flame Rod [R] to Burn!"
+            : nearBurnableBarrier.id.startsWith("prop-ow-east-exit-briar")
+            ? "East Exit Dry Vines (Map 3: Burned Pass) — Burn with Flame Rod [R] or Light Both Torches!"
+            : nearBurnableBarrier.id === "prop-ow-ledge-briar"
+            ? "Locked Ledge Dry Vines — Return with Flame Rod [R] to Burn & Claim +40 Rupees!"
             : "Dry Briar Thicket — Shoot with Flame Rod [R] to Burn!";
       } else if (nearUnlitTorch) {
         hero.interactPrompt =
           (nearUnlitTorch.timedDuration ?? 0) > 0
             ? `Timed Lantern (${nearUnlitTorch.timedDuration}s) — Shoot with Flame Rod [R] to Light All 4!`
+            : nearUnlitTorch.id.startsWith("prop-ow-east-exit-torch")
+            ? "East Exit Gate Torch — Light Both Torches with Flame Rod [R] to Burn the East Barrier!"
             : "Unlit Lantern — Shoot with Flame Rod [R] to Illuminate!";
       } else {
         hero.interactPrompt = null;

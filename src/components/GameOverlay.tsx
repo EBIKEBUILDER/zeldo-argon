@@ -356,7 +356,7 @@ export default function GameOverlay() {
     (e) => e.kind === "minion" && e.zone === zone && e.state !== "dead"
   ).length;
 
-  // Dark Room (Hall of Pillars) & Timed 8-Second Torch Square Status
+  // Dark Room (Room II: Dark Lantern Puzzle Room) & Timed 8-Second Torch Square Status
   const inDarkHall =
     phase === "playing" && !editorMode && zone === "dungeon" && dungeonRoom === "hall";
   const hallTorches = mapProps.filter(
@@ -364,7 +364,7 @@ export default function GameOverlay() {
       p.zone === "dungeon" &&
       p.prefab === "wall_torch" &&
       p.z >= -15.5 &&
-      p.z <= 11.8
+      p.z <= -1.2
   );
   const litHallTorchesCount = hallTorches.filter((p) => p.lit !== false).length;
   const hallLightRatio = Math.min(1, litHallTorchesCount / 4);
@@ -387,40 +387,54 @@ export default function GameOverlay() {
   );
 
   let currentObjective =
-    !flags.shopProgressionBought
-      ? "Map 1 Economy Goal: Earn 100 Rupees (SW Secret Stash Cave +50, SE Heirloom Quest NPC +50, & Gold Bounty Monsters 5x Drops) for the Shop's 100-Rupee Upgrade!"
-      : "Deflect Bridge Turret rocks with Shield (RMB), snag the Key over water with Boomerang (Q), or light the Torch Square (R)";
+    "Hub Goal: Take the West Exit to Forest Grove (Map 1B) to earn the Sanctum Key & Flame Rod (or earn 100 Rupees for the Shop Upgrade)!";
   if (zone === "frontier") {
     currentObjective =
-      "Melt Ice Armor & Burn Wooden Shields with Flame Rod (R), or dig Dirt Patches (G)!";
-  } else if (flags.chestUnlocked) {
-    currentObjective =
-      "Zeldo Crest Restored! Burn the North Exit Spiderwebs with Flame Rod (R) to enter Map 3!";
-  } else if (flags.bossDefeated) {
-    currentObjective =
-      "Open the Golden Chest, then burn the North Exit Spiderwebs (R) to enter Map 3!";
+      "Map 3 (The Burned Pass): Melt Ice Armor & Burn Wooden Shields with Flame Rod (R), or dig Dirt Patches (G)!";
+  } else if (zone === "grove") {
+    currentObjective = !flags.grovePuzzleSolved
+      ? "Map 1B (Forest Grove): Hit the Crystal Orb Switch across the stream with Boomerang (Q) OR defeat all 3 Ambush Monsters!"
+      : !flags.keyPickedUp
+      ? "Claim the Sanctum Key & Flame Rod from the North Shrine Pedestal (or snag it with Boomerang Q)!"
+      : "Return East to the Crossroads Hub and unlock the North Dungeon Gate!";
+  } else if (flags.chestUnlocked || flags.bossDefeated) {
+    currentObjective = !flags.eastExitBurned
+      ? "Boss Defeated (+1 Heart)! Return to Map 1 Hub and burn the East Exit Dry Vines / Torches with Flame Rod (R) to enter Map 3!"
+      : "Step through the East Exit of Map 1 into Map 3: The Burned Pass!";
   } else if (zone === "dungeon" && flags.gateUnlocked) {
     currentObjective =
-      "Shoot Malakor's Glowing Open Eye with your Bow (E) to pierce his Dread Plate!";
+      "Room IV (Boss Room): Shoot Malakor's Glowing Open Eye with your Bow (E) to claim a Full Heart Container (+1 Max HP)!";
   } else if (zone === "dungeon" && !flags.gateUnlocked) {
-    currentObjective = hero.hasDungeonKey
-      ? "Advance North through the Hall of Pillars to unlock the Gate"
-      : "Shoot both Wall Eye Statues with Bow (E), light all 4 Timed Lanterns (R), or find a Small Key!";
-  } else if (flags.keyPickedUp) {
     currentObjective =
-      "Hold Shield (RMB / Shift) to deflect the Bridge Turret's rocks and enter the Sunken Sanctum!";
+      dungeonRoom === "entry"
+        ? "Room I (Push-Block Room): Push the Carved Stone Block (WASD 1s) onto the Floor Switch!"
+        : dungeonRoom === "hall"
+        ? "Room II (Dark Lantern Room): Light all 4 Timed Lanterns within 8s with Flame Rod (R)!"
+        : hero.hasDungeonKey
+        ? "Room III (Mini-Arena): Approach the North Boss Gate to unlock it with your Key!"
+        : "Room III (Mini-Arena): Defeat the Arena Guards or shoot both Wall Eye Statues with Bow (E) to unseal the Boss Gate!";
+  } else if (flags.keyPickedUp && !flags.dungeonEntryUnlocked) {
+    currentObjective =
+      "Key & Flame Rod Acquired! Deflect the North Bridge Turret's rocks with Shield (RMB) and unlock the North Dungeon Gate!";
+  } else if (flags.dungeonEntryUnlocked) {
+    currentObjective =
+      "North Gate Unlocked! Step into the Sunken Sanctum Portal (Map 2) or burn the East Vines (R) for Map 3!";
   }
 
   const zoneLabel =
     zone === "overworld"
-      ? "Whispering Vale (Overworld)"
+      ? "Map 1: Crossroads Village Hub"
+      : zone === "grove"
+      ? "Map 1B: Whispering Forest Grove (West)"
       : zone === "frontier"
-      ? "Elderwood Frontier (Beyond the Sanctum)"
+      ? "Map 3: The Burned Pass (East Frontier)"
       : dungeonRoom === "entry"
-      ? "Sunken Sanctum — I. Antechamber"
+      ? "Map 2: Sunken Sanctum — I. Push-Block Room"
       : dungeonRoom === "hall"
-      ? "Sunken Sanctum — II. Hall of Pillars"
-      : "Sunken Sanctum — III. Dread Sanctum";
+      ? "Map 2: Sunken Sanctum — II. Dark Lantern Room"
+      : dungeonRoom === "arena"
+      ? "Map 2: Sunken Sanctum — III. Mini-Arena"
+      : "Map 2: Sunken Sanctum — IV. Boss Room";
 
   // Lookup currently selected entity for the Right Inspector Dock
   const selectedProp =
@@ -899,21 +913,28 @@ export default function GameOverlay() {
                   onClick={() => setEditorZone("overworld", true)}
                   className={`zone-switch-btn ${zone === "overworld" ? "active" : ""}`}
                 >
-                  Overworld
+                  Hub (Map 1)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorZone("grove", true)}
+                  className={`zone-switch-btn ${zone === "grove" ? "active" : ""}`}
+                >
+                  Grove (1B)
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditorZone("dungeon", true)}
                   className={`zone-switch-btn ${zone === "dungeon" ? "active" : ""}`}
                 >
-                  Dungeon
+                  Dungeon (2)
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditorZone("frontier", true)}
                   className={`zone-switch-btn ${zone === "frontier" ? "active" : ""}`}
                 >
-                  Frontier
+                  Pass (3)
                 </button>
               </div>
             </div>
@@ -2028,9 +2049,10 @@ export default function GameOverlay() {
                       })
                     }
                   >
-                    <option value="overworld">Overworld (Whispering Vale)</option>
-                    <option value="dungeon">Dungeon (Sunken Sanctum)</option>
-                    <option value="frontier">Elderwood Frontier (Beyond Sanctum)</option>
+                    <option value="overworld">Map 1: Crossroads Village Hub</option>
+                    <option value="grove">Map 1B: Whispering Forest Grove (West Exit)</option>
+                    <option value="dungeon">Map 2: Sunken Sanctum (First Dungeon)</option>
+                    <option value="frontier">Map 3: The Burned Pass (East Frontier)</option>
                   </select>
                 </label>
 
@@ -3034,7 +3056,9 @@ export default function GameOverlay() {
                 <span className="stat-lbl">Foes Vanquished</span>
               </div>
               <div className="stat-item">
-                <span className="stat-val">{(hero.hp / 2).toFixed(1)} / 5.0</span>
+                <span className="stat-val">
+                  {(hero.hp / 2).toFixed(1)} / {(hero.maxHp / 2).toFixed(1)}
+                </span>
                 <span className="stat-lbl">Hearts Left</span>
               </div>
             </div>

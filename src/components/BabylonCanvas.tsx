@@ -24,12 +24,14 @@ import {
   TerrainCellData,
   useGameStore,
 } from "@/store/gameStore";
-import {
+ import {
   BOSS_CHEST_POS,
   BOSS_EXIT_GATE_POS,
   CustomModelAsset,
+  DUNGEON_ENTRY_GATE_POS,
   DUNGEON_KEY_POS,
   EnemyKind,
+  GUIDE_NPC_POS,
   HEIRLOOM_NPC_POS,
   LOCKED_GATE_POS,
   MapPortal,
@@ -452,14 +454,16 @@ export default function BabylonCanvas() {
       64
     );
 
-    // =========================================================
+     // =========================================================
     // ZONE CONTAINERS & UPDATABLE TERRAIN MESHES
     // =========================================================
     const overworldRoot = new TransformNode("overworldRoot", scene);
+    const groveRoot = new TransformNode("groveRoot", scene);
     const dungeonRoot = new TransformNode("dungeonRoot", scene);
     const frontierRoot = new TransformNode("frontierRoot", scene);
 
     const owBaseColor = new Color3(0.24, 0.55, 0.28);
+    const grBaseColor = new Color3(0.19, 0.48, 0.27);
     const dgBaseColor = new Color3(0.18, 0.19, 0.25);
     const frBaseColor = new Color3(0.18, 0.46, 0.32);
 
@@ -468,6 +472,12 @@ export default function BabylonCanvas() {
       new Color3(1, 1, 1),
       undefined,
       new Color3(0.05, 0.07, 0.05)
+    );
+    const grGroundMat = makeMat(
+      "grGroundMat",
+      new Color3(1, 1, 1),
+      undefined,
+      new Color3(0.05, 0.08, 0.06)
     );
     const dgGroundMat = makeMat(
       "dgGroundMat",
@@ -492,6 +502,16 @@ export default function BabylonCanvas() {
     owGround.parent = overworldRoot;
     owGround.isPickable = true;
     applyTerrainCellsToGroundMesh(owGround, owBaseColor, {});
+
+    const grGround = MeshBuilder.CreateGround(
+      "grGround",
+      { width: 84, height: 84, subdivisions: 42, updatable: true },
+      scene
+    );
+    grGround.material = grGroundMat;
+    grGround.parent = groveRoot;
+    grGround.isPickable = true;
+    applyTerrainCellsToGroundMesh(grGround, grBaseColor, {});
 
     const dgGround = MeshBuilder.CreateGround(
       "dgGround",
@@ -862,18 +882,128 @@ export default function BabylonCanvas() {
     questExclamationDot.material = glowingCrimsonMat;
     questExclamationDot.parent = elderRowanQuestMarker;
 
-    // Western Ruins Key Pedestal & Floating Golden Sanctum Key
-    const keyPedestal = MeshBuilder.CreateCylinder(
-      "keyPedestal",
-      { diameterTop: 1.8, diameterBottom: 2.3, height: 0.7, tessellation: 12 },
+     // =========================================================
+    // MAP 1 HUB: 3D CROSSROADS GUIDE NPC (SCOUT LYRA AT GUIDE_NPC_POS)
+    // =========================================================
+    const scoutLyraRoot = new TransformNode("scoutLyraRoot", scene);
+    scoutLyraRoot.parent = overworldRoot;
+    scoutLyraRoot.position.set(GUIDE_NPC_POS.x, 0, GUIDE_NPC_POS.z);
+    scoutLyraRoot.rotation.y = Math.PI * 0.85;
+
+    const lyraRug = MeshBuilder.CreateCylinder(
+      "lyraRug",
+      { diameter: 2.1, height: 0.05, tessellation: 20 },
       scene
     );
-    keyPedestal.position.set(DUNGEON_KEY_POS.x, 0.35, DUNGEON_KEY_POS.z);
+    lyraRug.position.set(0, 0.025, 0);
+    lyraRug.material = pathMat;
+    lyraRug.parent = scoutLyraRoot;
+
+    const lyraCloakMat = makeMat(
+      "lyraCloakMat",
+      new Color3(0.18, 0.68, 0.44),
+      new Color3(0.05, 0.22, 0.14)
+    );
+    const lyraBody = MeshBuilder.CreateCylinder(
+      "lyraBody",
+      { diameterTop: 0.56, diameterBottom: 0.92, height: 1.24, tessellation: 14 },
+      scene
+    );
+    lyraBody.position.set(0, 0.66, 0);
+    lyraBody.material = lyraCloakMat;
+    lyraBody.parent = scoutLyraRoot;
+
+    const lyraHead = MeshBuilder.CreateSphere(
+      "lyraHead",
+      { diameter: 0.68, segments: 14 },
+      scene
+    );
+    lyraHead.position.set(0, 1.52, 0);
+    lyraHead.material = whiteEyeMat;
+    lyraHead.parent = scoutLyraRoot;
+
+    const lyraHood = MeshBuilder.CreateCylinder(
+      "lyraHood",
+      { diameterTop: 0.08, diameterBottom: 0.96, height: 0.78, tessellation: 12 },
+      scene
+    );
+    lyraHood.position.set(0, 1.98, -0.05);
+    lyraHood.material = lyraCloakMat;
+    lyraHood.parent = scoutLyraRoot;
+
+    const scoutLyraCompass = MeshBuilder.CreateTorus(
+      "scoutLyraCompass",
+      { diameter: 0.92, thickness: 0.1, tessellation: 20 },
+      scene
+    );
+    scoutLyraCompass.position.set(0, 2.75, 0);
+    scoutLyraCompass.material = goldKeyMat;
+    scoutLyraCompass.parent = scoutLyraRoot;
+
+    // =========================================================
+    // MAP 1 NORTH EXIT: LOCKED DUNGEON ENTRANCE IRON GATE (DUNGEON_ENTRY_GATE_POS = 0, 31.8)
+    // =========================================================
+    const owDungeonGateNode = new TransformNode("owDungeonGateNode", scene);
+    owDungeonGateNode.parent = overworldRoot;
+    owDungeonGateNode.position.set(DUNGEON_ENTRY_GATE_POS.x, 0, DUNGEON_ENTRY_GATE_POS.z);
+
+    {
+      const h = 4.5;
+      const w = 7.4;
+      const owIronParts: Mesh[] = [];
+      const barCount = 9;
+      for (let b = 0; b < barCount; b++) {
+        const bx = -3.2 + (b / (barCount - 1)) * 6.4;
+        const bar = MeshBuilder.CreateCylinder(
+          `owGateBar-${b}`,
+          { diameter: 0.26, height: h, tessellation: 12 },
+          scene
+        );
+        bar.position.set(bx, h / 2, 0);
+        owIronParts.push(bar);
+      }
+      const crossBeamTop = MeshBuilder.CreateBox(
+        "owGateBeamTop",
+        { width: w, height: 0.38, depth: 0.5 },
+        scene
+      );
+      crossBeamTop.position.set(0, h - 0.5, 0);
+      owIronParts.push(crossBeamTop);
+
+      const crossBeamMid = MeshBuilder.CreateBox(
+        "owGateBeamMid",
+        { width: w, height: 0.34, depth: 0.45 },
+        scene
+      );
+      crossBeamMid.position.set(0, h * 0.45, 0);
+      owIronParts.push(crossBeamMid);
+
+      mergeGroupWithMaterial("mergedOwDungeonGateIron", owIronParts, ironGateMat, owDungeonGateNode);
+
+      const owLockPlate = MeshBuilder.CreateBox(
+        "owGateLockPlate",
+        { width: 1.15, height: 1.25, depth: 0.65 },
+        scene
+      );
+      owLockPlate.position.set(0, h * 0.45, 0);
+      owLockPlate.material = goldKeyMat;
+      owLockPlate.parent = owDungeonGateNode;
+    }
+
+    // =========================================================
+    // MAP 1B (GROVE) SHRINE PEDESTAL: FLOATING GOLDEN SANCTUM KEY & FLAME ROD
+    // =========================================================
+    const keyPedestal = MeshBuilder.CreateCylinder(
+      "keyPedestal",
+      { diameterTop: 2.1, diameterBottom: 2.6, height: 0.72, tessellation: 14 },
+      scene
+    );
+    keyPedestal.position.set(DUNGEON_KEY_POS.x, 0.36, DUNGEON_KEY_POS.z);
     keyPedestal.material = ruinMat;
-    keyPedestal.parent = overworldRoot;
+    keyPedestal.parent = groveRoot;
 
     const keyNode = new TransformNode("sanctumKeyNode", scene);
-    keyNode.parent = overworldRoot;
+    keyNode.parent = groveRoot;
     keyNode.position.set(DUNGEON_KEY_POS.x, 1.6, DUNGEON_KEY_POS.z);
 
     const keyParts: Mesh[] = [];
@@ -904,14 +1034,34 @@ export default function BabylonCanvas() {
 
     mergeGroupWithMaterial("mergedSanctumKey", keyParts, goldKeyMat, keyNode);
 
+    // Floating Flame Rod Scepter alongside the Sanctum Key on the Grove Shrine Pedestal
+    const groveRodShaft = MeshBuilder.CreateCylinder(
+      "groveRodShaft",
+      { diameterTop: 0.12, diameterBottom: 0.09, height: 1.25, tessellation: 10 },
+      scene
+    );
+    groveRodShaft.position.set(-0.55, 0.05, 0);
+    groveRodShaft.rotation.z = -0.22;
+    groveRodShaft.material = glowingCrimsonMat;
+    groveRodShaft.parent = keyNode;
+
+    const groveRodCrown = MeshBuilder.CreatePolyhedron(
+      "groveRodCrown",
+      { type: 1, size: 0.22 },
+      scene
+    );
+    groveRodCrown.position.set(-0.68, 0.72, 0);
+    groveRodCrown.material = goldKeyMat;
+    groveRodCrown.parent = keyNode;
+
     const keyBeaconRing = MeshBuilder.CreateTorus(
       "keyBeaconRing",
-      { diameter: 2.3, thickness: 0.08, tessellation: 28 },
+      { diameter: 2.5, thickness: 0.09, tessellation: 28 },
       scene
     );
     keyBeaconRing.position.set(DUNGEON_KEY_POS.x, 0.12, DUNGEON_KEY_POS.z);
     keyBeaconRing.material = goldKeyMat;
-    keyBeaconRing.parent = overworldRoot;
+    keyBeaconRing.parent = groveRoot;
 
     // Dungeon Carpet Runner & Boss Arena Ring
     const dgRunner = MeshBuilder.CreateBox(
@@ -5328,11 +5478,13 @@ export default function BabylonCanvas() {
     let lastPointerY = 0;
     let cursorGroundPos: { x: number; z: number } | null = null;
 
-    const pickGroundPoint = (): { x: number; z: number } | null => {
+     const pickGroundPoint = (): { x: number; z: number } | null => {
       const snap = useGameStore.getState();
       const targetGround =
         snap.zone === "overworld"
           ? owGround
+          : snap.zone === "grove"
+          ? grGround
           : snap.zone === "frontier"
           ? frGround
           : dgGround;
@@ -5660,19 +5812,22 @@ export default function BabylonCanvas() {
       const t = now * 0.001;
       const activeCells = snap.terrainCells[snap.zone];
 
-      // 0. Sync Sculpted & Painted Terrain Vertex Buffers when modified
+       // 0. Sync Sculpted & Painted Terrain Vertex Buffers when modified
       if (snap.terrainRevision !== syncedTerrainRevision) {
         syncedTerrainRevision = snap.terrainRevision;
         applyTerrainCellsToGroundMesh(owGround, owBaseColor, snap.terrainCells.overworld);
+        applyTerrainCellsToGroundMesh(grGround, grBaseColor, snap.terrainCells.grove ?? {});
         applyTerrainCellsToGroundMesh(dgGround, dgBaseColor, snap.terrainCells.dungeon);
         applyTerrainCellsToGroundMesh(frGround, frBaseColor, snap.terrainCells.frontier ?? {});
       }
 
       // 1. Zone visibility & lighting atmosphere
       const isOverworld = snap.zone === "overworld";
+      const isGrove = snap.zone === "grove";
       const isDungeon = snap.zone === "dungeon";
       const isFrontier = snap.zone === "frontier";
       overworldRoot.setEnabled(isOverworld);
+      groveRoot.setEnabled(isGrove);
       dungeonRoot.setEnabled(isDungeon);
       frontierRoot.setEnabled(isFrontier);
 
@@ -5682,6 +5837,12 @@ export default function BabylonCanvas() {
         dirLight.intensity = 0.76;
         sanctumPointLight.intensity = 0;
         heroLanternDisc.setEnabled(false);
+      } else if (isGrove) {
+        scene.clearColor.set(0.06, 0.15, 0.1, 1);
+        hemiLight.intensity = 0.86;
+        dirLight.intensity = 0.72;
+        sanctumPointLight.intensity = 0;
+        heroLanternDisc.setEnabled(false);
       } else if (isFrontier) {
         scene.clearColor.set(0.06, 0.14, 0.12, 1);
         hemiLight.intensity = 0.88;
@@ -5689,7 +5850,7 @@ export default function BabylonCanvas() {
         sanctumPointLight.intensity = 0;
         heroLanternDisc.setEnabled(false);
       } else {
-        // Dark Room Visibility Cone & Lantern Illumination in Dungeon Room II (Hall of Pillars)
+        // Dark Room Visibility Cone & Lantern Illumination in Dungeon Room II (Dark Hall of Lanterns)
         // Zero extra dynamic PointLights or shadow maps — scales existing scene light uniforms!
         if (snap.dungeonRoom === "hall" && !snap.editorMode) {
           let litHallTorches = 0;
@@ -5698,7 +5859,7 @@ export default function BabylonCanvas() {
               p.zone === "dungeon" &&
               p.prefab === "wall_torch" &&
               p.z >= -15.5 &&
-              p.z <= 11.8 &&
+              p.z <= -1.2 &&
               p.lit !== false
             ) {
               litHallTorches++;
@@ -6097,12 +6258,12 @@ export default function BabylonCanvas() {
         }
       }
 
-      // 6. Sync Sanctum Key, Gate, Northern Frontier Exit Gate & Boss Chest
-      keyNode.setEnabled(isOverworld && !snap.flags.keyPickedUp);
-      keyBeaconRing.setEnabled(isOverworld && !snap.flags.keyPickedUp);
+       // 6. Sync Sanctum Key & Flame Rod Pedestal (Map 1B Grove), Gates & Boss Chest
+      keyNode.setEnabled(isGrove && !snap.flags.keyPickedUp);
+      keyBeaconRing.setEnabled(isGrove && !snap.flags.keyPickedUp);
       if (!snap.flags.keyPickedUp) {
         keyNode.rotation.y = t * 2.2;
-        if (snap.boomerang?.carryingKey && snap.boomerang.zone === "overworld") {
+        if (snap.boomerang?.carryingKey && snap.boomerang.zone === "grove") {
           keyNode.position.set(snap.boomerang.x, 1.35, snap.boomerang.z);
         } else {
           keyNode.position.set(
@@ -6112,6 +6273,16 @@ export default function BabylonCanvas() {
           );
         }
       }
+
+      const isOwEntryOpen = Boolean(
+        snap.flags.dungeonEntryUnlocked ||
+          snap.flags.keyPickedUp ||
+          snap.hero.hasDungeonKey
+      );
+      const targetOwGateY = isOwEntryOpen ? -4.8 : 0;
+      owDungeonGateNode.position.y +=
+        (targetOwGateY - owDungeonGateNode.position.y) *
+        Math.min(1, dt * (isOwEntryOpen ? 6 : 26));
 
       const isGateOpen =
         snap.flags.gateUnlocked &&
@@ -6140,7 +6311,7 @@ export default function BabylonCanvas() {
         zeldoCrestNode.setEnabled(false);
       }
 
-      // 6b. Sync Map 1 Economy Loop 3D Visuals (Shop Counter Relic, SW Secret Stash Chest, & Elder Rowan NPC)
+      // 6b. Sync Map 1 Economy & Hub Loop 3D Visuals (Shop Counter Relic, SW Secret Stash Chest, Elder Rowan & Scout Lyra)
       shopProgressionNode.setEnabled(!snap.flags.shopProgressionBought);
       if (!snap.flags.shopProgressionBought) {
         shopProgressionNode.rotation.y = Math.sin(t * 2.2) * 0.35;
@@ -6164,6 +6335,9 @@ export default function BabylonCanvas() {
         elderRowanQuestMarker.rotation.y = t * 3.2;
         elderRowanQuestMarker.position.y = 2.95 + Math.sin(t * 4.5) * 0.18;
       }
+
+      scoutLyraCompass.rotation.y = t * 2.5;
+      scoutLyraCompass.position.y = 2.75 + Math.sin(t * 3.8) * 0.14;
 
       // 7. Sync Enemies & Billboard Floating Health Bars
       const activeEnemyIds = new Set<string>();
