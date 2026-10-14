@@ -15,6 +15,7 @@ import {
   EnemyKind,
   EnemyShieldArmor,
   getDefaultEnemyWeight,
+  HEIRLOOM_NPC_POS,
   HERO_SPAWN,
   INITIAL_ENEMIES,
   INITIAL_PORTALS,
@@ -27,6 +28,7 @@ import {
   resolveArrowCollisions,
   resolveWorldCollisions,
   RupeeTier,
+  SECRET_STASH_POS,
   SHOP_INTERACT_POS,
   ZoneId,
 } from "@/game/worldData";
@@ -34,6 +36,10 @@ import { soundEngine } from "@/audio/soundEngine";
 
 export type GamePhase = "title" | "playing" | "gameover" | "victory";
 export type ShopItemId =
+  | "counter_hearts"
+  | "counter_ammo_magic"
+  | "counter_progression_upgrade"
+  | "heart_container"
   | "boomerang"
   | "bow"
   | "arrows"
@@ -210,6 +216,9 @@ export interface EnemyState {
   initialShieldArmor?: EnemyShieldArmor;
   shockArmor?: boolean;
   initialShockArmor?: boolean;
+  isBounty?: boolean;
+  initialIsBounty?: boolean;
+  questGroup?: "heirloom";
   provoked?: boolean;
   // Boss & Goblin Lunge combat state
   chargeAngle: number;
@@ -354,6 +363,11 @@ export interface GameFlags {
   dungeonCrystalPuzzleSolved?: boolean;
   frontierCrystalPuzzleSolved?: boolean;
   dungeonEyeStatuesSolved?: boolean;
+  secretStashClaimed?: boolean;
+  heirloomQuestStarted?: boolean;
+  heirloomMonstersCleared?: boolean;
+  heirloomQuestClaimed?: boolean;
+  shopProgressionBought?: boolean;
 }
 
 export interface GameStats {
@@ -685,6 +699,9 @@ function createInitialEnemies(): EnemyState[] {
     initialShieldArmor: spawn.shieldArmor ?? "none",
     shockArmor: spawn.shockArmor ?? false,
     initialShockArmor: spawn.shockArmor ?? false,
+    isBounty: spawn.isBounty ?? false,
+    initialIsBounty: spawn.isBounty ?? false,
+    questGroup: spawn.questGroup,
     chargeAngle: Math.PI,
     chargePathLength: BOSS_MAX_LUNGE_RANGE,
     chargeDistanceTraveled: 0,
@@ -831,6 +848,11 @@ function createInitialState(
       dungeonCrystalPuzzleSolved: false,
       frontierCrystalPuzzleSolved: false,
       dungeonEyeStatuesSolved: false,
+      secretStashClaimed: false,
+      heirloomQuestStarted: false,
+      heirloomMonstersCleared: false,
+      heirloomQuestClaimed: false,
+      shopProgressionBought: false,
     },
     stats: {
       enemiesDefeated: 0,
@@ -843,7 +865,7 @@ function createInitialState(
             id: 1,
             text: "Whispering Vale",
             subtext:
-              "Shield [RMB] deflects Bridge Turret Rocks • Boomerang [Q] fetches over water & stuns Shock Slimes • Bow [E] pierces Eye Statues & Boss Eye!",
+              "Explore Map 1 for Rupees (Secret SW Cave +50 • Elder Rowan's SE Quest +50 • Gold Bounty Monsters 5x) to buy the 100-Rupee Shop Upgrade!",
             timer: 6.5,
           }
         : null,
@@ -868,7 +890,7 @@ function createInitialState(
   };
 }
 
-const MAP_STORAGE_KEY = "zeldo-authored-map-v5";
+const MAP_STORAGE_KEY = "zeldo-authored-map-v6";
 
 function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   if (p.prefab === "dirt_patch") {
@@ -1852,6 +1874,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hp: e.maxHp,
           shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
           shockArmor: e.initialShockArmor ?? e.shockArmor ?? false,
+          isBounty: e.initialIsBounty ?? e.isBounty ?? false,
           state: "idle",
           stateTimer: 0,
           hitFlashTimer: 0,
@@ -1912,6 +1935,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         dungeonCrystalPuzzleSolved: false,
         frontierCrystalPuzzleSolved: false,
         dungeonEyeStatuesSolved: false,
+        secretStashClaimed: false,
+        heirloomQuestStarted: false,
+        heirloomMonstersCleared: false,
+        heirloomQuestClaimed: false,
+        shopProgressionBought: false,
       },
       hero: {
         ...state.hero,
@@ -2050,23 +2078,167 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   // =========================================================
-  // MERCHANT SHOP PURCHASE ACTION
+  // MERCHANT SHOP PURCHASE ACTION (INCLUDING THE 3 FEATURED COUNTER ITEMS!)
   // =========================================================
   buyShopItem: (item: ShopItemId) => {
     const state = get();
-    const hero = { ...state.hero, bottles: [...state.hero.bottles] };
+    const hero = {
+      ...state.hero,
+      bottles: [...state.hero.bottles],
+      unlockedPrimaries: [...state.hero.unlockedPrimaries],
+      unlockedOffhands: [...state.hero.unlockedOffhands],
+      unlockedTunics: [...state.hero.unlockedTunics],
+      unlockedBoots: [...state.hero.unlockedBoots],
+    };
+    const flags = { ...state.flags };
 
     const pushNotice = (text: string, subtext: string) => {
       set({
         hero,
+        flags,
         banner: {
           id: Date.now() + Math.floor(Math.random() * 1000),
           text,
           subtext,
-          timer: 4.2,
+          timer: 4.5,
         },
       });
     };
+
+    // 1. COUNTER ITEM #1: Refill Hearts / Red Potion (Cheap: 20 Rupees)
+    if (item === "counter_hearts") {
+      const emptyIdx = hero.bottles.findIndex((b) => b === "empty");
+      if (hero.hp >= hero.maxHp && emptyIdx === -1) {
+        soundEngine.playGateLocked();
+        pushNotice(
+          "Hearts & Bottles Already Full!",
+          "Your Life Hearts are at 100% and all Glass Bottles are filled."
+        );
+        return;
+      }
+      if (hero.rupees < 20) {
+        soundEngine.playGateLocked();
+        pushNotice("Not Enough Rupees!", "Refill Hearts / Potion costs 20 Rupees.");
+        return;
+      }
+      hero.rupees -= 20;
+      hero.hp = hero.maxHp;
+      hero.damageFractionAcc = 0;
+      if (emptyIdx !== -1) {
+        hero.bottles[emptyIdx] = "red_potion";
+      }
+      soundEngine.playShopPurchase();
+      soundEngine.playPotionDrink();
+      pushNotice(
+        emptyIdx !== -1
+          ? `Full Hearts Restored + Bottled Red Potion (#${emptyIdx + 1})!`
+          : "All Life Hearts Restored to 100%!",
+        emptyIdx !== -1
+          ? "Your health is full AND an empty bottle was filled with a Crimson Potion!"
+          : "You feel completely revitalized for the battles ahead!"
+      );
+      return;
+    }
+
+    // 2. COUNTER ITEM #2: Bundle of Arrows + Magic Refill (Cheap: 10 Rupees)
+    if (item === "counter_ammo_magic") {
+      if (hero.arrows >= 99 && hero.mp >= hero.maxMp) {
+        soundEngine.playGateLocked();
+        pushNotice(
+          "Quiver & Magic Already Full!",
+          "You already carry 99 Arrows and 100% Magic Power (MP)."
+        );
+        return;
+      }
+      if (hero.rupees < 10) {
+        soundEngine.playGateLocked();
+        pushNotice(
+          "Not Enough Rupees!",
+          "Bundle of 10 Arrows + Magic Refill costs 10 Rupees."
+        );
+        return;
+      }
+      hero.rupees -= 10;
+      hero.arrows = Math.min(99, hero.arrows + 10);
+      hero.mp = hero.maxMp;
+      soundEngine.playShopPurchase();
+      pushNotice(
+        `+10 Arrows (${hero.arrows}) & 100% Magic Restored!`,
+        "Your Bow quiver is restocked and your Flame Rod Magic meter is at 100%!"
+      );
+      return;
+    }
+
+    // 3. COUNTER ITEM #3: Champion's Progression Upgrade (Expensive: 100 Rupees)
+    if (item === "counter_progression_upgrade") {
+      if (flags.shopProgressionBought) {
+        soundEngine.playGateLocked();
+        pushNotice(
+          "Champion's Relic Already Claimed!",
+          "You can still purchase repeatable Heart Containers (+1 Max Heart) for 100 Rupees!"
+        );
+        return;
+      }
+      if (hero.rupees < 100) {
+        soundEngine.playGateLocked();
+        pushNotice(
+          `Need ${100 - hero.rupees} More Rupees! (100 Rupees Required)`,
+          "Earn 50 Rupees in the SW Secret Stash Cave, 50 Rupees from Elder Rowan's Quest, or hunt Gold 5x Bounty Monsters!"
+        );
+        return;
+      }
+      hero.rupees -= 100;
+      flags.shopProgressionBought = true;
+      // Grant +1 Full Heart Container (+2 half-hearts) & full heal
+      hero.maxHp += 2;
+      hero.hp = hero.maxHp;
+      hero.damageFractionAcc = 0;
+      // Unlock & equip Bigger Shield (Aegis Mirror Shield: blocks 2 physical & magical damage!)
+      if (!hero.unlockedOffhands.includes("mirror_shield")) {
+        hero.unlockedOffhands.push("mirror_shield");
+      }
+      hero.equippedOffhand = "mirror_shield";
+      hero.shieldBlock = 2;
+      // Unlock & equip Tempered Master Blade (2x Sword Damage!)
+      if (!hero.unlockedPrimaries.includes("tempered_blade")) {
+        hero.unlockedPrimaries.push("tempered_blade");
+      }
+      hero.equippedPrimary = "tempered_blade";
+      hero.swordDamage = 2;
+      // Upgrade Bomb Bag capacity & refill Bombs to 30
+      hero.maxBombs = Math.max(hero.maxBombs || 30, 30);
+      hero.bombs = hero.maxBombs;
+      hero.mp = hero.maxMp;
+
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        "Champion's Progression Upgrade Unlocked! (+1 Heart, Mirror Shield, Master Blade & 30 Bombs)",
+        "Your Max HP increased, Aegis Mirror Shield & Tempered Blade are equipped, and your Bomb Bag is full!"
+      );
+      return;
+    }
+
+    // Repeatable 100-Rupee Heart Container (+1 Max Heart)
+    if (item === "heart_container") {
+      if (hero.rupees < 100) {
+        soundEngine.playGateLocked();
+        pushNotice(
+          `Need ${100 - hero.rupees} More Rupees! (100 Rupees Required)`,
+          "A Heart Container (+1 Max Heart) costs 100 Rupees."
+        );
+        return;
+      }
+      hero.rupees -= 100;
+      hero.maxHp += 2;
+      hero.hp = hero.maxHp;
+      hero.damageFractionAcc = 0;
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        `Purchased Heart Container! (${hero.maxHp / 2} Max Hearts)`,
+        "Your maximum life capacity permanently increased by +1 Full Heart and all Hearts are restored!"
+      );
+      return;
+    }
 
     if (item === "boomerang") {
       if (hero.hasBoomerang) return;
@@ -4165,7 +4337,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // Helper to handle enemy defeat & rupee / recovery heart drops
+    // Helper to handle enemy defeat & rupee / recovery heart drops (including 5x Bounty Monster Fountain & Heirloom Sub-Quest!)
     const handleEnemyDeath = (enemy: EnemyState) => {
       enemy.hp = 0;
       enemy.state = "dead";
@@ -4202,16 +4374,46 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const tier: RupeeTier = enemy.rupeeDrop === "boss" ? "red" : enemy.rupeeDrop;
         const value =
           tier === "heart" ? 2 : tier === "red" ? 20 : tier === "blue" ? 5 : 1;
-        rupees.push({
-          id: `drop-${enemy.id}-${stats.elapsedSeconds.toFixed(2)}`,
-          zone,
-          x: enemy.x,
-          z: enemy.z,
-          tier,
-          value,
-          collected: false,
-          spawnBounceTimer: 0.36,
-        });
+
+        if (enemy.isBounty) {
+          // BOUNTY MONSTER: Drops 5x Rupees in a celebratory radial fountain!
+          soundEngine.playSecretSolve();
+          const bountyOffsets = [
+            { ox: 0, oz: 0 },
+            { ox: -0.95, oz: 0.55 },
+            { ox: 0.95, oz: 0.55 },
+            { ox: -0.75, oz: -0.85 },
+            { ox: 0.75, oz: -0.85 },
+          ];
+          bountyOffsets.forEach((off, bIdx) => {
+            rupees.push({
+              id: `drop-bounty-${enemy.id}-${bIdx}-${stats.elapsedSeconds.toFixed(2)}`,
+              zone,
+              x: enemy.x + off.ox,
+              z: enemy.z + off.oz,
+              tier,
+              value,
+              collected: false,
+              spawnBounceTimer: 0.44 + bIdx * 0.04,
+            });
+          });
+          pushBanner(
+            `Bounty Monster Vanquished! (5x Rupee Drop: +${value * 5} Rupees!)`,
+            "Gold/Crimson Bounty Monsters drop 5x Rupees to help fund the 100-Rupee Shop Upgrade!",
+            4.2
+          );
+        } else {
+          rupees.push({
+            id: `drop-${enemy.id}-${stats.elapsedSeconds.toFixed(2)}`,
+            zone,
+            x: enemy.x,
+            z: enemy.z,
+            tier,
+            value,
+            collected: false,
+            spawnBounceTimer: 0.36,
+          });
+        }
 
         // Enemies also sometimes drop a Recovery Heart (especially when hero is hurt)
         const heartDropChance = hero.hp < hero.maxHp ? 0.38 : 0.18;
@@ -4226,6 +4428,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
             collected: false,
             spawnBounceTimer: 0.42,
           });
+        }
+      }
+
+      // Check if all Eastern Bandit Cave monsters (`questGroup === "heirloom"`) are now cleared!
+      if (enemy.questGroup === "heirloom" && !flags.heirloomMonstersCleared) {
+        const remainingHeirloomFoes = enemies.filter(
+          (e) => e.questGroup === "heirloom" && e.state !== "dead"
+        );
+        if (remainingHeirloomFoes.length === 0) {
+          flags.heirloomMonstersCleared = true;
+          soundEngine.playSecretSolve();
+          pushBanner(
+            "Recovered Elder Rowan's Golden Heirloom!",
+            "You cleared out the Eastern Bandit Cave! Return to Elder Rowan outside the cave for your 50-Rupee reward!",
+            5.8
+          );
         }
       }
     };
@@ -5530,7 +5748,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
             if (prop.id === "prop-ow-cracked-cave-rock") {
               pushBanner(
                 "Secret Echo Cave Entrance Unsealed!",
-                "Your bomb shattered the cracked boulder blocking the North-West cliffside cave!",
+                "Your bomb shattered the cracked boulder blocking the North-West cliffside cave (+50 Rupees inside)!",
+                5.5
+              );
+            } else if (prop.id === "prop-ow-stash-cracked-rock") {
+              pushBanner(
+                "Secret Rupee Stash Cave Unsealed! (+50 Rupees Inside!)",
+                "Your bomb blasted open the South-West corner cave — step inside to claim the 50-Rupee Stash Chest!",
                 5.5
               );
             } else {
@@ -6852,6 +7076,91 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // =========================================================
+    // 13b. MAP 1 ECONOMY LOOP: SECRET RUPEE STASH CAVE (+50 RUPEES) & ELDER ROWAN NPC SUB-QUEST (+50 RUPEES)
+    // =========================================================
+    if (zone === "overworld") {
+      // A. South-West Corner Secret Rupee Stash Cave Chest (`SECRET_STASH_POS = -30.5, -33.2`)
+      if (!flags.secretStashClaimed) {
+        const distToStash = Math.hypot(
+          hero.x - SECRET_STASH_POS.x,
+          hero.z - SECRET_STASH_POS.z
+        );
+        if (distToStash <= 2.4) {
+          flags.secretStashClaimed = true;
+          hero.rupees += 50;
+          soundEngine.playVictoryFanfare();
+          pushBanner(
+            "Discovered the Secret Rupee Stash! (+50 Rupees!)",
+            "You claimed the hidden 50-Rupee chest in the SW Cave! Visit Bramble's Shop for the 100-Rupee Upgrade!",
+            6.5
+          );
+        }
+      }
+
+      // B. Mini-Sub-Quest NPC: Elder Rowan (`HEIRLOOM_NPC_POS = 20.5, -29.2`) outside the Eastern Bandit Cave
+      const npcDx = hero.x - HEIRLOOM_NPC_POS.x;
+      const npcDz = hero.z - HEIRLOOM_NPC_POS.z;
+      const distToNpc = Math.hypot(npcDx, npcDz);
+
+      // Soft personal-space collision so the Hero doesn't walk directly through Elder Rowan
+      if (distToNpc < 1.05) {
+        const pushX = distToNpc > 0.01 ? npcDx / distToNpc : 0;
+        const pushZ = distToNpc > 0.01 ? npcDz / distToNpc : 1;
+        hero.x = HEIRLOOM_NPC_POS.x + pushX * 1.05;
+        hero.z = HEIRLOOM_NPC_POS.z + pushZ * 1.05;
+      }
+
+      // Also check if all Heirloom Cave monsters are already dead (in case edited or killed via other means)
+      if (!flags.heirloomMonstersCleared) {
+        const heirloomEnemies = enemies.filter((e) => e.questGroup === "heirloom");
+        if (
+          heirloomEnemies.length > 0 &&
+          heirloomEnemies.every((e) => e.state === "dead")
+        ) {
+          flags.heirloomMonstersCleared = true;
+        }
+      }
+
+      if (distToNpc <= 2.85) {
+        if (flags.heirloomMonstersCleared && !flags.heirloomQuestClaimed) {
+          flags.heirloomQuestStarted = true;
+          flags.heirloomQuestClaimed = true;
+          hero.rupees += 50;
+          soundEngine.playVictoryFanfare();
+          pushBanner(
+            "Elder Rowan: \"You recovered my Heirloom! Here's 50 Rupees!\"",
+            "+50 Rupees earned! You now have enough to buy the 100-Rupee Progression Upgrade at Bramble's Shop!",
+            6.5
+          );
+        } else if (
+          !flags.heirloomQuestStarted ||
+          (input.interactPressed && !flags.heirloomMonstersCleared)
+        ) {
+          flags.heirloomQuestStarted = true;
+          if (chestNoticeCooldown <= 0 || input.interactPressed) {
+            chestNoticeCooldown = 3.2;
+            soundEngine.playKeyPickup();
+            const remainingCount = enemies.filter(
+              (e) => e.questGroup === "heirloom" && e.state !== "dead"
+            ).length;
+            pushBanner(
+              "Elder Rowan: \"Monsters stole my heirloom! Clear them out and I'll pay you 50 Rupees!\"",
+              `Defeat the ${remainingCount} monster${remainingCount === 1 ? "" : "s"} in the Eastern Bandit Cave just east of here!`,
+              5.8
+            );
+          }
+        } else if (flags.heirloomQuestClaimed && input.interactPressed) {
+          soundEngine.playKeyPickup();
+          pushBanner(
+            "Elder Rowan: \"Thank you again for saving my family heirloom!\"",
+            "Spend those 50 Rupees on the 100-Rupee Progression Upgrade at Merchant Bramble's Shop!",
+            4.2
+          );
+        }
+      }
+    }
+
     // 14. Compute Contextual Interaction Prompt for HUD (`hero.interactPrompt`)
     if (hero.heldObject) {
       hero.interactPrompt =
@@ -6919,6 +7228,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
           e.stunTimer <= 0 &&
           Math.hypot(e.x - hero.x, e.z - hero.z) <= 4.2
       );
+      const nearBountyEnemy = enemies.find(
+        (e) =>
+          e.zone === zone &&
+          e.state !== "dead" &&
+          e.isBounty &&
+          Math.hypot(e.x - hero.x, e.z - hero.z) <= 5.5
+      );
       const nearMoatKey =
         zone === "overworld" &&
         !flags.keyPickedUp &&
@@ -6930,6 +7246,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
           (r.id === "rupee-ow-river-gap" || r.id === "rupee-dg-water-gap") &&
           Math.hypot(r.x - hero.x, r.z - hero.z) <= 7.5
       );
+      const nearSecretStash =
+        zone === "overworld" &&
+        !flags.secretStashClaimed &&
+        Math.hypot(SECRET_STASH_POS.x - hero.x, SECRET_STASH_POS.z - hero.z) <= 5.5;
+      const nearElderRowan =
+        zone === "overworld" &&
+        Math.hypot(HEIRLOOM_NPC_POS.x - hero.x, HEIRLOOM_NPC_POS.z - hero.z) <= 4.5;
 
       if (nearGroundBomb) {
         hero.interactPrompt = "Press [F] or [B] to Lift & Throw Bomb";
@@ -6938,6 +7261,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
           nearLiftable.prefab === "clay_pot"
             ? "Press [F] to Lift Clay Pot"
             : "Press [F] to Lift Light Rock";
+      } else if (nearSecretStash) {
+        hero.interactPrompt =
+          "Secret Rupee Stash Chest (+50 Rupees) — Walk Up to Claim Treasure!";
+      } else if (nearElderRowan) {
+        hero.interactPrompt = flags.heirloomQuestClaimed
+          ? "Elder Rowan — Press [F] to Chat (Heirloom Sub-Quest Completed!)"
+          : flags.heirloomMonstersCleared
+          ? "Elder Rowan — Step Closer to Claim Your +50 Rupee Quest Reward!"
+          : "Elder Rowan (NPC Quest) — Clear the Eastern Bandit Cave for +50 Rupees! [Press F]";
       } else if (nearBridgeTurret) {
         hero.interactPrompt =
           "Bridge Stone Turret — Hold Shield [RMB / Shift] and walk forward to deflect rocks!";
@@ -6953,8 +7285,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       } else if (nearShockEnemy) {
         hero.interactPrompt =
           "Electrified Enemy — Throw Boomerang [Q / 1] to Stun for 2s Before Slashing!";
+      } else if (nearBountyEnemy) {
+        hero.interactPrompt =
+          "Gold/Crimson Bounty Monster — Defeat for 5x Rupee Drops!";
       } else if (nearCrackedRock) {
-        hero.interactPrompt = "Cracked Boulder — Press [B] to Place Bomb!";
+        hero.interactPrompt =
+          nearCrackedRock.id === "prop-ow-stash-cracked-rock"
+            ? "Secret Rupee Stash Cave — Press [B] to Place Bomb & Unseal (+50 Rupees)!"
+            : "Cracked Boulder — Press [B] to Place Bomb!";
       } else if (nearBurnableBarrier) {
         hero.interactPrompt =
           nearBurnableBarrier.prefab === "spiderweb_barrier"

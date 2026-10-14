@@ -30,10 +30,12 @@ import {
   CustomModelAsset,
   DUNGEON_KEY_POS,
   EnemyKind,
+  HEIRLOOM_NPC_POS,
   LOCKED_GATE_POS,
   MapPortal,
   MapPropInstance,
   PropPrefabId,
+  SECRET_STASH_POS,
   SHOP_INTERACT_POS,
   SHOP_STALL_POS,
   ZoneId,
@@ -61,6 +63,7 @@ interface EnemyMeshRig {
   woodShieldNode?: TransformNode;
   iceArmorNode?: TransformNode;
   shockAuraNode?: TransformNode;
+  bountyAuraNode?: TransformNode;
 }
 
 /**
@@ -638,33 +641,226 @@ export default function BabylonCanvas() {
     merchantHat.material = merchantRobeMat;
     merchantHat.parent = shopNode;
 
-    const displayBoomerang = MeshBuilder.CreateTorus(
-      "displayBoomerang",
-      { diameter: 0.75, thickness: 0.14, tessellation: 12 },
-      scene
-    );
-    displayBoomerang.position.set(sx - 1.6, 1.32, sz + 0.4);
-    displayBoomerang.material = goldKeyMat;
-    displayBoomerang.parent = shopNode;
-
-    const displayBow = MeshBuilder.CreateTorus(
-      "displayBow",
-      { diameter: 0.85, thickness: 0.1, tessellation: 16 },
-      scene
-    );
-    displayBow.rotation.x = Math.PI / 2;
-    displayBow.position.set(sx - 0.5, 1.38, sz + 0.4);
-    displayBow.material = goldKeyMat;
-    displayBow.parent = shopNode;
-
+    // 3 Featured Counter Items on Bramble's Curio Shop Counter:
+    // 1. Left Counter Item: Refill Hearts / Red Potion (20 Rupees)
     const displayHeart = MeshBuilder.CreateSphere(
       "displayHeart",
       { diameter: 0.46, segments: 12 },
       scene
     );
-    displayHeart.position.set(sx + 1.5, 1.38, sz + 0.4);
+    displayHeart.position.set(sx - 1.55, 1.38, sz + 0.4);
     displayHeart.material = glowingCrimsonMat;
     displayHeart.parent = shopNode;
+
+    const displayPotionVial = MeshBuilder.CreateCylinder(
+      "displayPotionVial",
+      { diameterTop: 0.14, diameterBottom: 0.34, height: 0.48, tessellation: 12 },
+      scene
+    );
+    displayPotionVial.position.set(sx - 1.15, 1.38, sz + 0.4);
+    displayPotionVial.material = glowingCrimsonMat;
+    displayPotionVial.parent = shopNode;
+
+    // 2. Center Counter Item: Bundle of Arrows + Magic Refill (10 Rupees)
+    const displayBow = MeshBuilder.CreateTorus(
+      "displayBow",
+      { diameter: 0.78, thickness: 0.1, tessellation: 16 },
+      scene
+    );
+    displayBow.rotation.x = Math.PI / 2;
+    displayBow.position.set(sx - 0.18, 1.38, sz + 0.4);
+    displayBow.material = goldKeyMat;
+    displayBow.parent = shopNode;
+
+    const displayMagicVial = MeshBuilder.CreatePolyhedron(
+      "displayMagicVial",
+      { type: 1, size: 0.22 },
+      scene
+    );
+    displayMagicVial.position.set(sx + 0.25, 1.42, sz + 0.4);
+    displayMagicVial.material = makeMat(
+      "displayMagicMat",
+      new Color3(0.2, 0.95, 0.48),
+      new Color3(0.1, 0.65, 0.28)
+    );
+    displayMagicVial.parent = shopNode;
+
+    // 3. Right Counter Item: Expensive 100-Rupee Progression Upgrade Relic (Mirror Shield + Heart Container + Bomb Bag!)
+    const shopProgressionNode = new TransformNode("shopProgressionNode", scene);
+    shopProgressionNode.position.set(sx + 1.48, 1.44, sz + 0.4);
+    shopProgressionNode.parent = shopNode;
+
+    const displayRelicShield = MeshBuilder.CreateCylinder(
+      "displayRelicShield",
+      { diameterTop: 0.76, diameterBottom: 0.42, height: 0.14, tessellation: 12 },
+      scene
+    );
+    displayRelicShield.rotation.x = Math.PI / 2.4;
+    displayRelicShield.material = goldKeyMat;
+    displayRelicShield.parent = shopProgressionNode;
+
+    const displayRelicGem = MeshBuilder.CreatePolyhedron(
+      "displayRelicGem",
+      { type: 1, size: 0.22 },
+      scene
+    );
+    displayRelicGem.position.set(0, 0.36, 0);
+    displayRelicGem.material = glowingCrimsonMat;
+    displayRelicGem.parent = shopProgressionNode;
+
+    // =========================================================
+    // MAP 1 ECONOMY LOOP: 3D SECRET RUPEE STASH CHEST (+50 RUPEES) IN SW CAVE
+    // =========================================================
+    const secretStashRoot = new TransformNode("secretStashRoot", scene);
+    secretStashRoot.parent = overworldRoot;
+    secretStashRoot.position.set(SECRET_STASH_POS.x, 0, SECRET_STASH_POS.z);
+
+    const stashDais = MeshBuilder.CreateCylinder(
+      "stashDais",
+      { diameterTop: 2.8, diameterBottom: 3.2, height: 0.26, tessellation: 16 },
+      scene
+    );
+    stashDais.position.set(0, 0.13, 0);
+    stashDais.material = ruinMat;
+    stashDais.parent = secretStashRoot;
+
+    const stashChestBase = MeshBuilder.CreateBox(
+      "stashChestBase",
+      { width: 1.75, height: 0.88, depth: 1.2 },
+      scene
+    );
+    stashChestBase.position.set(0, 0.7, 0);
+    stashChestBase.material = woodMat;
+    stashChestBase.parent = secretStashRoot;
+
+    const stashChestTrim = MeshBuilder.CreateBox(
+      "stashChestTrim",
+      { width: 1.84, height: 0.2, depth: 1.26 },
+      scene
+    );
+    stashChestTrim.position.set(0, 1.05, 0);
+    stashChestTrim.material = goldKeyMat;
+    stashChestTrim.parent = secretStashRoot;
+
+    const secretStashLid = MeshBuilder.CreateCylinder(
+      "secretStashLid",
+      { diameter: 1.2, height: 1.75, tessellation: 14 },
+      scene
+    );
+    secretStashLid.rotation.z = Math.PI / 2;
+    secretStashLid.scaling.set(0.55, 1, 1);
+    secretStashLid.position.set(0, 1.18, 0);
+    secretStashLid.material = woodMat;
+    secretStashLid.parent = secretStashRoot;
+
+    const secretStashRing = MeshBuilder.CreateTorus(
+      "secretStashRing",
+      { diameter: 3.1, thickness: 0.11, tessellation: 28 },
+      scene
+    );
+    secretStashRing.position.set(0, 0.28, 0);
+    secretStashRing.material = goldKeyMat;
+    secretStashRing.parent = secretStashRoot;
+
+    const secretStashGemNode = MeshBuilder.CreatePolyhedron(
+      "secretStashGemNode",
+      { type: 1, size: 0.45 },
+      scene
+    );
+    secretStashGemNode.scaling.set(0.8, 1.35, 0.65);
+    secretStashGemNode.position.set(0, 1.95, 0);
+    secretStashGemNode.material = glowingCrimsonMat;
+    secretStashGemNode.parent = secretStashRoot;
+
+    // =========================================================
+    // MAP 1 ECONOMY LOOP: 3D MINI-SUB-QUEST NPC (ELDER ROWAN AT HEIRLOOM_NPC_POS)
+    // =========================================================
+    const elderRowanRoot = new TransformNode("elderRowanRoot", scene);
+    elderRowanRoot.parent = overworldRoot;
+    elderRowanRoot.position.set(HEIRLOOM_NPC_POS.x, 0, HEIRLOOM_NPC_POS.z);
+    elderRowanRoot.rotation.y = Math.PI * 0.15;
+
+    const rowanRug = MeshBuilder.CreateCylinder(
+      "rowanRug",
+      { diameter: 2.3, height: 0.05, tessellation: 20 },
+      scene
+    );
+    rowanRug.position.set(0, 0.025, 0);
+    rowanRug.material = goldKeyMat;
+    rowanRug.parent = elderRowanRoot;
+
+    const rowanRobeMat = makeMat(
+      "rowanRobeMat",
+      new Color3(0.22, 0.48, 0.85),
+      new Color3(0.08, 0.18, 0.36)
+    );
+    const rowanBody = MeshBuilder.CreateCylinder(
+      "rowanBody",
+      { diameterTop: 0.62, diameterBottom: 1.0, height: 1.28, tessellation: 14 },
+      scene
+    );
+    rowanBody.position.set(0, 0.68, 0);
+    rowanBody.material = rowanRobeMat;
+    rowanBody.parent = elderRowanRoot;
+
+    const rowanHead = MeshBuilder.CreateSphere(
+      "rowanHead",
+      { diameter: 0.72, segments: 14 },
+      scene
+    );
+    rowanHead.position.set(0, 1.56, 0);
+    rowanHead.material = whiteEyeMat;
+    rowanHead.parent = elderRowanRoot;
+
+    const rowanBeard = MeshBuilder.CreateCylinder(
+      "rowanBeard",
+      { diameterTop: 0.46, diameterBottom: 0.08, height: 0.55, tessellation: 10 },
+      scene
+    );
+    rowanBeard.position.set(0, 1.24, 0.24);
+    rowanBeard.material = whiteEyeMat;
+    rowanBeard.parent = elderRowanRoot;
+
+    const rowanHat = MeshBuilder.CreateCylinder(
+      "rowanHat",
+      { diameterTop: 0.06, diameterBottom: 1.08, height: 0.85, tessellation: 12 },
+      scene
+    );
+    rowanHat.position.set(0, 2.1, 0);
+    rowanHat.material = goldKeyMat;
+    rowanHat.parent = elderRowanRoot;
+
+    const rowanStaff = MeshBuilder.CreateCylinder(
+      "rowanStaff",
+      { diameter: 0.11, height: 1.85, tessellation: 8 },
+      scene
+    );
+    rowanStaff.position.set(0.54, 0.92, 0.18);
+    rowanStaff.material = woodMat;
+    rowanStaff.parent = elderRowanRoot;
+
+    // Floating Overhead Quest Marker above Elder Rowan (! when active, Golden Star when ready to claim!)
+    const elderRowanQuestMarker = new TransformNode("elderRowanQuestMarker", scene);
+    elderRowanQuestMarker.position.set(0, 2.95, 0);
+    elderRowanQuestMarker.parent = elderRowanRoot;
+
+    const questExclamationShaft = MeshBuilder.CreateCylinder(
+      "questExclamationShaft",
+      { diameterTop: 0.24, diameterBottom: 0.12, height: 0.55, tessellation: 10 },
+      scene
+    );
+    questExclamationShaft.position.set(0, 0.22, 0);
+    questExclamationShaft.material = goldKeyMat;
+    questExclamationShaft.parent = elderRowanQuestMarker;
+
+    const questExclamationDot = MeshBuilder.CreateSphere(
+      "questExclamationDot",
+      { diameter: 0.22, segments: 10 },
+      scene
+    );
+    questExclamationDot.position.set(0, -0.2, 0);
+    questExclamationDot.material = glowingCrimsonMat;
+    questExclamationDot.parent = elderRowanQuestMarker;
 
     // Western Ruins Key Pedestal & Floating Golden Sanctum Key
     const keyPedestal = MeshBuilder.CreateCylinder(
@@ -4491,6 +4687,45 @@ export default function BabylonCanvas() {
       mergeGroupWithMaterial(`enemyShockAuraMerged-${id}`, shockParts, shockSpikeMat, shockAuraNode);
       shockAuraNode.setEnabled(false);
 
+      // Gold/Crimson Bounty Monster Crown & Orbiting Bounty Ring (for 5x Rupee Bounty Monsters!)
+      const bountyAuraNode = new TransformNode(`enemyBountyAura-${id}`, scene);
+      bountyAuraNode.position.set(0, 0, 0);
+      bountyAuraNode.parent = body;
+
+      const crownY =
+        kind === "knight" ? 2.45 : kind === "goblin" || kind === "archer" ? 1.85 : 1.38;
+      const bountyCrownRing = MeshBuilder.CreateTorus(
+        `bountyCrownRing-${id}`,
+        { diameter: kind === "knight" ? 0.86 : 0.68, thickness: 0.12, tessellation: 16 },
+        scene
+      );
+      bountyCrownRing.position.set(0, crownY, 0);
+      bountyCrownRing.material = goldKeyMat;
+      bountyCrownRing.parent = bountyAuraNode;
+
+      for (let p = 0; p < 4; p++) {
+        const pAng = (p / 4) * Math.PI * 2;
+        const rad = kind === "knight" ? 0.38 : 0.3;
+        const spike = MeshBuilder.CreatePolyhedron(
+          `bountyCrownGem-${id}-${p}`,
+          { type: 1, size: 0.14 },
+          scene
+        );
+        spike.position.set(Math.cos(pAng) * rad, crownY + 0.14, Math.sin(pAng) * rad);
+        spike.material = p % 2 === 0 ? goldKeyMat : glowingCrimsonMat;
+        spike.parent = bountyAuraNode;
+      }
+
+      const bountyFloorRing = MeshBuilder.CreateTorus(
+        `bountyFloorRing-${id}`,
+        { diameter: kind === "knight" ? 2.35 : 1.85, thickness: 0.1, tessellation: 24 },
+        scene
+      );
+      bountyFloorRing.position.set(0, 0.14, 0);
+      bountyFloorRing.material = goldKeyMat;
+      bountyFloorRing.parent = bountyAuraNode;
+      bountyAuraNode.setEnabled(false);
+
       tagHierarchyMetadata(root, "enemy", id);
 
       return {
@@ -4515,6 +4750,7 @@ export default function BabylonCanvas() {
         woodShieldNode,
         iceArmorNode,
         shockAuraNode,
+        bountyAuraNode,
       };
     };
 
@@ -5904,6 +6140,31 @@ export default function BabylonCanvas() {
         zeldoCrestNode.setEnabled(false);
       }
 
+      // 6b. Sync Map 1 Economy Loop 3D Visuals (Shop Counter Relic, SW Secret Stash Chest, & Elder Rowan NPC)
+      shopProgressionNode.setEnabled(!snap.flags.shopProgressionBought);
+      if (!snap.flags.shopProgressionBought) {
+        shopProgressionNode.rotation.y = Math.sin(t * 2.2) * 0.35;
+      }
+
+      if (snap.flags.secretStashClaimed) {
+        secretStashLid.position.set(0, 1.48, 0.38);
+        secretStashGemNode.setEnabled(false);
+        secretStashRing.setEnabled(false);
+      } else {
+        secretStashLid.position.set(0, 1.18, 0);
+        secretStashGemNode.setEnabled(true);
+        secretStashGemNode.rotation.y = t * 2.8;
+        secretStashGemNode.position.y = 1.95 + Math.sin(t * 3.6) * 0.16;
+        secretStashRing.setEnabled(true);
+        secretStashRing.scaling.setAll(1 + Math.sin(t * 4.2) * 0.06);
+      }
+
+      elderRowanQuestMarker.setEnabled(!snap.flags.heirloomQuestClaimed);
+      if (!snap.flags.heirloomQuestClaimed) {
+        elderRowanQuestMarker.rotation.y = t * 3.2;
+        elderRowanQuestMarker.position.y = 2.95 + Math.sin(t * 4.5) * 0.18;
+      }
+
       // 7. Sync Enemies & Billboard Floating Health Bars
       const activeEnemyIds = new Set<string>();
       for (let eIdx = 0; eIdx < snap.enemies.length; eIdx++) {
@@ -5923,6 +6184,7 @@ export default function BabylonCanvas() {
           if (rig.archerAimLine) rig.archerAimLine.setEnabled(false);
           if (rig.stunStarsRoot) rig.stunStarsRoot.setEnabled(false);
           if (rig.shockAuraNode) rig.shockAuraNode.setEnabled(false);
+          if (rig.bountyAuraNode) rig.bountyAuraNode.setEnabled(false);
           continue;
         }
 
@@ -5972,6 +6234,13 @@ export default function BabylonCanvas() {
             rig.shockAuraNode.rotation.y = -t * 7.2;
             const shockPulse = 1.0 + Math.sin(t * 28 + eIdx) * 0.12;
             rig.shockAuraNode.scaling.setAll(shockPulse);
+          }
+        }
+        if (rig.bountyAuraNode) {
+          const isBounty = Boolean(enemy.isBounty);
+          rig.bountyAuraNode.setEnabled(isBounty);
+          if (isBounty) {
+            rig.bountyAuraNode.rotation.y = t * 2.6;
           }
         }
 
@@ -6087,6 +6356,10 @@ export default function BabylonCanvas() {
           } else if (flashing) {
             mat.diffuseColor.set(0.95, 0.9, 0.45);
             mat.emissiveColor.set(0.35, 0.3, 0.08);
+          } else if (enemy.isBounty && idx === 0) {
+            // Gold/Crimson Bounty Monster body tint!
+            mat.diffuseColor.set(0.98, 0.72, 0.18);
+            mat.emissiveColor.set(0.45, 0.16, 0.06);
           } else {
             mat.diffuseColor.copyFrom(rig!.baseColors[idx]);
             mat.emissiveColor.set(0.08, 0.04, 0.06);

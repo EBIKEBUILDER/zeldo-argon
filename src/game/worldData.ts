@@ -159,6 +159,8 @@ export interface EnemySpawn {
   rupeeDrop: RupeeTier | "boss";
   shieldArmor?: EnemyShieldArmor; // "wood" (Wooden Shield) or "ice" (Ice Armor) — blocks Sword/Arrows until burned/melted with Flame Rod (R)!
   shockArmor?: boolean; // Electrified/spiked shell that hurts on contact or melee unless stunned for 2s by the Boomerang (Q)!
+  isBounty?: boolean; // Gold/Crimson Bounty Monster variant that drops 5x Rupees when killed!
+  questGroup?: "heirloom"; // Marks monsters belonging to the Map 1 Heirloom Recovery NPC sub-quest
 }
 
 export interface WorldRupeeSpawn {
@@ -203,6 +205,18 @@ export const SHOP_STALL_POS = {
 
 export const SHOP_INTERACT_POS = {
   x: 11.5,
+  z: -29.2,
+};
+
+// Map 1 Economy Loop — Secret 50-Rupee Stash Cave in South-West Corner (hidden behind bush + cracked boulder!)
+export const SECRET_STASH_POS = {
+  x: -30.5,
+  z: -33.2,
+};
+
+// Map 1 Economy Loop — Mini-Sub-Quest NPC (Elder Rowan) outside the South-East Bandit Cave (+50 Rupees reward!)
+export const HEIRLOOM_NPC_POS = {
+  x: 20.5,
   z: -29.2,
 };
 
@@ -364,6 +378,80 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     speed: 0,
     damage: 1,
     rupeeDrop: "red",
+  },
+  // Overworld — South-West Starting Area Gold/Crimson Bounty Slime (Tougher variant that drops 5x Rupees = 25 Rupees!)
+  {
+    id: "ow-bounty-slime",
+    kind: "slime",
+    zone: "overworld",
+    x: -16.5,
+    z: -28.5,
+    hp: 5,
+    weight: 0.75,
+    aggroRadius: 8.5,
+    speed: 5.2,
+    damage: 1,
+    rupeeDrop: "blue",
+    isBounty: true,
+  },
+  // Overworld — South-East Bandit Cave Pack (Stole Elder Rowan's Heirloom — clear them out for +50 Rupees!)
+  {
+    id: "ow-heirloom-goblin-1",
+    kind: "goblin",
+    zone: "overworld",
+    x: 28.5,
+    z: -31.0,
+    hp: 4,
+    weight: 2.0,
+    aggroRadius: 8.2,
+    speed: 5.4,
+    damage: 1,
+    rupeeDrop: "blue",
+    questGroup: "heirloom",
+  },
+  {
+    id: "ow-heirloom-slime-1",
+    kind: "slime",
+    zone: "overworld",
+    x: 28.5,
+    z: -27.8,
+    hp: 3,
+    weight: 0.5,
+    aggroRadius: 8.2,
+    speed: 4.9,
+    damage: 1,
+    rupeeDrop: "blue",
+    questGroup: "heirloom",
+  },
+  {
+    id: "ow-heirloom-bounty-chief",
+    kind: "goblin",
+    zone: "overworld",
+    x: 31.8,
+    z: -29.5,
+    hp: 6,
+    weight: 2.4,
+    aggroRadius: 8.5,
+    speed: 5.6,
+    damage: 1,
+    rupeeDrop: "blue",
+    isBounty: true,
+    questGroup: "heirloom",
+  },
+  // Overworld — Central Meadow Gold/Crimson Bounty Knight (Elite Bounty Monster that drops 5x Red Rupees = 100 Rupees!)
+  {
+    id: "ow-bounty-knight",
+    kind: "knight",
+    zone: "overworld",
+    x: 14.5,
+    z: -5.5,
+    hp: 10,
+    weight: 12.0,
+    aggroRadius: 8.8,
+    speed: 5.1,
+    damage: 1,
+    rupeeDrop: "red",
+    isBounty: true,
   },
   // Overworld — Central Meadow (well outside hero spawn at z=-32)
   // Includes Electrified Spiked Slimes (`shockArmor: true`) that hurt on contact/slash unless stunned for 2s by Boomerang [Q]!
@@ -908,6 +996,11 @@ export const INITIAL_WORLD_RUPEES: WorldRupeeSpawn[] = [
   { id: "rupee-fr-1", zone: "frontier", x: -16, z: -12, tier: "blue", value: 5 },
   { id: "rupee-fr-2", zone: "frontier", x: 16, z: -12, tier: "blue", value: 5 },
   { id: "rupee-fr-3", zone: "frontier", x: 0, z: 26, tier: "red", value: 20 },
+  // Secret Echo Grotto 50-Rupee Stash (inside the hidden NW cave behind the cracked boulder!)
+  { id: "rupee-grotto-1", zone: "frontier", x: -27.2, z: 31.2, tier: "red", value: 20 },
+  { id: "rupee-grotto-2", zone: "frontier", x: -24.8, z: 31.2, tier: "red", value: 20 },
+  { id: "rupee-grotto-3", zone: "frontier", x: -27.0, z: 29.5, tier: "blue", value: 5 },
+  { id: "rupee-grotto-4", zone: "frontier", x: -25.0, z: 29.5, tier: "blue", value: 5 },
 ];
 
 /**
@@ -1122,7 +1215,7 @@ export function buildInitialMapProps(): MapPropInstance[] {
     // Extra scenic perimeter trees
     { x: -18, z: -29 },
     { x: -24, z: -26 },
-    { x: 24, z: -28 },
+    { x: 23, z: -24.5 },
     { x: 32, z: -15 },
     { x: 33, z: 10 },
   ];
@@ -2526,6 +2619,151 @@ export function buildInitialMapProps(): MapPropInstance[] {
       colliderDepth: 1.2,
       colliderKind: "wall",
       eyeActivated: false,
+    },
+
+    // =========================================================
+    // 17. MAP 1 ECONOMY LOOP — SECRET RUPEE STASH CAVE (SW Corner) & BANDIT HEIRLOOM CAVE (SE Corner)
+    // =========================================================
+    // A. South-West Corner Secret Rupee Stash Cave (`SECRET_STASH_POS = -30.5, -33.2`)
+    // Hidden behind a concealing Meadow Bush (`-23.8, -33.2`) + Explodable Cracked Boulder (`-25.8, -33.2`)!
+    {
+      id: "prop-ow-stash-wall-n",
+      prefab: "stone_wall",
+      name: "Secret Stash Cave North Ridge",
+      zone: "overworld",
+      x: -31.0,
+      y: 0,
+      z: -29.2,
+      rotY: 0,
+      scaleX: 10.5,
+      scaleY: 3.8,
+      scaleZ: 1.8,
+      hasCollider: true,
+      colliderWidth: 10.5,
+      colliderDepth: 1.8,
+      colliderKind: "cliff",
+    },
+    {
+      id: "prop-ow-stash-cave-arch",
+      prefab: "temple_arch",
+      name: "Secret Rupee Stash Cave Archway",
+      zone: "overworld",
+      x: -26.5,
+      y: 0,
+      z: -33.2,
+      rotY: Math.PI / 2,
+      scaleX: 0.72,
+      scaleY: 0.85,
+      scaleZ: 0.85,
+      hasCollider: false,
+      colliderWidth: 7.2,
+      colliderDepth: 2.6,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-ow-stash-cracked-rock",
+      prefab: "cracked_rock",
+      name: "Secret Stash Cave Cracked Boulder (Blast with Bomb [B]!)",
+      zone: "overworld",
+      x: -25.8,
+      y: 0,
+      z: -33.2,
+      rotY: 0.3,
+      scaleX: 1.25,
+      scaleY: 1.25,
+      scaleZ: 1.25,
+      hasCollider: true,
+      colliderWidth: 2.3,
+      colliderDepth: 2.3,
+      colliderKind: "ruin",
+      smashed: false,
+    },
+    {
+      id: "prop-ow-stash-bush",
+      prefab: "bush",
+      name: "Secret Stash Concealing Bush",
+      zone: "overworld",
+      x: -23.6,
+      y: 0,
+      z: -33.2,
+      rotY: 0.4,
+      scaleX: 1.25,
+      scaleY: 1.25,
+      scaleZ: 1.25,
+      hasCollider: false,
+      colliderWidth: 1.6,
+      colliderDepth: 1.6,
+      colliderKind: "tree",
+    },
+
+    // B. South-East Bandit Cave (`x: 26.5..35, z: -33..-26`) outside Elder Rowan NPC (`20.5, -29.2`)
+    {
+      id: "prop-ow-heirloom-trail",
+      prefab: "path_tile",
+      name: "Eastern Bandit Cave Trail",
+      zone: "overworld",
+      x: 23.0,
+      y: 0,
+      z: -29.5,
+      rotY: 0,
+      scaleX: 14.0,
+      scaleY: 1,
+      scaleZ: 3.4,
+      hasCollider: false,
+      colliderWidth: 14.0,
+      colliderDepth: 3.4,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-ow-heirloom-wall-n",
+      prefab: "stone_wall",
+      name: "Bandit Cave North Wall",
+      zone: "overworld",
+      x: 31.2,
+      y: 0,
+      z: -25.2,
+      rotY: 0,
+      scaleX: 9.5,
+      scaleY: 3.6,
+      scaleZ: 1.8,
+      hasCollider: true,
+      colliderWidth: 9.5,
+      colliderDepth: 1.8,
+      colliderKind: "cliff",
+    },
+    {
+      id: "prop-ow-heirloom-wall-s",
+      prefab: "stone_wall",
+      name: "Bandit Cave South Wall",
+      zone: "overworld",
+      x: 31.2,
+      y: 0,
+      z: -33.8,
+      rotY: 0,
+      scaleX: 9.5,
+      scaleY: 3.6,
+      scaleZ: 1.8,
+      hasCollider: true,
+      colliderWidth: 9.5,
+      colliderDepth: 1.8,
+      colliderKind: "cliff",
+    },
+    {
+      id: "prop-ow-heirloom-cave-arch",
+      prefab: "temple_arch",
+      name: "Eastern Bandit Cave Entrance",
+      zone: "overworld",
+      x: 26.5,
+      y: 0,
+      z: -29.5,
+      rotY: -Math.PI / 2,
+      scaleX: 0.78,
+      scaleY: 0.88,
+      scaleZ: 0.88,
+      hasCollider: false,
+      colliderWidth: 7.8,
+      colliderDepth: 2.8,
+      colliderKind: "ruin",
     }
   );
 

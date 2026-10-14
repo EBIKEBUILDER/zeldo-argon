@@ -387,7 +387,9 @@ export default function GameOverlay() {
   );
 
   let currentObjective =
-    "Deflect Bridge Turret rocks with Shield (RMB), snag the Key over water with Boomerang (Q), or light the Torch Square (R)";
+    !flags.shopProgressionBought
+      ? "Map 1 Economy Goal: Earn 100 Rupees (SW Secret Stash Cave +50, SE Heirloom Quest NPC +50, & Gold Bounty Monsters 5x Drops) for the Shop's 100-Rupee Upgrade!"
+      : "Deflect Bridge Turret rocks with Shield (RMB), snag the Key over water with Boomerang (Q), or light the Torch Square (R)";
   if (zone === "frontier") {
     currentObjective =
       "Melt Ice Armor & Burn Wooden Shields with Flame Rod (R), or dig Dirt Patches (G)!";
@@ -1728,6 +1730,19 @@ export default function GameOverlay() {
                       />
                       <span>Electrified / Spiked Shell (Stun for 2s w/ Boomerang Q to Slash!)</span>
                     </label>
+                    <label className="inspector-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedEnemy.isBounty)}
+                        onChange={(e) =>
+                          updateEnemyInstance(selectedEnemy.id, {
+                            isBounty: e.target.checked,
+                            initialIsBounty: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Gold/Crimson Bounty Variant (Drops 5x Rupee Fountain on Death!)</span>
+                    </label>
                   </>
                 )}
 
@@ -2473,7 +2488,7 @@ export default function GameOverlay() {
           <div className="shop-card">
             <div className="shop-header">
               <div>
-                <div className="shop-pill">SOUTH CLEARING BAZAAR</div>
+                <div className="shop-pill">SOUTH CLEARING BAZAAR • MAP 1 ECONOMY HUB</div>
                 <h2 className="shop-title">BRAMBLE&apos;S CURIO SHOP</h2>
               </div>
               <div className="shop-wallet">
@@ -2482,9 +2497,194 @@ export default function GameOverlay() {
               </div>
             </div>
             <p className="shop-greeting">
-              &ldquo;Welcome, traveler! Stock up on weapons, arrows, Glass Bottles, and
-              alchemical potions for your journey!&rdquo;
+              &ldquo;Welcome, traveler! Check out the <strong>3 Featured Counter Specials</strong>{" "}
+              right on my table—including the <strong>100-Rupee Champion&apos;s Progression Upgrade</strong>!
+              Explore the Vale&apos;s secret caves, help Elder Rowan in the SE, or hunt Gold Bounty
+              Monsters to earn your fortune!&rdquo;
             </p>
+
+            {/* MAP 1 RUPEE ECONOMY TRACKER BANNER */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: "8px",
+                marginBottom: "12px",
+                padding: "8px 10px",
+                borderRadius: "10px",
+                background: "rgba(255, 210, 76, 0.08)",
+                border: "1px solid rgba(255, 210, 76, 0.32)",
+                fontSize: "0.75rem",
+              }}
+            >
+              <div>
+                <div style={{ color: "#ffd24c", fontWeight: 800 }}>
+                  1. SW Secret Stash Cave (+50)
+                </div>
+                <div style={{ color: flags.secretStashClaimed ? "#5eff9e" : "#d8d5e8" }}>
+                  {flags.secretStashClaimed
+                    ? "✓ Claimed (+50 Rupees!)"
+                    : "Hidden behind SW Bush & Cracked Wall (-26, -33)"}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: "#ffd24c", fontWeight: 800 }}>
+                  2. SE Heirloom Quest NPC (+50)
+                </div>
+                <div style={{ color: flags.heirloomQuestClaimed ? "#5eff9e" : "#d8d5e8" }}>
+                  {flags.heirloomQuestClaimed
+                    ? "✓ Claimed (+50 Rupees!)"
+                    : flags.heirloomMonstersCleared
+                    ? "★ Monsters Cleared! Talk to Elder Rowan (20.5, -29)"
+                    : "Clear SE Bandit Cave for Elder Rowan (20.5, -29)"}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: "#ffd24c", fontWeight: 800 }}>
+                  3. Gold Bounty Monsters (5x)
+                </div>
+                <div style={{ color: "#d8d5e8" }}>
+                  Slay Gold/Crimson Crowned Monsters in Map 1 for a 5x Rupee Fountain!
+                </div>
+              </div>
+            </div>
+
+            {/* THE 3 FEATURED SHOP COUNTER ITEMS */}
+            <div
+              style={{
+                fontSize: "0.76rem",
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                color: "#ffd24c",
+                marginBottom: "6px",
+                textTransform: "uppercase",
+              }}
+            >
+              ★ Featured On The Shop Counter (3 Table Specials)
+            </div>
+            <div className="shop-items-grid" style={{ marginBottom: "12px" }}>
+              {/* COUNTER ITEM 1: REFILL HEARTS / POTION (20 RUPEES) */}
+              <div
+                className="shop-item-card"
+                style={{
+                  borderColor: "rgba(255, 82, 119, 0.55)",
+                  background: "rgba(56, 18, 32, 0.55)",
+                }}
+              >
+                <div className="shop-item-top">
+                  <span className="shop-item-name">1. Refill Hearts &amp; Potion</span>
+                  <span className="shop-item-hotkey">Cheap: 20 Rupees</span>
+                </div>
+                <p className="shop-item-desc">
+                  <strong>Left Counter Special:</strong> Immediately restores{" "}
+                  <strong>100% of your Life Hearts</strong> AND fills an Empty Glass Bottle
+                  with a Crimson Red Potion!
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    (hero.hp >= hero.maxHp && !(hero.bottles ?? []).includes("empty")) ||
+                    hero.rupees < 20
+                  }
+                  onClick={() => buyShopItem("counter_hearts")}
+                  className="shop-buy-btn"
+                >
+                  {hero.hp >= hero.maxHp && !(hero.bottles ?? []).includes("empty")
+                    ? "Hearts & Bottles Full"
+                    : hero.rupees >= 20
+                    ? "Buy Counter Special — 20 Rupees"
+                    : "Need 20 Rupees"}
+                </button>
+              </div>
+
+              {/* COUNTER ITEM 2: BUNDLE OF ARROWS + MAGIC REFILL (10 RUPEES) */}
+              <div
+                className="shop-item-card"
+                style={{
+                  borderColor: "rgba(62, 230, 135, 0.55)",
+                  background: "rgba(16, 48, 36, 0.55)",
+                }}
+              >
+                <div className="shop-item-top">
+                  <span className="shop-item-name">2. 10 Arrows + Magic Refill</span>
+                  <span className="shop-item-hotkey">Cheap: 10 Rupees</span>
+                </div>
+                <p className="shop-item-desc">
+                  <strong>Center Counter Special:</strong> Restocks{" "}
+                  <strong>+10 Iron-Tipped Arrows</strong> (Quiver: {hero.arrows}) AND
+                  restores <strong>100% Magic Power (MP)</strong> for your Flame Rod!
+                </p>
+                <button
+                  type="button"
+                  disabled={hero.rupees < 10}
+                  onClick={() => buyShopItem("counter_ammo_magic")}
+                  className="shop-buy-btn"
+                >
+                  {hero.rupees >= 10
+                    ? "Buy +10 Arrows & Full MP — 10 Rupees"
+                    : "Need 10 Rupees"}
+                </button>
+              </div>
+
+              {/* COUNTER ITEM 3: EXPENSIVE PROGRESSION ITEM / UPGRADE (100 RUPEES) */}
+              <div
+                className={`shop-item-card ${
+                  flags.shopProgressionBought ? "shop-item-owned" : ""
+                }`}
+                style={{
+                  borderColor: "rgba(255, 215, 76, 0.85)",
+                  background: "rgba(68, 48, 12, 0.65)",
+                  boxShadow: "0 0 18px rgba(255, 210, 64, 0.18)",
+                }}
+              >
+                <div className="shop-item-top">
+                  <span className="shop-item-name" style={{ color: "#ffe270" }}>
+                    3. Champion&apos;s Progression Set
+                  </span>
+                  <span className="shop-item-hotkey">Key Goal: 100 Rupees</span>
+                </div>
+                <p className="shop-item-desc">
+                  <strong>Right Counter Grand Prize:</strong> Grants{" "}
+                  <strong>+1 Heart Container (+1 Max HP &amp; Full Heal)</strong>, equips the{" "}
+                  <strong>Aegis Mirror Shield</strong> &amp;{" "}
+                  <strong>Tempered Blade (2x DMG)</strong>, and upgrades{" "}
+                  <strong>Bomb Bag to 30 Bombs</strong>!
+                </p>
+                <button
+                  type="button"
+                  disabled={hero.rupees < 100}
+                  onClick={() =>
+                    buyShopItem(
+                      flags.shopProgressionBought
+                        ? "heart_container"
+                        : "counter_progression_upgrade"
+                    )
+                  }
+                  className="shop-buy-btn"
+                >
+                  {flags.shopProgressionBought
+                    ? hero.rupees >= 100
+                      ? "Buy +1 Heart Container — 100 Rupees"
+                      : "Owned ✓ (+1 Heart Container: 100 Rupees)"
+                    : hero.rupees >= 100
+                    ? "★ Unlock Progression Set — 100 Rupees"
+                    : `Need 100 Rupees (${hero.rupees}/100)`}
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                fontSize: "0.74rem",
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                color: "#b9b4d4",
+                marginBottom: "6px",
+                textTransform: "uppercase",
+              }}
+            >
+              Additional Curio Stock &amp; Alchemical Bottles
+            </div>
 
             <div className="shop-items-grid">
               <div className={`shop-item-card ${hero.hasBoomerang ? "shop-item-owned" : ""}`}>
@@ -2530,25 +2730,6 @@ export default function GameOverlay() {
                     : hero.rupees >= 20
                     ? "Buy — 20 Rupees"
                     : "Need 20 Rupees"}
-                </button>
-              </div>
-
-              <div className="shop-item-card">
-                <div className="shop-item-top">
-                  <span className="shop-item-name">Bundle of 10 Arrows</span>
-                  <span className="shop-item-hotkey">Quiver: {hero.arrows}</span>
-                </div>
-                <p className="shop-item-desc">
-                  Restocks 10 iron-tipped arrows for your quiver. Pair with the
-                  Ranger&apos;s Ash Bow to snipe enemies from afar.
-                </p>
-                <button
-                  type="button"
-                  disabled={hero.rupees < 10}
-                  onClick={() => buyShopItem("arrows")}
-                  className="shop-buy-btn"
-                >
-                  {hero.rupees >= 10 ? "Buy +10 — 10 Rupees" : "Need 10 Rupees"}
                 </button>
               </div>
 
