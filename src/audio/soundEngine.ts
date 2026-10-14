@@ -293,7 +293,32 @@ class SoundEngine {
     osc.stop(now + 0.25);
   }
 
-  public playRupeePickup(tier: "green" | "blue" | "red" = "green"): void {
+  public playHeartPickup(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Warm 3-note rising healing chime (F5 -> A5 -> C6)
+    [698.46, 880.0, 1046.5].forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      const t = now + idx * 0.05;
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.22, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.19);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.2);
+    });
+  }
+
+  public playRupeePickup(tier: "green" | "blue" | "red" | "heart" = "green"): void {
+    if (tier === "heart") {
+      this.playHeartPickup();
+      return;
+    }
     const ctx = this.getContext();
     if (!ctx) return;
     const now = ctx.currentTime;

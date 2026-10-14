@@ -1,7 +1,7 @@
-export type ZoneId = "overworld" | "dungeon";
+export type ZoneId = "overworld" | "dungeon" | "frontier";
 export type DungeonRoomId = "entry" | "hall" | "sanctum";
 export type EnemyKind = "slime" | "goblin" | "archer" | "knight" | "minion" | "boss";
-export type RupeeTier = "green" | "blue" | "red";
+export type RupeeTier = "green" | "blue" | "red" | "heart";
 
 export type PropPrefabId =
   | "pine_tree"
@@ -163,8 +163,28 @@ export const LOCKED_GATE_POS = {
 };
 
 export const BOSS_CHEST_POS = {
+  x: -6.5,
+  z: 32.0,
+};
+
+export const BOSS_EXIT_GATE_POS = {
   x: 0,
-  z: 33,
+  z: 36.2,
+};
+
+export const BOSS_EXIT_PORTAL_POS = {
+  x: 0,
+  z: 34.8,
+};
+
+export const FRONTIER_ENTRY_SPAWN = {
+  x: 0,
+  z: -30.5,
+};
+
+export const FRONTIER_EXIT_PORTAL_POS = {
+  x: 0,
+  z: -34.8,
 };
 
 export const BOSS_MAX_LUNGE_RANGE = 14.5;
@@ -197,6 +217,34 @@ export const INITIAL_PORTALS: MapPortal[] = [
     label: "Whispering Vale",
     sublabel: "Returned to the sunlit overworld.",
     color: "cyan",
+  },
+  {
+    id: "portal-dg-frontier",
+    zone: "dungeon",
+    x: BOSS_EXIT_PORTAL_POS.x,
+    z: BOSS_EXIT_PORTAL_POS.z,
+    radius: 2.1,
+    targetZone: "frontier",
+    targetX: FRONTIER_ENTRY_SPAWN.x,
+    targetZ: FRONTIER_ENTRY_SPAWN.z,
+    targetFacing: 0,
+    label: "Elderwood Frontier",
+    sublabel: "Beyond the Sunken Sanctum — Explore the highlands or press Tab to customize with the Map Editor!",
+    color: "emerald",
+  },
+  {
+    id: "portal-fr-dungeon",
+    zone: "frontier",
+    x: FRONTIER_EXIT_PORTAL_POS.x,
+    z: FRONTIER_EXIT_PORTAL_POS.z,
+    radius: 2.0,
+    targetZone: "dungeon",
+    targetX: 0,
+    targetZ: 31.0,
+    targetFacing: Math.PI,
+    label: "The Sunken Sanctum",
+    sublabel: "Returned to Room III: Dread Sanctum.",
+    color: "emerald",
   },
 ];
 
@@ -238,7 +286,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 0.6,
     aggroRadius: 11.5,
     speed: 4.5,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "blue",
   },
   {
@@ -292,7 +340,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 0.6,
     aggroRadius: 11.5,
     speed: 4.6,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "blue",
   },
   {
@@ -318,7 +366,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 12.0,
     aggroRadius: 8.8,
     speed: 5.0,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "red",
   },
 
@@ -346,7 +394,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 0.6,
     aggroRadius: 11.5,
     speed: 4.6,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "blue",
   },
   {
@@ -359,7 +407,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 12.0,
     aggroRadius: 8.8,
     speed: 5.0,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "red",
   },
 
@@ -387,7 +435,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 0.6,
     aggroRadius: 11.5,
     speed: 4.6,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "blue",
   },
   {
@@ -400,7 +448,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 12.0,
     aggroRadius: 8.8,
     speed: 5.0,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "red",
   },
 
@@ -508,7 +556,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 0.6,
     aggroRadius: 11.5,
     speed: 4.6,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "blue",
   },
   {
@@ -521,7 +569,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 0.6,
     aggroRadius: 11.5,
     speed: 4.6,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "blue",
   },
   {
@@ -534,7 +582,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 12.0,
     aggroRadius: 8.5,
     speed: 5.0,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "red",
   },
 
@@ -549,7 +597,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 2.2,
     aggroRadius: 13.0,
     speed: 5.6,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "blue",
   },
   {
@@ -562,7 +610,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 2.2,
     aggroRadius: 13.0,
     speed: 5.6,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "blue",
   },
   {
@@ -575,7 +623,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 2.2,
     aggroRadius: 13.0,
     speed: 5.7,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "blue",
   },
   {
@@ -588,8 +636,127 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     weight: 100.0,
     aggroRadius: 14.0,
     speed: 3.9,
-    damage: 2,
+    damage: 1,
     rupeeDrop: "boss",
+  },
+
+  // Elderwood Frontier — Post-Boss Highland Map (reuses existing monsters; ready for Map Editor customization!)
+  {
+    id: "fr-slime-1",
+    kind: "slime",
+    zone: "frontier",
+    x: -9,
+    z: -15,
+    hp: 3,
+    weight: 0.5,
+    aggroRadius: 8.5,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  {
+    id: "fr-slime-2",
+    kind: "slime",
+    zone: "frontier",
+    x: 9,
+    z: -14,
+    hp: 3,
+    weight: 0.5,
+    aggroRadius: 8.5,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  {
+    id: "fr-goblin-1",
+    kind: "goblin",
+    zone: "frontier",
+    x: -12,
+    z: -2,
+    hp: 4,
+    weight: 2.0,
+    aggroRadius: 8.8,
+    speed: 5.5,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  {
+    id: "fr-goblin-2",
+    kind: "goblin",
+    zone: "frontier",
+    x: 12,
+    z: 0,
+    hp: 4,
+    weight: 2.0,
+    aggroRadius: 8.8,
+    speed: 5.5,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  {
+    id: "fr-archer-1",
+    kind: "archer",
+    zone: "frontier",
+    x: -18,
+    z: 9,
+    hp: 3,
+    weight: 0.6,
+    aggroRadius: 11.5,
+    speed: 4.6,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  {
+    id: "fr-archer-2",
+    kind: "archer",
+    zone: "frontier",
+    x: 18,
+    z: 9,
+    hp: 3,
+    weight: 0.6,
+    aggroRadius: 11.5,
+    speed: 4.6,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  {
+    id: "fr-minion-1",
+    kind: "minion",
+    zone: "frontier",
+    x: 0,
+    z: 10,
+    hp: 5,
+    weight: 2.2,
+    aggroRadius: 9.5,
+    speed: 5.6,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  {
+    id: "fr-knight-1",
+    kind: "knight",
+    zone: "frontier",
+    x: -8,
+    z: 20,
+    hp: 8,
+    weight: 12.0,
+    aggroRadius: 8.8,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "fr-knight-2",
+    kind: "knight",
+    zone: "frontier",
+    x: 8,
+    z: 20,
+    hp: 8,
+    weight: 12.0,
+    aggroRadius: 8.8,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "red",
   },
 ];
 
@@ -606,6 +773,10 @@ export const INITIAL_WORLD_RUPEES: WorldRupeeSpawn[] = [
   // Dungeon alcove pickups
   { id: "rupee-dg-1", zone: "dungeon", x: -15, z: -9, tier: "blue", value: 5 },
   { id: "rupee-dg-2", zone: "dungeon", x: 15, z: -9, tier: "blue", value: 5 },
+  // Elderwood Frontier pickups
+  { id: "rupee-fr-1", zone: "frontier", x: -16, z: -12, tier: "blue", value: 5 },
+  { id: "rupee-fr-2", zone: "frontier", x: 16, z: -12, tier: "blue", value: 5 },
+  { id: "rupee-fr-3", zone: "frontier", x: 0, z: 26, tier: "red", value: 20 },
 ];
 
 /**
@@ -999,7 +1170,8 @@ export function buildInitialMapProps(): MapPropInstance[] {
     { id: "dg-r2-north-e", name: "Sanctum Gate Wall E", minX: 3.5, maxX: 19.5, minZ: 11, maxZ: 13, h: 5.2 },
     { id: "dg-r3-west", name: "Boss Sanctum West Wall", minX: -18.5, maxX: -16.5, minZ: 12, maxZ: 37, h: 5.5 },
     { id: "dg-r3-east", name: "Boss Sanctum East Wall", minX: 16.5, maxX: 18.5, minZ: 12, maxZ: 37, h: 5.5 },
-    { id: "dg-r3-north", name: "Boss Sanctum North Wall", minX: -18.5, maxX: 18.5, minZ: 35.5, maxZ: 37.5, h: 5.5 },
+    { id: "dg-r3-north-w", name: "Boss Sanctum North Wall W", minX: -18.5, maxX: -3.5, minZ: 35.5, maxZ: 37.5, h: 5.5 },
+    { id: "dg-r3-north-e", name: "Boss Sanctum North Wall E", minX: 3.5, maxX: 18.5, minZ: 35.5, maxZ: 37.5, h: 5.5 },
   ];
   dgWallDefs.forEach((dw) => {
     const w = dw.maxX - dw.minX;
@@ -1109,6 +1281,154 @@ export function buildInitialMapProps(): MapPropInstance[] {
     });
   });
 
+  // 8. Elderwood Frontier (New Post-Boss Map — perimeter cliffs, entrance road & starter props ready for Map Editor!)
+  const frCliffDefs = [
+    { id: "fr-border-s-w", name: "Frontier South-West Ridge", minX: -40, maxX: -7, minZ: -40, maxZ: -36.5, h: 4.8 },
+    { id: "fr-border-s-e", name: "Frontier South-East Ridge", minX: 7, maxX: 40, minZ: -40, maxZ: -36.5, h: 4.8 },
+    { id: "fr-border-s-back", name: "Frontier Gate Backdrop", minX: -7, maxX: 7, minZ: -40, maxZ: -37.2, h: 5.5 },
+    { id: "fr-border-n", name: "Frontier North Ridge", minX: -40, maxX: 40, minZ: 36.5, maxZ: 40, h: 5.2 },
+    { id: "fr-border-w", name: "Frontier West Ridge", minX: -40, maxX: -36.5, minZ: -40, maxZ: 40, h: 4.8 },
+    { id: "fr-border-e", name: "Frontier East Ridge", minX: 36.5, maxX: 40, minZ: -40, maxZ: 40, h: 4.8 },
+  ];
+  frCliffDefs.forEach((fc) => {
+    const w = fc.maxX - fc.minX;
+    const d = fc.maxZ - fc.minZ;
+    props.push({
+      id: `prop-${fc.id}`,
+      prefab: "cliff_block",
+      name: fc.name,
+      zone: "frontier",
+      x: (fc.minX + fc.maxX) / 2,
+      y: 0,
+      z: (fc.minZ + fc.maxZ) / 2,
+      rotY: 0,
+      scaleX: w,
+      scaleY: fc.h,
+      scaleZ: d,
+      hasCollider: true,
+      colliderWidth: w,
+      colliderDepth: d,
+      colliderKind: "cliff",
+    });
+  });
+
+  props.push(
+    {
+      id: "prop-fr-entry-arch",
+      prefab: "temple_arch",
+      name: "Sanctum Exit Archway",
+      zone: "frontier",
+      x: 0,
+      y: 0,
+      z: -35.2,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: false,
+      colliderWidth: 10,
+      colliderDepth: 3.2,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-fr-main-road",
+      prefab: "path_tile",
+      name: "Frontier Highland Road",
+      zone: "frontier",
+      x: 0,
+      y: 0,
+      z: -6,
+      rotY: 0,
+      scaleX: 5.2,
+      scaleY: 1,
+      scaleZ: 54,
+      hasCollider: false,
+      colliderWidth: 5.2,
+      colliderDepth: 54,
+      colliderKind: "ruin",
+    }
+  );
+
+  const frTrees = [
+    { x: -16, z: -24 },
+    { x: 16, z: -24 },
+    { x: -25, z: -8 },
+    { x: 25, z: -8 },
+    { x: -22, z: 16 },
+    { x: 22, z: 16 },
+  ];
+  frTrees.forEach((ft, idx) => {
+    props.push({
+      id: `prop-fr-tree-${idx + 1}`,
+      prefab: "pine_tree",
+      name: `Frontier Pine #${idx + 1}`,
+      zone: "frontier",
+      x: ft.x,
+      y: 0,
+      z: ft.z,
+      rotY: idx * 1.1,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 2.1,
+      colliderDepth: 2.1,
+      colliderKind: "tree",
+    });
+  });
+
+  const frBushes = [
+    { x: -5.5, z: -24 },
+    { x: -7.1, z: -24 },
+    { x: 5.5, z: -24 },
+    { x: 7.1, z: -24 },
+    { x: -8, z: 5 },
+    { x: 8, z: 5 },
+  ];
+  frBushes.forEach((fb, idx) => {
+    props.push({
+      id: `prop-fr-bush-${idx + 1}`,
+      prefab: "bush",
+      name: `Frontier Bush #${idx + 1}`,
+      zone: "frontier",
+      x: fb.x,
+      y: 0,
+      z: fb.z,
+      rotY: idx * 0.8,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: false,
+      colliderWidth: 1.4,
+      colliderDepth: 1.4,
+      colliderKind: "tree",
+    });
+  });
+
+  const frPillars = [
+    { x: -6.5, z: 15 },
+    { x: 6.5, z: 15 },
+  ];
+  frPillars.forEach((fp, idx) => {
+    props.push({
+      id: `prop-fr-pillar-${idx + 1}`,
+      prefab: "ruin_pillar",
+      name: `Highland Ruin Pillar #${idx + 1}`,
+      zone: "frontier",
+      x: fp.x,
+      y: 0,
+      z: fp.z,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 2.0,
+      colliderDepth: 2.0,
+      colliderKind: "pillar",
+    });
+  });
+
   return props;
 }
 
@@ -1128,7 +1448,7 @@ export function buildObstaclesFromMapProps(mapProps: MapPropInstance[]): RectObs
       kind: "pedestal",
       height: 1.3,
     },
-    // Locked Gate in Dungeon
+    // Locked Gate in Dungeon (South Boss Sanctum Entrance)
     {
       id: "dg-locked-gate",
       zone: "dungeon",
@@ -1136,6 +1456,17 @@ export function buildObstaclesFromMapProps(mapProps: MapPropInstance[]): RectObs
       maxX: LOCKED_GATE_POS.x + 3.5,
       minZ: LOCKED_GATE_POS.z - 0.8,
       maxZ: LOCKED_GATE_POS.z + 0.8,
+      kind: "gate",
+      height: 4.6,
+    },
+    // Boss Exit Gate in Dungeon (North Boss Sanctum Exit to Elderwood Frontier — unlocks when Boss dies!)
+    {
+      id: "dg-boss-exit-gate",
+      zone: "dungeon",
+      minX: BOSS_EXIT_GATE_POS.x - 3.5,
+      maxX: BOSS_EXIT_GATE_POS.x + 3.5,
+      minZ: BOSS_EXIT_GATE_POS.z - 0.8,
+      maxZ: BOSS_EXIT_GATE_POS.z + 0.8,
       kind: "gate",
       height: 4.6,
     },
@@ -1209,7 +1540,8 @@ export function resolveWorldCollisions(
   radius: number,
   zone: ZoneId,
   gateUnlocked: boolean,
-  dynamicObstacles?: RectObstacle[]
+  dynamicObstacles?: RectObstacle[],
+  bossExitUnlocked = false
 ): { x: number; z: number; hitObstacle: boolean } {
   let curX = x;
   let curZ = z;
@@ -1217,7 +1549,8 @@ export function resolveWorldCollisions(
   const list = dynamicObstacles ?? [];
   for (const obs of list) {
     if (obs.zone !== zone) continue;
-    if (obs.kind === "gate" && gateUnlocked) continue;
+    if (obs.id === "dg-locked-gate" && gateUnlocked) continue;
+    if (obs.id === "dg-boss-exit-gate" && bossExitUnlocked) continue;
     const res = resolveCircleRectCollision(curX, curZ, radius, obs);
     if (res.collided) {
       hitObstacle = true;
@@ -1226,6 +1559,45 @@ export function resolveWorldCollisions(
     curZ = res.z;
   }
   return { x: curX, z: curZ, hitObstacle };
+}
+
+/**
+ * Computes how far a circle of `radius` can travel from `(startX, startZ)` along `angle`
+ * before hitting a wall, pillar, tree, or boulder, up to `maxDist`.
+ * Used for Boss, Sentinel Knight, and Goblin Fighter ground lunge path telegraphs!
+ */
+export function computeEnemyChargePathLength(
+  startX: number,
+  startZ: number,
+  angle: number,
+  radius: number,
+  maxDist: number,
+  zone: ZoneId,
+  gateUnlocked: boolean,
+  dynamicObstacles?: RectObstacle[],
+  bossExitUnlocked = false
+): number {
+  const dirX = Math.sin(angle);
+  const dirZ = Math.cos(angle);
+  const step = 0.3;
+  const list = dynamicObstacles ?? [];
+  for (let d = step; d <= maxDist; d += step) {
+    const testX = startX + dirX * d;
+    const testZ = startZ + dirZ * d;
+    if (Math.abs(testX) >= 39.0 - radius || Math.abs(testZ) >= 39.0 - radius) {
+      return d;
+    }
+    for (const obs of list) {
+      if (obs.zone !== zone) continue;
+      if (obs.id === "dg-locked-gate" && gateUnlocked) continue;
+      if (obs.id === "dg-boss-exit-gate" && bossExitUnlocked) continue;
+      const res = resolveCircleRectCollision(testX, testZ, radius, obs);
+      if (res.collided) {
+        return d;
+      }
+    }
+  }
+  return maxDist;
 }
 
 /**
@@ -1247,12 +1619,11 @@ export function computeBossChargePathLength(
   for (let d = step; d <= maxDist; d += step) {
     const testX = startX + dirX * d;
     const testZ = startZ + dirZ * d;
-    if (testZ - radius < 13.0) {
+    if (testZ - radius < 12.85) {
       return d;
     }
     for (const obs of list) {
       if (obs.zone !== "dungeon") continue;
-      if (obs.kind === "gate") continue;
       const res = resolveCircleRectCollision(testX, testZ, radius, obs);
       if (res.collided) {
         return d;
