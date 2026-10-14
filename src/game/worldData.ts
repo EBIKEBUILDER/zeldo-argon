@@ -1,5 +1,6 @@
 export type ZoneId = "overworld" | "grove" | "dungeon" | "frontier";
-export type DungeonRoomId = "entry" | "hall" | "arena" | "sanctum";
+export type DungeonRoomId = "hub" | "west_wing" | "east_wing" | "crypt" | "sanctum";
+export type BossArmorState = "ARMORED" | "EXPOSED_EYE" | "STUNNED" | "DEAD";
 export type EnemyKind =
   | "slime"
   | "goblin"
@@ -56,6 +57,7 @@ export type PotRewardKind =
   | "none"
   | "random"
   | "small_key"
+  | "arrows_10"
   | "green_rupee"
   | "blue_rupee"
   | "red_rupee"
@@ -160,7 +162,7 @@ export interface EnemySpawn {
   shieldArmor?: EnemyShieldArmor; // "wood" (Wooden Shield) or "ice" (Ice Armor) — blocks Sword/Arrows until burned/melted with Flame Rod (R)!
   shockArmor?: boolean; // Electrified/spiked shell that hurts on contact or melee unless stunned for 2s by the Boomerang (Q)!
   isBounty?: boolean; // Gold/Crimson Bounty Monster variant that drops 5x Rupees when killed!
-  questGroup?: "heirloom" | "grove_ambush"; // Marks monsters belonging to the Heirloom NPC sub-quest or West Grove Ambush Trial
+  questGroup?: "heirloom" | "grove_ambush" | "ember_guards"; // Marks monsters belonging to quests or dungeon room ambushes
 }
 
 export interface WorldRupeeSpawn {
@@ -226,7 +228,7 @@ export const GUIDE_NPC_POS = {
   z: -5.2,
 };
 
-// Dungeon Entry Key & Flame Rod Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
+// Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,
   z: 15.5,
@@ -236,6 +238,39 @@ export const DUNGEON_KEY_POS = {
 export const DUNGEON_ENTRY_GATE_POS = {
   x: 0,
   z: 31.8,
+};
+
+// =========================================================
+// 5-ROOM CROSS DUNGEON POSITIONS (MAP 2: THE SUNKEN SANCTUM)
+// =========================================================
+// Room 2 (West Wing: The Chasm Gallery) — Small Key Pedestal across the bottomless chasm (fetch with Boomerang Q!)
+export const DG_SMALL_KEY_POS = {
+  x: -31.2,
+  z: 0.0,
+};
+
+// Room 1 -> Room 3 (East Wing: The Ember Sanctum) — Locked Small Key Door (also slams shut on ambush!)
+export const EAST_WING_DOOR_POS = {
+  x: 14.0,
+  z: 0.0,
+};
+
+// Room 3 (East Wing: The Ember Sanctum) — Center Treasure Chest containing the Dungeon's Signature Item: Flame Rod!
+export const FIRE_ROD_CHEST_POS = {
+  x: 26.0,
+  z: 1.5,
+};
+
+// Room 4 (South-East Wing: The Dark Archery Crypt) — Center Big Boss Key Chest (spawns when Cyclops Eye is pierced with Bow E!)
+export const BIG_KEY_CHEST_POS = {
+  x: 26.0,
+  z: -24.0,
+};
+
+// Room 4 -> Room 1 (South Entrance Shortcut Door) — Drops open when the Cyclops Eye Statue in Room 4 is pierced!
+export const CRYPT_SHORTCUT_DOOR_POS = {
+  x: 14.0,
+  z: -24.0,
 };
 
 export const OVERWORLD_PORTAL_POS = {
@@ -250,7 +285,7 @@ export const DUNGEON_EXIT_POS = {
 
 export const DUNGEON_ENTRY_SPAWN = {
   x: 0,
-  z: -30.5,
+  z: -29.5,
 };
 
 export const OVERWORLD_RETURN_SPAWN = {
@@ -258,9 +293,10 @@ export const OVERWORLD_RETURN_SPAWN = {
   z: 28.5,
 };
 
+// Room 1 -> Room 5 (North Boss Door) — Blocked by Iron Bars (4 Hub Lanterns) AND Big Boss Key Lock!
 export const LOCKED_GATE_POS = {
   x: 0,
-  z: 12,
+  z: 12.0,
 };
 
 export const BOSS_CHEST_POS = {
@@ -291,7 +327,7 @@ export const FRONTIER_EXIT_PORTAL_POS = {
 export const BOSS_MAX_LUNGE_RANGE = 14.5;
 
 export const INITIAL_PORTALS: MapPortal[] = [
-  // NORTH EXIT: Map 1 (Central Hub) -> Map 2 (The First Dungeon: Sunken Sanctum)
+  // NORTH EXIT: Map 1 (Central Hub) -> Map 2 (The First Dungeon: Sunken Sanctum — 5-Room Cross Puzzle Box!)
   {
     id: "portal-ow-sanctum",
     zone: "overworld",
@@ -303,7 +339,7 @@ export const INITIAL_PORTALS: MapPortal[] = [
     targetZ: DUNGEON_ENTRY_SPAWN.z,
     targetFacing: 0,
     label: "Map 2: The Sunken Sanctum",
-    sublabel: "Room I: Push-Block Antechamber — 4 Rooms await on the path to Warden Malakor!",
+    sublabel: "Room 1: Central Lantern Hub — Explore the West Wing (Room 2) to begin solving the 5-Room Cross Dungeon!",
     color: "cyan",
   },
   {
@@ -320,19 +356,19 @@ export const INITIAL_PORTALS: MapPortal[] = [
     sublabel: "Returned to the Central Hub from the Sunken Sanctum.",
     color: "cyan",
   },
-  // DUNGEON BACK DOOR: Returns the victorious Hero from Map 2 Boss Room to the Map 1 Crossroads Hub to head East!
+  // NORTH SANCTUARY DOOR (Room 5 Boss Lair Exit): Opens when Ignis is defeated, leading directly into Map 3 (Elderwood Frontier)!
   {
     id: "portal-dg-frontier",
     zone: "dungeon",
     x: BOSS_EXIT_PORTAL_POS.x,
     z: BOSS_EXIT_PORTAL_POS.z,
     radius: 2.1,
-    targetZone: "overworld",
-    targetX: 0,
-    targetZ: 2.5,
-    targetFacing: Math.PI / 2,
-    label: "Map 1: Central Crossroads Hub",
-    sublabel: "Sanctum Conquered! Head EAST along the Crossroads and burn the Dry Vines [R] to enter Map 3!",
+    targetZone: "frontier",
+    targetX: FRONTIER_ENTRY_SPAWN.x,
+    targetZ: FRONTIER_ENTRY_SPAWN.z,
+    targetFacing: 0,
+    label: "Map 3: Elderwood Frontier (Beyond the Sanctum)",
+    sublabel: "Ignis Vanquished! You stepped through the North Sanctuary Door with +1 Max Heart and the Flame Rod!",
     color: "gold",
   },
   // WEST EXIT: Map 1 (Central Hub West) -> Map 1B (The Mini-Cave / Forest Grove)
@@ -718,143 +754,158 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     rupeeDrop: "red",
   },
 
-  // Dungeon Room 1 — Torchlit Antechamber (Lightweight Purple Poring Blobs + Electrified Storm Slimes!)
+  // =========================================================
+  // 5-ROOM CROSS DUNGEON ENEMIES (MAP 2: THE SUNKEN SANCTUM)
+  // =========================================================
+  // Room 1: The Central Lantern Hub (Entrance) — 2 Crypt Skeletons (Minions) + 1 North Wall Turret (Deflect with Shield RMB!)
   {
-    id: "dg-slime-1",
-    kind: "slime",
+    id: "dg-hub-skeleton-1",
+    kind: "minion",
     zone: "dungeon",
-    x: -8.5,
-    z: -22.5,
-    hp: 3,
-    weight: 0.5,
-    aggroRadius: 7.5,
-    speed: 4.9,
-    damage: 1,
-    rupeeDrop: "green",
-  },
-  {
-    id: "dg-slime-2",
-    kind: "slime",
-    zone: "dungeon",
-    x: 8.5,
-    z: -22.5,
-    hp: 3,
-    weight: 0.5,
-    aggroRadius: 7.5,
-    speed: 4.9,
-    damage: 1,
-    rupeeDrop: "green",
-  },
-  {
-    id: "dg-slime-3",
-    kind: "slime",
-    zone: "dungeon",
-    x: -4.5,
-    z: -18.5,
-    hp: 3,
-    weight: 0.5,
-    aggroRadius: 7.8,
-    speed: 5.0,
-    damage: 1,
-    rupeeDrop: "blue",
-    shockArmor: true,
-  },
-  {
-    id: "dg-slime-4",
-    kind: "slime",
-    zone: "dungeon",
-    x: 4.5,
-    z: -18.5,
-    hp: 3,
-    weight: 0.5,
-    aggroRadius: 7.8,
-    speed: 5.0,
-    damage: 1,
-    rupeeDrop: "blue",
-    shockArmor: true,
-  },
-  {
-    id: "dg-slime-5",
-    kind: "slime",
-    zone: "dungeon",
-    x: 0,
-    z: -16.5,
-    hp: 3,
-    weight: 0.5,
-    aggroRadius: 7.8,
-    speed: 5.1,
-    damage: 1,
-    rupeeDrop: "blue",
-  },
-
-  // Dungeon Room 2 — Hall of Pillars (Goblins + Goblin Archers + Heavy Crypt Knight)
-  {
-    id: "dg-goblin-1",
-    kind: "goblin",
-    zone: "dungeon",
-    x: -11,
-    z: -5,
+    x: -6.5,
+    z: -8.5,
     hp: 4,
     weight: 2.0,
     aggroRadius: 8.5,
-    speed: 5.5,
+    speed: 5.2,
     damage: 1,
     rupeeDrop: "blue",
   },
   {
-    id: "dg-goblin-2",
-    kind: "goblin",
+    id: "dg-hub-skeleton-2",
+    kind: "minion",
     zone: "dungeon",
-    x: 11,
-    z: -4,
+    x: 6.5,
+    z: -8.5,
     hp: 4,
     weight: 2.0,
     aggroRadius: 8.5,
-    speed: 5.5,
+    speed: 5.2,
     damage: 1,
     rupeeDrop: "blue",
   },
   {
-    id: "dg-archer-1",
-    kind: "archer",
-    zone: "dungeon",
-    x: -12,
-    z: 5,
-    hp: 3,
-    weight: 0.6,
-    aggroRadius: 11.5,
-    speed: 4.6,
-    damage: 1,
-    rupeeDrop: "blue",
-  },
-  {
-    id: "dg-archer-2",
-    kind: "archer",
-    zone: "dungeon",
-    x: 12,
-    z: 5,
-    hp: 3,
-    weight: 0.6,
-    aggroRadius: 11.5,
-    speed: 4.6,
-    damage: 1,
-    rupeeDrop: "blue",
-  },
-  {
-    id: "dg-knight-1",
-    kind: "knight",
+    id: "dg-hub-turret",
+    kind: "turret",
     zone: "dungeon",
     x: 0,
-    z: 5,
-    hp: 8,
-    weight: 12.0,
-    aggroRadius: 8.5,
-    speed: 5.0,
+    z: 8.8,
+    hp: 4,
+    weight: 18.0,
+    aggroRadius: 16.5,
+    speed: 0,
     damage: 1,
     rupeeDrop: "red",
   },
 
-  // Dungeon Room 3 — Boss Sanctum (Minions + Immovable Boss Malakor)
+  // Room 2: The Chasm Gallery (West Wing — Boomerang Test) — 2 Armored Spiked / Electrified Slimes on the East Ledge!
+  {
+    id: "dg-west-spiked-1",
+    kind: "slime",
+    zone: "dungeon",
+    x: -19.5,
+    z: -4.5,
+    hp: 3,
+    weight: 0.5,
+    aggroRadius: 8.2,
+    speed: 4.9,
+    damage: 1,
+    rupeeDrop: "blue",
+    shockArmor: true,
+  },
+  {
+    id: "dg-west-spiked-2",
+    kind: "slime",
+    zone: "dungeon",
+    x: -19.5,
+    z: 4.5,
+    hp: 3,
+    weight: 0.5,
+    aggroRadius: 8.2,
+    speed: 4.9,
+    damage: 1,
+    rupeeDrop: "blue",
+    shockArmor: true,
+  },
+
+  // Room 3: The Ember Sanctum (East Wing — Fire Rod Chest) — 3 Shielded Goblins guarding the Center Chest (`questGroup: "ember_guards"`)!
+  {
+    id: "dg-east-goblin-1",
+    kind: "goblin",
+    zone: "dungeon",
+    x: 22.0,
+    z: 5.2,
+    hp: 4,
+    weight: 2.0,
+    aggroRadius: 9.0,
+    speed: 5.4,
+    damage: 1,
+    rupeeDrop: "blue",
+    shieldArmor: "wood",
+    questGroup: "ember_guards",
+  },
+  {
+    id: "dg-east-goblin-2",
+    kind: "goblin",
+    zone: "dungeon",
+    x: 30.0,
+    z: 5.2,
+    hp: 4,
+    weight: 2.0,
+    aggroRadius: 9.0,
+    speed: 5.4,
+    damage: 1,
+    rupeeDrop: "blue",
+    shieldArmor: "wood",
+    questGroup: "ember_guards",
+  },
+  {
+    id: "dg-east-goblin-3",
+    kind: "goblin",
+    zone: "dungeon",
+    x: 26.0,
+    z: -3.8,
+    hp: 4,
+    weight: 2.0,
+    aggroRadius: 9.0,
+    speed: 5.4,
+    damage: 1,
+    rupeeDrop: "red",
+    shieldArmor: "wood",
+    questGroup: "ember_guards",
+  },
+
+  // Room 4: The Dark Archery Crypt (South-East Wing — Bow & Fire Rod Combo) — 2 Ice-Armored Knights!
+  {
+    id: "dg-crypt-knight-1",
+    kind: "knight",
+    zone: "dungeon",
+    x: 21.5,
+    z: -21.5,
+    hp: 7,
+    weight: 12.0,
+    aggroRadius: 9.0,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "red",
+    shieldArmor: "ice",
+  },
+  {
+    id: "dg-crypt-knight-2",
+    kind: "knight",
+    zone: "dungeon",
+    x: 30.5,
+    z: -21.5,
+    hp: 7,
+    weight: 12.0,
+    aggroRadius: 9.0,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "red",
+    shieldArmor: "ice",
+  },
+
+  // Room 5: The Boss Lair — "Ignis, the Armored Eye-Golem" (3-Phase Boss + Minions)
   {
     id: "dg-minion-1",
     kind: "minion",
@@ -882,25 +933,12 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     rupeeDrop: "blue",
   },
   {
-    id: "dg-minion-3",
-    kind: "minion",
-    zone: "dungeon",
-    x: 0,
-    z: 20.5,
-    hp: 5,
-    weight: 2.2,
-    aggroRadius: 13.0,
-    speed: 5.7,
-    damage: 1,
-    rupeeDrop: "blue",
-  },
-  {
     id: "dg-boss",
     kind: "boss",
     zone: "dungeon",
     x: 0,
     z: 26,
-    hp: 25,
+    hp: 24,
     weight: 100.0,
     aggroRadius: 14.0,
     speed: 3.9,
@@ -1060,7 +1098,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     rupeeDrop: "blue",
   },
   // Map 1B (West Exit: The Mini-Cave / Forest Grove) — 3 Ambush Monsters (`questGroup: "grove_ambush"`)
-  // Defeating all 3 ambush monsters OR hitting the Grove Crystal Switch with the Boomerang [Q] unseals the Dungeon Entry Key & Flame Rod!
+  // Defeating all 3 ambush monsters OR hitting the Grove Crystal Switch with the Boomerang [Q] unseals the Dungeon Entry Key!
   {
     id: "gr-ambush-slime-1",
     kind: "slime",
@@ -1127,11 +1165,11 @@ export const INITIAL_WORLD_RUPEES: WorldRupeeSpawn[] = [
   { id: "rupee-gr-1", zone: "grove", x: -12.5, z: -4.0, tier: "blue", value: 5 },
   { id: "rupee-gr-2", zone: "grove", x: 12.5, z: -4.0, tier: "blue", value: 5 },
   { id: "rupee-gr-3", zone: "grove", x: 9.5, z: 5.5, tier: "red", value: 20 },
-  // Dungeon Room 1 Big Red Rupee (+20) behind low water blocks — fetch with Boomerang [Q]!
-  { id: "rupee-dg-water-gap", zone: "dungeon", x: 12.4, z: -28.5, tier: "red", value: 20 },
+  // Dungeon Room 2 (West Wing Chasm Gallery) Big Red Rupee (+20) across the chasm — fetch with Boomerang [Q]!
+  { id: "rupee-dg-water-gap", zone: "dungeon", x: -31.2, z: -6.8, tier: "red", value: 20 },
   // Dungeon alcove pickups
-  { id: "rupee-dg-1", zone: "dungeon", x: -15, z: -9, tier: "blue", value: 5 },
-  { id: "rupee-dg-2", zone: "dungeon", x: 15, z: -9, tier: "blue", value: 5 },
+  { id: "rupee-dg-1", zone: "dungeon", x: -11.5, z: -22.0, tier: "blue", value: 5 },
+  { id: "rupee-dg-2", zone: "dungeon", x: 11.5, z: -22.0, tier: "blue", value: 5 },
   // Elderwood Frontier pickups
   { id: "rupee-fr-1", zone: "frontier", x: -16, z: -12, tier: "blue", value: 5 },
   { id: "rupee-fr-2", zone: "frontier", x: 16, z: -12, tier: "blue", value: 5 },
@@ -1569,24 +1607,33 @@ export function buildInitialMapProps(): MapPropInstance[] {
     }
   );
 
-  // 7. Dungeon Walls (4 Rooms: Room I Push-Block -> Room II Dark Lanterns -> Room III Mini-Arena -> Room IV Boss!), Carved Pillars, Flickering Torches & Crates
+  // 7. 5-Room Cross Dungeon Walls (Room 1 Hub -> Room 2 West Chasm Gallery / Room 3 East Ember Sanctum -> Room 4 SE Archery Crypt -> Room 5 North Boss Lair!)
   const dgWallDefs = [
-    { id: "dg-r1-south", name: "Room I (Push-Block) South Wall", minX: -15, maxX: 15, minZ: -37.5, maxZ: -35.5, h: 5.0 },
-    { id: "dg-r1-west", name: "Room I (Push-Block) West Wall", minX: -15.5, maxX: -13.5, minZ: -37, maxZ: -13.5, h: 5.0 },
-    { id: "dg-r1-east", name: "Room I (Push-Block) East Wall", minX: 13.5, maxX: 15.5, minZ: -37, maxZ: -13.5, h: 5.0 },
-    { id: "dg-r1-north-w", name: "Room I / Room II Divider W", minX: -19.5, maxX: -3.8, minZ: -15, maxZ: -13, h: 5.0 },
-    { id: "dg-r1-north-e", name: "Room I / Room II Divider E", minX: 3.8, maxX: 19.5, minZ: -15, maxZ: -13, h: 5.0 },
-    { id: "dg-r2-west", name: "Room II & III West Wall", minX: -19.5, maxX: -17.5, minZ: -14, maxZ: 12.5, h: 5.0 },
-    { id: "dg-r2-east", name: "Room II & III East Wall", minX: 17.5, maxX: 19.5, minZ: -14, maxZ: 12.5, h: 5.0 },
-    // Divider between Room II (Dark Lantern Puzzle Room) and Room III (Mini-Arena Room) at z = -1.5
-    { id: "dg-r2-mid-w", name: "Room II / Room III Arena Divider W", minX: -18.5, maxX: -4.2, minZ: -2.2, maxZ: -0.8, h: 4.8 },
-    { id: "dg-r2-mid-e", name: "Room II / Room III Arena Divider E", minX: 4.2, maxX: 18.5, minZ: -2.2, maxZ: -0.8, h: 4.8 },
-    { id: "dg-r2-north-w", name: "Room III / Boss Sanctum Gate Wall W", minX: -19.5, maxX: -3.5, minZ: 11, maxZ: 13, h: 5.2 },
-    { id: "dg-r2-north-e", name: "Room III / Boss Sanctum Gate Wall E", minX: 3.5, maxX: 19.5, minZ: 11, maxZ: 13, h: 5.2 },
-    { id: "dg-r3-west", name: "Room IV (Boss Sanctum) West Wall", minX: -18.5, maxX: -16.5, minZ: 12, maxZ: 37, h: 5.5 },
-    { id: "dg-r3-east", name: "Room IV (Boss Sanctum) East Wall", minX: 16.5, maxX: 18.5, minZ: 12, maxZ: 37, h: 5.5 },
-    { id: "dg-r3-north-w", name: "Room IV (Boss Sanctum) North Wall W", minX: -18.5, maxX: -3.5, minZ: 35.5, maxZ: 37.5, h: 5.5 },
-    { id: "dg-r3-north-e", name: "Room IV (Boss Sanctum) North Wall E", minX: 3.5, maxX: 18.5, minZ: 35.5, maxZ: 37.5, h: 5.5 },
+    // Room 1: Central Lantern Hub & South Entrance (x: -14..+14, z: -36..+12)
+    { id: "dg-r1-south", name: "Room 1 (Central Hub) South Wall", minX: -15, maxX: 15, minZ: -37.5, maxZ: -35.5, h: 5.0 },
+    { id: "dg-r1-west-s", name: "Room 1 West Wall South", minX: -15, maxX: -13, minZ: -37.5, maxZ: -3.5, h: 5.0 },
+    { id: "dg-r1-west-n", name: "Room 1 West Wall North", minX: -15, maxX: -13, minZ: 3.5, maxZ: 12.5, h: 5.0 },
+    { id: "dg-r1-east-s", name: "Room 1 East Wall South", minX: 13, maxX: 15, minZ: -37.5, maxZ: -27.5, h: 5.0 },
+    { id: "dg-r1-east-mid", name: "Room 1 East Wall Mid", minX: 13, maxX: 15, minZ: -20.5, maxZ: -3.5, h: 5.0 },
+    { id: "dg-r1-east-n", name: "Room 1 East Wall North", minX: 13, maxX: 15, minZ: 3.5, maxZ: 12.5, h: 5.0 },
+    { id: "dg-r1-north-w", name: "Room 1 / Room 5 Boss Gate Wall W", minX: -18.5, maxX: -3.5, minZ: 11, maxZ: 13, h: 5.2 },
+    { id: "dg-r1-north-e", name: "Room 1 / Room 5 Boss Gate Wall E", minX: 3.5, maxX: 18.5, minZ: 11, maxZ: 13, h: 5.2 },
+    // Room 2: West Wing — The Chasm Gallery (x: -38..-14, z: -14..+12)
+    { id: "dg-r2-north", name: "Room 2 (West Wing) North Wall", minX: -38.5, maxX: -13.5, minZ: 11, maxZ: 13, h: 5.0 },
+    { id: "dg-r2-south", name: "Room 2 (West Wing) South Wall", minX: -38.5, maxX: -13.5, minZ: -15, maxZ: -13, h: 5.0 },
+    { id: "dg-r2-west", name: "Room 2 (West Wing) Far West Wall", minX: -38.5, maxX: -36.5, minZ: -14.5, maxZ: 12.5, h: 5.0 },
+    // Room 3: East Wing — The Ember Sanctum (x: +14..+38, z: -12..+12)
+    { id: "dg-r3-north", name: "Room 3 (East Wing) North Wall", minX: 13.5, maxX: 38.5, minZ: 11, maxZ: 13, h: 5.0 },
+    { id: "dg-r34-east", name: "Room 3 & 4 Far East Wall", minX: 36.5, maxX: 38.5, minZ: -37.5, maxZ: 12.5, h: 5.0 },
+    { id: "dg-r3-south-w", name: "Room 3 / Room 4 Divider W", minX: 13.5, maxX: 22.5, minZ: -13, maxZ: -11, h: 5.0 },
+    { id: "dg-r3-south-e", name: "Room 3 / Room 4 Divider E", minX: 29.5, maxX: 38.5, minZ: -13, maxZ: -11, h: 5.0 },
+    // Room 4: South-East Wing — The Dark Archery Crypt (x: +14..+38, z: -37..-12)
+    { id: "dg-r4-south", name: "Room 4 (Archery Crypt) South Wall", minX: 13.5, maxX: 38.5, minZ: -37.5, maxZ: -35.5, h: 5.0 },
+    // Room 5: North Wing — The Boss Lair (x: -16..+16, z: +12..+37)
+    { id: "dg-r5-west", name: "Room 5 (Boss Lair) West Wall", minX: -18.5, maxX: -16.5, minZ: 12, maxZ: 37, h: 5.5 },
+    { id: "dg-r5-east", name: "Room 5 (Boss Lair) East Wall", minX: 16.5, maxX: 18.5, minZ: 12, maxZ: 37, h: 5.5 },
+    { id: "dg-r5-north-w", name: "Room 5 (Boss Lair) North Wall W", minX: -18.5, maxX: -3.5, minZ: 35.5, maxZ: 37.5, h: 5.5 },
+    { id: "dg-r5-north-e", name: "Room 5 (Boss Lair) North Wall E", minX: 3.5, maxX: 18.5, minZ: 35.5, maxZ: 37.5, h: 5.5 },
   ];
   dgWallDefs.forEach((dw) => {
     const w = dw.maxX - dw.minX;
@@ -1611,12 +1658,15 @@ export function buildInitialMapProps(): MapPropInstance[] {
   });
 
   const dgPillars = [
-    { id: "dg-r2-pillar-sw", name: "Hall Pillar SW", x: -6.5, z: -6.5 },
-    { id: "dg-r2-pillar-se", name: "Hall Pillar SE", x: 6.5, z: -6.5 },
-    { id: "dg-r2-pillar-nw", name: "Hall Pillar NW", x: -6.5, z: 3.5 },
-    { id: "dg-r2-pillar-ne", name: "Hall Pillar NE", x: 6.5, z: 3.5 },
-    { id: "dg-r3-pillar-w", name: "Boss Sanctum Pillar W", x: -10, z: 25 },
-    { id: "dg-r3-pillar-e", name: "Boss Sanctum Pillar E", x: 10, z: 25 },
+    { id: "dg-r1-pillar-sw", name: "Central Hub Pillar SW", x: -8.5, z: -14.5, low: false },
+    { id: "dg-r1-pillar-se", name: "Central Hub Pillar SE", x: 8.5, z: -14.5, low: false },
+    // Low pillars in Room 2 (West Wing) framing the distant Crystal Orb Switch across the chasm (non-blocking so Boomerang/Bow passes over!)
+    { id: "dg-r2-low-pillar-s", name: "Chasm Gallery Low Pillar S", x: -29.2, z: 5.0, low: true },
+    { id: "dg-r2-low-pillar-n", name: "Chasm Gallery Low Pillar N", x: -29.2, z: 8.6, low: true },
+    { id: "dg-r3-pillar-w", name: "Ember Sanctum Pillar W", x: 19.5, z: 8.0, low: false },
+    { id: "dg-r3-pillar-e", name: "Ember Sanctum Pillar E", x: 32.5, z: 8.0, low: false },
+    { id: "dg-r5-pillar-w", name: "Boss Lair Pillar W", x: -10, z: 24.5, low: false },
+    { id: "dg-r5-pillar-e", name: "Boss Lair Pillar E", x: 10, z: 24.5, low: false },
   ];
   dgPillars.forEach((dp) => {
     props.push({
@@ -1628,37 +1678,37 @@ export function buildInitialMapProps(): MapPropInstance[] {
       y: 0,
       z: dp.z,
       rotY: 0,
-      scaleX: 1,
-      scaleY: 1,
-      scaleZ: 1,
-      hasCollider: true,
+      scaleX: dp.low ? 0.75 : 1,
+      scaleY: dp.low ? 0.42 : 1,
+      scaleZ: dp.low ? 0.75 : 1,
+      hasCollider: !dp.low,
       colliderWidth: 2.0,
       colliderDepth: 2.0,
       colliderKind: "pillar",
     });
   });
 
-  const torchCoords = [
-    { x: -11.5, z: -32 },
-    { x: 11.5, z: -32 },
-    { x: -11.5, z: -16 },
-    { x: 11.5, z: -16 },
-    { x: -5.2, z: 10.2 },
-    { x: 5.2, z: 10.2 },
-    { x: -14.5, z: 16 },
-    { x: 14.5, z: 16 },
-    { x: -14.5, z: 32 },
-    { x: 14.5, z: 32 },
+  // Dungeon Entrance & Room 4 Dark Crypt & Room 5 Boss Lair Corner Lanterns
+  const dgTorches = [
+    // Room 1 South Entrance Lit Braziers
+    { id: "prop-dg-torch-entry-w", name: "Entrance Brazier W", x: -10.5, z: -32.0, lit: true },
+    { id: "prop-dg-torch-entry-e", name: "Entrance Brazier E", x: 10.5, z: -32.0, lit: true },
+    // Room 4 (The Dark Archery Crypt) — 4 Unlit Corner Lanterns (Light with Flame Rod [R] to Illuminate the Crypt!)
+    { id: "prop-dg-crypt-torch-nw", name: "Dark Crypt Corner Lantern NW (Light with Flame Rod [R]!)", x: 18.2, z: -16.2, lit: false },
+    { id: "prop-dg-crypt-torch-ne", name: "Dark Crypt Corner Lantern NE (Light with Flame Rod [R]!)", x: 33.8, z: -16.2, lit: false },
+    { id: "prop-dg-crypt-torch-sw", name: "Dark Crypt Corner Lantern SW (Light with Flame Rod [R]!)", x: 18.2, z: -31.8, lit: false },
+    { id: "prop-dg-crypt-torch-se", name: "Dark Crypt Corner Lantern SE (Light with Flame Rod [R]!)", x: 33.8, z: -31.8, lit: false },
+    // Room 5 (The Boss Lair) — 4 Unlit Corner Lanterns
+    { id: "prop-dg-boss-torch-sw", name: "Boss Lair Corner Lantern SW (Light with Flame Rod [R]!)", x: -14.2, z: 16.0, lit: false },
+    { id: "prop-dg-boss-torch-se", name: "Boss Lair Corner Lantern SE (Light with Flame Rod [R]!)", x: 14.2, z: 16.0, lit: false },
+    { id: "prop-dg-boss-torch-nw", name: "Boss Lair Corner Lantern NW (Light with Flame Rod [R]!)", x: -14.2, z: 31.8, lit: false },
+    { id: "prop-dg-boss-torch-ne", name: "Boss Lair Corner Lantern NE (Light with Flame Rod [R]!)", x: 14.2, z: 31.8, lit: false },
   ];
-  torchCoords.forEach((tc, idx) => {
-    // Room 2 (Hall of Pillars, z = 10.2) starts unlit so the Dark Room visibility mechanic is active!
-    const isDarkHallTorch = Math.abs(tc.z - 10.2) < 0.5;
+  dgTorches.forEach((tc) => {
     props.push({
-      id: `prop-dg-torch-${idx + 1}`,
+      id: tc.id,
       prefab: "wall_torch",
-      name: isDarkHallTorch
-        ? `Dark Hall Brazier #${idx + 1} (Light with Flame Rod [R]!)`
-        : `Sanctum Brazier #${idx + 1}`,
+      name: tc.name,
       zone: "dungeon",
       x: tc.x,
       y: 0,
@@ -1671,7 +1721,7 @@ export function buildInitialMapProps(): MapPropInstance[] {
       colliderWidth: 0.9,
       colliderDepth: 0.9,
       colliderKind: "pillar",
-      lit: !isDarkHallTorch,
+      lit: tc.lit,
     });
   });
 
@@ -1764,10 +1814,11 @@ export function buildInitialMapProps(): MapPropInstance[] {
     });
   });
 
-  // Dungeon Antechamber Twin Unlit Braziers Puzzle
+  // Room 3 (East Wing: The Ember Sanctum) — 2 Unlit Lanterns flanking the South Spiderweb Doorway!
+  // Shooting both with the newly acquired Flame Rod [R] reopens the West Door back to Room 1!
   [
-    { id: "prop-dg-puzzle-torch-1", name: "Antechamber West Unlit Brazier", x: -5.5, z: -24.5 },
-    { id: "prop-dg-puzzle-torch-2", name: "Antechamber East Unlit Brazier", x: 5.5, z: -24.5 },
+    { id: "prop-dg-puzzle-torch-1", name: "Ember Sanctum South-West Lantern (Shoot with Flame Rod [R]!)", x: 22.2, z: -9.6 },
+    { id: "prop-dg-puzzle-torch-2", name: "Ember Sanctum South-East Lantern (Shoot with Flame Rod [R]!)", x: 29.8, z: -9.6 },
   ].forEach((dt) => {
     props.push({
       id: dt.id,
@@ -1843,7 +1894,7 @@ export function buildInitialMapProps(): MapPropInstance[] {
       id: "prop-dg-dirt-1",
       name: "Sanctum Loam Patch (Glass Bottle)",
       zone: "dungeon",
-      x: -8.5,
+      x: -9.5,
       z: -26.5,
       reward: "bottle",
     },
@@ -1887,10 +1938,8 @@ export function buildInitialMapProps(): MapPropInstance[] {
   });
 
   const crateCoords = [
-    { x: -12, z: -30 },
-    { x: 12, z: -29 },
-    { x: -15.5, z: -1 },
-    { x: 15.5, z: -1 },
+    { x: -11.5, z: -30 },
+    { x: 11.5, z: -29 },
   ];
   crateCoords.forEach((cc, idx) => {
     props.push({
@@ -2096,45 +2145,63 @@ export function buildInitialMapProps(): MapPropInstance[] {
       z: -30.5,
       reward: "heart",
     },
-    // Dungeon Antechamber Pots — INCLUDING THE HIDDEN SANCTUM SMALL KEY POT!
+    // Room 2 (West Wing: Chasm Gallery) Bonus Secret Pot behind the Retractable Crystal Barrier (+10 Arrows & Magic Refill!)
     {
-      id: "prop-dg-pot-key",
-      name: "Ancient Sealed Pot (Hides Sanctum Small Key!)",
+      id: "prop-dg-west-bonus-pot",
+      name: "Chasm Gallery Secret Pot (+10 Arrows & Magic Refill!)",
       zone: "dungeon",
-      x: 9.8,
-      z: -27.5,
-      reward: "small_key",
+      x: -19.5,
+      z: 10.1,
+      reward: "arrows_10",
     },
+    // Room 3 (East Wing: Ember Sanctum) Corner Pots
     {
-      id: "prop-dg-pot-2",
-      name: "Antechamber Pot (Recovery Heart)",
+      id: "prop-dg-east-pot-1",
+      name: "Ember Sanctum Pot (Bomb Bundle +5)",
       zone: "dungeon",
-      x: 9.8,
-      z: -25.6,
-      reward: "heart",
-    },
-    {
-      id: "prop-dg-pot-3",
-      name: "Antechamber Pot (Bomb Bundle +5)",
-      zone: "dungeon",
-      x: -9.8,
-      z: -27.5,
+      x: 18.0,
+      z: 9.2,
       reward: "bombs_5",
     },
     {
-      id: "prop-dg-pot-4",
-      name: "Hall of Pillars Pot (Blue Rupee)",
+      id: "prop-dg-east-pot-2",
+      name: "Ember Sanctum Pot (Recovery Heart)",
       zone: "dungeon",
-      x: -14.5,
-      z: -7.5,
-      reward: "blue_rupee",
+      x: 34.0,
+      z: 9.2,
+      reward: "heart",
+    },
+    // Room 5 (Boss Lair) 4 Corner Pots (Arrows & Magic/Heart refills mid-fight!)
+    {
+      id: "prop-dg-boss-pot-1",
+      name: "Boss Lair SW Supply Pot (+10 Arrows & Magic Refill!)",
+      zone: "dungeon",
+      x: -14.2,
+      z: 14.2,
+      reward: "arrows_10",
     },
     {
-      id: "prop-dg-pot-5",
-      name: "Hall of Pillars Pot (Recovery Heart)",
+      id: "prop-dg-boss-pot-2",
+      name: "Boss Lair SE Supply Pot (+10 Arrows & Magic Refill!)",
       zone: "dungeon",
-      x: 14.5,
-      z: -7.5,
+      x: 14.2,
+      z: 14.2,
+      reward: "arrows_10",
+    },
+    {
+      id: "prop-dg-boss-pot-3",
+      name: "Boss Lair NW Supply Pot (Recovery Heart & Magic)",
+      zone: "dungeon",
+      x: -14.2,
+      z: 33.8,
+      reward: "heart",
+    },
+    {
+      id: "prop-dg-boss-pot-4",
+      name: "Boss Lair NE Supply Pot (Recovery Heart & Magic)",
+      zone: "dungeon",
+      x: 14.2,
+      z: 33.8,
       reward: "heart",
     },
     // Secret Echo Grotto Pots (inside Frontier NW grotto)
@@ -2274,45 +2341,6 @@ export function buildInitialMapProps(): MapPropInstance[] {
       puzzleTargetX: -9.5,
       puzzleTargetZ: -21.0,
       pushedSolved: false,
-    },
-    // Dungeon Push Block Puzzle (Antechamber North-West)
-    {
-      id: "prop-dg-push-target-1",
-      prefab: "path_tile",
-      name: "Sanctum Block Socket Rune",
-      zone: "dungeon",
-      x: -6.5,
-      y: 0.03,
-      z: -16.5,
-      rotY: 0,
-      scaleX: 2.1,
-      scaleY: 1,
-      scaleZ: 2.1,
-      hasCollider: false,
-      colliderWidth: 2.1,
-      colliderDepth: 2.1,
-      colliderKind: "ruin",
-      colorHex: "#4fd8ff",
-    },
-    {
-      id: "prop-dg-push-block-1",
-      prefab: "push_block",
-      name: "Sanctum Runed Push Block (Push North onto Socket!)",
-      zone: "dungeon",
-      x: -6.5,
-      y: 0,
-      z: -19.0,
-      rotY: 0,
-      scaleX: 1,
-      scaleY: 1,
-      scaleZ: 1,
-      hasCollider: true,
-      colliderWidth: 1.9,
-      colliderDepth: 1.9,
-      colliderKind: "wall",
-      puzzleTargetX: -6.5,
-      puzzleTargetZ: -16.5,
-      pushedSolved: false,
     }
   );
 
@@ -2358,34 +2386,16 @@ export function buildInitialMapProps(): MapPropInstance[] {
       colliderKind: "wall",
       switchState: "blue",
     },
-    // Dungeon Crystal Orb Switches & Barrier in Hall of Pillars
+    // Room 2 (West Wing: The Chasm Gallery) — Distant Crystal Orb Switch across the chasm (`-31.2, 6.8`)
+    // Hitting it with Boomerang [Q] or Bow [E] lowers the barrier (`-19.5, 8.2`) over the Bonus Supply Pot!
     {
       id: "prop-dg-crystal-switch-1",
       prefab: "crystal_switch",
-      name: "Sanctum West Crystal Orb Switch",
+      name: "Chasm Gallery Crystal Orb Switch (Hit Across Chasm with Boomerang [Q] or Bow [E]!)",
       zone: "dungeon",
-      x: -9.5,
+      x: -31.2,
       y: 0,
-      z: -1.5,
-      rotY: 0,
-      scaleX: 1,
-      scaleY: 1,
-      scaleZ: 1,
-      hasCollider: true,
-      colliderWidth: 1.3,
-      colliderDepth: 1.3,
-      colliderKind: "pillar",
-      switchState: "blue",
-      switchTarget: "orange",
-    },
-    {
-      id: "prop-dg-crystal-switch-2",
-      prefab: "crystal_switch",
-      name: "Sanctum East Crystal Orb Switch",
-      zone: "dungeon",
-      x: 9.5,
-      y: 0,
-      z: -1.5,
+      z: 6.8,
       rotY: 0,
       scaleX: 1,
       scaleY: 1,
@@ -2400,18 +2410,18 @@ export function buildInitialMapProps(): MapPropInstance[] {
     {
       id: "prop-dg-crystal-barrier-1",
       prefab: "crystal_barrier",
-      name: "Sanctum Hall Crystal Barrier",
+      name: "Chasm Gallery Secret Pot Barrier (Hit Distant Switch to Lower!)",
       zone: "dungeon",
-      x: 0,
+      x: -19.5,
       y: 0,
-      z: -1.5,
+      z: 8.2,
       rotY: 0,
       scaleX: 1,
       scaleY: 1,
       scaleZ: 1,
       hasCollider: true,
       colliderWidth: 2.4,
-      colliderDepth: 2.4,
+      colliderDepth: 2.2,
       colliderKind: "wall",
       switchState: "blue",
     }
@@ -2511,40 +2521,19 @@ export function buildInitialMapProps(): MapPropInstance[] {
       colliderKind: "ruin",
       smashed: false,
       potReward: "red_rupee",
-    },
-    // Dungeon Explodable Cracked Rock
-    {
-      id: "prop-dg-cracked-rock-1",
-      prefab: "cracked_rock",
-      name: "Sanctum Cracked Wall Boulder (Use Bomb [B]!)",
-      zone: "dungeon",
-      x: -11.5,
-      y: 0,
-      z: -21.0,
-      rotY: 0,
-      scaleX: 1.15,
-      scaleY: 1.15,
-      scaleZ: 1.15,
-      hasCollider: true,
-      colliderWidth: 2.4,
-      colliderDepth: 2.4,
-      colliderKind: "wall",
-      smashed: false,
-      potReward: "heart",
     }
   );
 
   // =========================================================
   // 13. TIMED TORCH SQUARE PUZZLES (8-SECOND COUNTDOWN — LIGHT ALL 4 SIMULTANEOUSLY!)
   // =========================================================
-  // Dungeon Room 2 (Hall of Pillars) — 4 unlit timed lanterns in a square.
-  // Lighting them illuminates the Dark Room AND if all 4 are lit simultaneously within 8s,
-  // they lock in permanently, unlock the Boss Sanctum Gate, and spawn a treasure chest reward!
+  // Room 1 (The Central Lantern Hub) — 4 Unlit Timed Lanterns surrounding the raised center platform!
+  // Once the player acquires the Flame Rod in Room 3, lighting all 4 Hub Lanterns within 8s drops the iron bars on the North Boss Door!
   const dgTimedSquare = [
-    { id: "prop-dg-timed-torch-sw", name: "Hall Timed Lantern SW (8s Timer)", x: -4.2, z: -7.8 },
-    { id: "prop-dg-timed-torch-se", name: "Hall Timed Lantern SE (8s Timer)", x: 4.2, z: -7.8 },
-    { id: "prop-dg-timed-torch-nw", name: "Hall Timed Lantern NW (8s Timer)", x: -4.2, z: -3.2 },
-    { id: "prop-dg-timed-torch-ne", name: "Hall Timed Lantern NE (8s Timer)", x: 4.2, z: -3.2 },
+    { id: "prop-dg-timed-torch-sw", name: "Central Hub Lantern SW (8s Timer)", x: -3.8, z: -5.0 },
+    { id: "prop-dg-timed-torch-se", name: "Central Hub Lantern SE (8s Timer)", x: 3.8, z: -5.0 },
+    { id: "prop-dg-timed-torch-nw", name: "Central Hub Lantern NW (8s Timer)", x: -3.8, z: 2.0 },
+    { id: "prop-dg-timed-torch-ne", name: "Central Hub Lantern NE (8s Timer)", x: 3.8, z: 2.0 },
   ];
   dgTimedSquare.forEach((tt) => {
     props.push({
@@ -2605,22 +2594,23 @@ export function buildInitialMapProps(): MapPropInstance[] {
   // 14. BURNABLE BARRIERS (SPIDERWEBS & DRY BRIARS — BURN AWAY WITH FLAME ROD [R]!)
   // =========================================================
   props.push(
-    // Thick Spiderweb Barrier blocking the Dungeon North Exit into Map 3 (Elderwood Frontier)!
+    // Room 3 -> Room 4 (East Wing South Doorway) Thick Spiderweb Barrier!
+    // Once the player claims the Flame Rod from the Room 3 Chest, they burn this web wall to enter Room 4 (Dark Archery Crypt)!
     {
-      id: "prop-dg-exit-spiderweb",
+      id: "prop-dg-room3-spiderweb",
       prefab: "spiderweb_barrier",
-      name: "Sanctum Exit Thick Spiderweb (Burn with Flame Rod [R]!)",
+      name: "Ember Sanctum South Spiderweb Wall (Burn with Flame Rod [R] to Enter Room 4!)",
       zone: "dungeon",
-      x: 0,
+      x: 26.0,
       y: 0,
-      z: 33.4,
+      z: -11.8,
       rotY: 0,
-      scaleX: 1.35,
-      scaleY: 1.2,
+      scaleX: 1.55,
+      scaleY: 1.25,
       scaleZ: 1,
       hasCollider: true,
-      colliderWidth: 5.2,
-      colliderDepth: 1.6,
+      colliderWidth: 6.2,
+      colliderDepth: 1.8,
       colliderKind: "wall",
       smashed: false,
     },
@@ -2682,14 +2672,13 @@ export function buildInitialMapProps(): MapPropInstance[] {
       smashed: false,
     },
     // =========================================================
-    // 15. LOW WATER BLOCKS FOR BOOMERANG FETCH-OVER-GAP PUZZLES
+    // 15. LOW WATER / CHASM BLOCKS FOR BOOMERANG FETCH-OVER-GAP PUZZLES
     // =========================================================
-    // Sunken Water Moat surrounding the Sanctum Key Pedestal (-28, 11) in the Western Ruins
-    // Blocks the Hero from walking onto the pedestal — throw the Boomerang [Q] across the water to snag the Key!
+    // Sunken Water Moat surrounding the Western Ruins Treasure Pedestal (-28, 11) in Overworld
     {
       id: "prop-ow-key-moat-s",
       prefab: "water_tile",
-      name: "Sanctum Key Moat South (Throw Boomerang [Q] Across!)",
+      name: "Ruins Moat South (Throw Boomerang [Q] Across!)",
       zone: "overworld",
       x: -28.0,
       y: 0,
@@ -2706,7 +2695,7 @@ export function buildInitialMapProps(): MapPropInstance[] {
     {
       id: "prop-ow-key-moat-n",
       prefab: "water_tile",
-      name: "Sanctum Key Moat North",
+      name: "Ruins Moat North",
       zone: "overworld",
       x: -28.0,
       y: 0,
@@ -2723,7 +2712,7 @@ export function buildInitialMapProps(): MapPropInstance[] {
     {
       id: "prop-ow-key-moat-e",
       prefab: "water_tile",
-      name: "Sanctum Key Moat East (Throw Boomerang [Q] Across!)",
+      name: "Ruins Moat East (Throw Boomerang [Q] Across!)",
       zone: "overworld",
       x: -25.1,
       y: 0,
@@ -2740,7 +2729,7 @@ export function buildInitialMapProps(): MapPropInstance[] {
     {
       id: "prop-ow-key-moat-w",
       prefab: "water_tile",
-      name: "Sanctum Key Moat West",
+      name: "Ruins Moat West",
       zone: "overworld",
       x: -30.9,
       y: 0,
@@ -2754,60 +2743,43 @@ export function buildInitialMapProps(): MapPropInstance[] {
       colliderDepth: 5.8,
       colliderKind: "water",
     },
-    // Dungeon Room 1 Sunken Water Channel blocking the East Alcove Big Red Rupee (+20)
+    // Room 2 (West Wing: The Chasm Gallery) — Wide Impassable Chasm / Deep Water Channel splitting Room 2 down the middle!
+    // Throw the Boomerang [Q] across the gap to snag the Small Key (`DG_SMALL_KEY_POS = -31.2, 0.0`) & hit the Crystal Switch (`-31.2, 6.8`)!
     {
       id: "prop-dg-water-gap",
       prefab: "water_tile",
-      name: "Antechamber Water Trench (Fetch Rupee with Boomerang [Q]!)",
+      name: "Room 2 (Chasm Gallery) Deep Chasm Channel (Throw Boomerang [Q] Across to Snag Small Key!)",
       zone: "dungeon",
-      x: 9.8,
+      x: -26.5,
       y: 0,
-      z: -28.5,
+      z: -1.0,
       rotY: 0,
-      scaleX: 2.0,
+      scaleX: 3.4,
       scaleY: 1,
-      scaleZ: 6.4,
+      scaleZ: 24.4,
       hasCollider: true,
-      colliderWidth: 2.0,
-      colliderDepth: 6.4,
+      colliderWidth: 3.4,
+      colliderDepth: 24.4,
       colliderKind: "water",
     },
     // =========================================================
-    // 16. DUNGEON WALL EYE STATUES (BOW & ARROW [E] PUZZLE — SWORD & FIRE BOUNCE OFF!)
+    // 16. ROOM 4 (THE DARK ARCHERY CRYPT) CYCLOPS EYE STATUE (BOW & ARROW [E] PUZZLE — SWORD & FIRE BOUNCE OFF!)
     // =========================================================
     {
-      id: "prop-dg-eye-statue-w",
+      id: "prop-dg-eye-statue-crypt",
       prefab: "eye_statue",
-      name: "Sanctum West Wall Eye Statue (Shoot with Bow [E]!)",
+      name: "Room 4 (Dark Archery Crypt) Cyclops Eye Statue (Shoot with Bow [E] for Big Boss Key!)",
       zone: "dungeon",
-      x: -6.4,
+      x: 26.0,
       y: 0,
-      z: 10.65,
-      rotY: 0,
-      scaleX: 1,
-      scaleY: 1,
-      scaleZ: 1,
+      z: -35.0,
+      rotY: Math.PI,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.15,
       hasCollider: true,
-      colliderWidth: 1.6,
-      colliderDepth: 1.2,
-      colliderKind: "wall",
-      eyeActivated: false,
-    },
-    {
-      id: "prop-dg-eye-statue-e",
-      prefab: "eye_statue",
-      name: "Sanctum East Wall Eye Statue (Shoot with Bow [E]!)",
-      zone: "dungeon",
-      x: 6.4,
-      y: 0,
-      z: 10.65,
-      rotY: 0,
-      scaleX: 1,
-      scaleY: 1,
-      scaleZ: 1,
-      hasCollider: true,
-      colliderWidth: 1.6,
-      colliderDepth: 1.2,
+      colliderWidth: 1.8,
+      colliderDepth: 1.4,
       colliderKind: "wall",
       eyeActivated: false,
     },
@@ -3316,7 +3288,7 @@ export function buildObstaclesFromMapProps(mapProps: MapPropInstance[]): RectObs
       kind: "gate",
       height: 4.6,
     },
-    // Locked Gate in Dungeon (South Boss Sanctum Entrance)
+    // Locked Gate in Dungeon (North Hub -> Room 5 Boss Sanctum Entrance)
     {
       id: "dg-locked-gate",
       zone: "dungeon",
@@ -3324,6 +3296,28 @@ export function buildObstaclesFromMapProps(mapProps: MapPropInstance[]): RectObs
       maxX: LOCKED_GATE_POS.x + 3.5,
       minZ: LOCKED_GATE_POS.z - 0.8,
       maxZ: LOCKED_GATE_POS.z + 0.8,
+      kind: "gate",
+      height: 4.6,
+    },
+    // East Wing Small Key Door (Room 1 Central Hub -> Room 3 Ember Sanctum)
+    {
+      id: "dg-east-key-door",
+      zone: "dungeon",
+      minX: EAST_WING_DOOR_POS.x - 0.8,
+      maxX: EAST_WING_DOOR_POS.x + 0.8,
+      minZ: EAST_WING_DOOR_POS.z - 3.5,
+      maxZ: EAST_WING_DOOR_POS.z + 3.5,
+      kind: "gate",
+      height: 4.6,
+    },
+    // Room 4 -> Room 1 Shortcut Door (opens after piercing the Cyclops Eye Statue in Room 4!)
+    {
+      id: "dg-crypt-shortcut-door",
+      zone: "dungeon",
+      minX: CRYPT_SHORTCUT_DOOR_POS.x - 0.8,
+      maxX: CRYPT_SHORTCUT_DOOR_POS.x + 0.8,
+      minZ: CRYPT_SHORTCUT_DOOR_POS.z - 3.5,
+      maxZ: CRYPT_SHORTCUT_DOOR_POS.z + 3.5,
       kind: "gate",
       height: 4.6,
     },

@@ -24,13 +24,18 @@ import {
   TerrainCellData,
   useGameStore,
 } from "@/store/gameStore";
- import {
+import {
+  BIG_KEY_CHEST_POS,
   BOSS_CHEST_POS,
   BOSS_EXIT_GATE_POS,
+  CRYPT_SHORTCUT_DOOR_POS,
   CustomModelAsset,
+  DG_SMALL_KEY_POS,
   DUNGEON_ENTRY_GATE_POS,
   DUNGEON_KEY_POS,
+  EAST_WING_DOOR_POS,
   EnemyKind,
+  FIRE_ROD_CHEST_POS,
   GUIDE_NPC_POS,
   HEIRLOOM_NPC_POS,
   LOCKED_GATE_POS,
@@ -1034,26 +1039,6 @@ export default function BabylonCanvas() {
 
     mergeGroupWithMaterial("mergedSanctumKey", keyParts, goldKeyMat, keyNode);
 
-    // Floating Flame Rod Scepter alongside the Sanctum Key on the Grove Shrine Pedestal
-    const groveRodShaft = MeshBuilder.CreateCylinder(
-      "groveRodShaft",
-      { diameterTop: 0.12, diameterBottom: 0.09, height: 1.25, tessellation: 10 },
-      scene
-    );
-    groveRodShaft.position.set(-0.55, 0.05, 0);
-    groveRodShaft.rotation.z = -0.22;
-    groveRodShaft.material = glowingCrimsonMat;
-    groveRodShaft.parent = keyNode;
-
-    const groveRodCrown = MeshBuilder.CreatePolyhedron(
-      "groveRodCrown",
-      { type: 1, size: 0.22 },
-      scene
-    );
-    groveRodCrown.position.set(-0.68, 0.72, 0);
-    groveRodCrown.material = goldKeyMat;
-    groveRodCrown.parent = keyNode;
-
     const keyBeaconRing = MeshBuilder.CreateTorus(
       "keyBeaconRing",
       { diameter: 2.5, thickness: 0.09, tessellation: 28 },
@@ -1063,20 +1048,369 @@ export default function BabylonCanvas() {
     keyBeaconRing.material = goldKeyMat;
     keyBeaconRing.parent = groveRoot;
 
-    // Dungeon Carpet Runner & Boss Arena Ring
+    // Dungeon Cross-Shaped Carpet Runners, Central Hub Raised Platform & Boss Arena Ring
+    const dgRunnerMat = makeMat(
+      "dgRunnerMat",
+      new Color3(0.42, 0.14, 0.18),
+      new Color3(0.08, 0.02, 0.03)
+    );
     const dgRunner = MeshBuilder.CreateBox(
       "dgRunner",
       { width: 4.5, height: 0.05, depth: 66 },
       scene
     );
     dgRunner.position.set(0, 0.025, -1);
-    dgRunner.material = makeMat(
-      "dgRunnerMat",
-      new Color3(0.42, 0.14, 0.18),
-      new Color3(0.08, 0.02, 0.03)
-    );
+    dgRunner.material = dgRunnerMat;
     dgRunner.parent = dungeonRoot;
     dgRunner.isPickable = false;
+
+    const dgCrossRunner = MeshBuilder.CreateBox(
+      "dgCrossRunner",
+      { width: 56, height: 0.048, depth: 4.2 },
+      scene
+    );
+    dgCrossRunner.position.set(1.0, 0.024, 0);
+    dgCrossRunner.material = dgRunnerMat;
+    dgCrossRunner.parent = dungeonRoot;
+    dgCrossRunner.isPickable = false;
+
+    const dgCryptRunner = MeshBuilder.CreateBox(
+      "dgCryptRunner",
+      { width: 4.0, height: 0.046, depth: 24 },
+      scene
+    );
+    dgCryptRunner.position.set(26.0, 0.023, -23.0);
+    dgCryptRunner.material = dgRunnerMat;
+    dgCryptRunner.parent = dungeonRoot;
+    dgCryptRunner.isPickable = false;
+
+    // Room 1 Central Hub Raised Stone Platform (surrounded by the 4 Unlit Timed Lanterns)
+    const dgHubPlatform = MeshBuilder.CreateBox(
+      "dgHubPlatform",
+      { width: 6.4, height: 0.24, depth: 6.0 },
+      scene
+    );
+    dgHubPlatform.position.set(0, 0.12, -1.5);
+    dgHubPlatform.material = dgPillarMat;
+    dgHubPlatform.parent = dungeonRoot;
+    dgHubPlatform.isPickable = false;
+
+    const dgHubPlatformRing = MeshBuilder.CreateTorus(
+      "dgHubPlatformRing",
+      { diameter: 4.6, thickness: 0.14, tessellation: 28 },
+      scene
+    );
+    dgHubPlatformRing.position.set(0, 0.26, -1.5);
+    dgHubPlatformRing.material = goldKeyMat;
+    dgHubPlatformRing.parent = dungeonRoot;
+    dgHubPlatformRing.isPickable = false;
+
+    // Room 2 (West Wing) Small Key Pedestal & Floating Small Key Across the Chasm (`DG_SMALL_KEY_POS = -31.2, 0.0`)
+    const dgSmallKeyPedestal = MeshBuilder.CreateCylinder(
+      "dgSmallKeyPedestal",
+      { diameterTop: 2.1, diameterBottom: 2.5, height: 0.55, tessellation: 16 },
+      scene
+    );
+    dgSmallKeyPedestal.position.set(DG_SMALL_KEY_POS.x, 0.275, DG_SMALL_KEY_POS.z);
+    dgSmallKeyPedestal.material = dgPillarMat;
+    dgSmallKeyPedestal.parent = dungeonRoot;
+    dgSmallKeyPedestal.isPickable = false;
+
+    const dgSmallKeyBeaconRing = MeshBuilder.CreateTorus(
+      "dgSmallKeyBeaconRing",
+      { diameter: 2.4, thickness: 0.1, tessellation: 24 },
+      scene
+    );
+    dgSmallKeyBeaconRing.position.set(DG_SMALL_KEY_POS.x, 0.58, DG_SMALL_KEY_POS.z);
+    dgSmallKeyBeaconRing.material = goldKeyMat;
+    dgSmallKeyBeaconRing.parent = dungeonRoot;
+    dgSmallKeyBeaconRing.isPickable = false;
+
+    const dgSmallKeyNode = new TransformNode("dgSmallKeyNode", scene);
+    dgSmallKeyNode.parent = dungeonRoot;
+    dgSmallKeyNode.position.set(DG_SMALL_KEY_POS.x, 1.65, DG_SMALL_KEY_POS.z);
+    {
+      const skParts: Mesh[] = [];
+      const skBow = MeshBuilder.CreateTorus(
+        "dgSmallKeyBow",
+        { diameter: 0.68, thickness: 0.16, tessellation: 18 },
+        scene
+      );
+      skBow.rotation.x = Math.PI / 2;
+      skBow.position.set(0, 0.42, 0);
+      skParts.push(skBow);
+
+      const skShaft = MeshBuilder.CreateCylinder(
+        "dgSmallKeyShaft",
+        { diameter: 0.16, height: 0.92, tessellation: 10 },
+        scene
+      );
+      skShaft.position.set(0, -0.14, 0);
+      skParts.push(skShaft);
+
+      const skBit1 = MeshBuilder.CreateBox(
+        "dgSmallKeyBit1",
+        { width: 0.28, height: 0.12, depth: 0.12 },
+        scene
+      );
+      skBit1.position.set(0.16, -0.34, 0);
+      skParts.push(skBit1);
+
+      const skBit2 = MeshBuilder.CreateBox(
+        "dgSmallKeyBit2",
+        { width: 0.34, height: 0.14, depth: 0.12 },
+        scene
+      );
+      skBit2.position.set(0.18, -0.52, 0);
+      skParts.push(skBit2);
+
+      mergeGroupWithMaterial("dgSmallKeyMerged", skParts, goldKeyMat, dgSmallKeyNode);
+    }
+
+    // Room 1 -> Room 3 Locked Small Key Door (`EAST_WING_DOOR_POS = 14.0, 0.0`)
+    const eastWingDoorNode = new TransformNode("eastWingDoorNode", scene);
+    eastWingDoorNode.parent = dungeonRoot;
+    eastWingDoorNode.position.set(EAST_WING_DOOR_POS.x, 0, EAST_WING_DOOR_POS.z);
+    eastWingDoorNode.rotation.y = Math.PI / 2;
+    {
+      const h = 4.5;
+      const w = 6.2;
+      const eastDoorParts: Mesh[] = [];
+      const barCount = 7;
+      for (let b = 0; b < barCount; b++) {
+        const bx = -2.6 + (b / (barCount - 1)) * 5.2;
+        const bar = MeshBuilder.CreateCylinder(
+          `eastDoorBar-${b}`,
+          { diameter: 0.24, height: h, tessellation: 10 },
+          scene
+        );
+        bar.position.set(bx, h / 2, 0);
+        eastDoorParts.push(bar);
+      }
+      const beamTop = MeshBuilder.CreateBox(
+        "eastDoorBeamTop",
+        { width: w, height: 0.36, depth: 0.48 },
+        scene
+      );
+      beamTop.position.set(0, h - 0.45, 0);
+      eastDoorParts.push(beamTop);
+
+      const beamMid = MeshBuilder.CreateBox(
+        "eastDoorBeamMid",
+        { width: w, height: 0.32, depth: 0.44 },
+        scene
+      );
+      beamMid.position.set(0, h * 0.45, 0);
+      eastDoorParts.push(beamMid);
+
+      mergeGroupWithMaterial("mergedEastWingDoorIron", eastDoorParts, ironGateMat, eastWingDoorNode);
+
+      const eastLockPlate = MeshBuilder.CreateBox(
+        "eastDoorLockPlate",
+        { width: 0.95, height: 1.05, depth: 0.62 },
+        scene
+      );
+      eastLockPlate.position.set(0, h * 0.45, 0);
+      eastLockPlate.material = goldKeyMat;
+      eastLockPlate.parent = eastWingDoorNode;
+    }
+
+    // Room 3 (East Wing: Ember Sanctum) Center Flame Rod Treasure Chest (`FIRE_ROD_CHEST_POS = 26.0, 1.5`)
+    const fireRodChestRoot = new TransformNode("fireRodChestRoot", scene);
+    fireRodChestRoot.parent = dungeonRoot;
+    fireRodChestRoot.position.set(FIRE_ROD_CHEST_POS.x, 0, FIRE_ROD_CHEST_POS.z);
+
+    const fireRodChestDais = MeshBuilder.CreateBox(
+      "fireRodChestDais",
+      { width: 3.6, height: 0.36, depth: 2.8 },
+      scene
+    );
+    fireRodChestDais.position.set(0, 0.18, 0);
+    fireRodChestDais.material = dgPillarMat;
+    fireRodChestDais.parent = fireRodChestRoot;
+
+    const fireRodChestBase = MeshBuilder.CreateBox(
+      "fireRodChestBase",
+      { width: 1.85, height: 0.92, depth: 1.25 },
+      scene
+    );
+    fireRodChestBase.position.set(0, 0.82, 0);
+    fireRodChestBase.material = woodMat;
+    fireRodChestBase.parent = fireRodChestRoot;
+
+    const fireRodChestTrim = MeshBuilder.CreateBox(
+      "fireRodChestTrim",
+      { width: 1.94, height: 0.22, depth: 1.32 },
+      scene
+    );
+    fireRodChestTrim.position.set(0, 1.2, 0);
+    fireRodChestTrim.material = goldKeyMat;
+    fireRodChestTrim.parent = fireRodChestRoot;
+
+    const fireRodChestLid = MeshBuilder.CreateCylinder(
+      "fireRodChestLid",
+      { diameter: 1.25, height: 1.88, tessellation: 16 },
+      scene
+    );
+    fireRodChestLid.rotation.z = Math.PI / 2;
+    fireRodChestLid.position.set(0, 1.32, 0);
+    fireRodChestLid.material = goldKeyMat;
+    fireRodChestLid.parent = fireRodChestRoot;
+
+    const fireRodChestSealRing = MeshBuilder.CreateTorus(
+      "fireRodChestSealRing",
+      { diameter: 2.9, thickness: 0.13, tessellation: 24 },
+      scene
+    );
+    fireRodChestSealRing.position.set(0, 0.45, 0);
+    fireRodChestSealRing.material = glowingCrimsonMat;
+    fireRodChestSealRing.parent = fireRodChestRoot;
+
+    const fireRodChestRelicNode = new TransformNode("fireRodChestRelicNode", scene);
+    fireRodChestRelicNode.parent = fireRodChestRoot;
+    fireRodChestRelicNode.position.set(0, 2.25, 0);
+    {
+      const rodShaft = MeshBuilder.CreateCylinder(
+        "fireRodChestShaft",
+        { diameterTop: 0.13, diameterBottom: 0.16, height: 1.15, tessellation: 10 },
+        scene
+      );
+      rodShaft.rotation.z = -0.35;
+      rodShaft.material = glowingCrimsonMat;
+      rodShaft.parent = fireRodChestRelicNode;
+
+      const rodOrb = MeshBuilder.CreateSphere(
+        "fireRodChestOrb",
+        { diameter: 0.42, segments: 12 },
+        scene
+      );
+      rodOrb.position.set(0.2, 0.52, 0);
+      rodOrb.material = goldKeyMat;
+      rodOrb.parent = fireRodChestRelicNode;
+    }
+
+    // Room 4 (South-East Dark Archery Crypt) Big Boss Key Chest (`BIG_KEY_CHEST_POS = 26.0, -24.0`) & West Shortcut Gate (`CRYPT_SHORTCUT_DOOR_POS = 14.0, -24.0`)
+    const bigKeyChestRoot = new TransformNode("bigKeyChestRoot", scene);
+    bigKeyChestRoot.parent = dungeonRoot;
+    bigKeyChestRoot.position.set(BIG_KEY_CHEST_POS.x, 0, BIG_KEY_CHEST_POS.z);
+
+    const bigKeyChestDais = MeshBuilder.CreateBox(
+      "bigKeyChestDais",
+      { width: 3.8, height: 0.38, depth: 3.0 },
+      scene
+    );
+    bigKeyChestDais.position.set(0, 0.19, 0);
+    bigKeyChestDais.material = dgPillarMat;
+    bigKeyChestDais.parent = bigKeyChestRoot;
+
+    const bigKeyChestBase = MeshBuilder.CreateBox(
+      "bigKeyChestBase",
+      { width: 1.95, height: 0.98, depth: 1.32 },
+      scene
+    );
+    bigKeyChestBase.position.set(0, 0.86, 0);
+    bigKeyChestBase.material = glowingCrimsonMat;
+    bigKeyChestBase.parent = bigKeyChestRoot;
+
+    const bigKeyChestTrim = MeshBuilder.CreateBox(
+      "bigKeyChestTrim",
+      { width: 2.05, height: 0.24, depth: 1.4 },
+      scene
+    );
+    bigKeyChestTrim.position.set(0, 1.26, 0);
+    bigKeyChestTrim.material = goldKeyMat;
+    bigKeyChestTrim.parent = bigKeyChestRoot;
+
+    const bigKeyChestLid = MeshBuilder.CreateCylinder(
+      "bigKeyChestLid",
+      { diameter: 1.32, height: 1.98, tessellation: 16 },
+      scene
+    );
+    bigKeyChestLid.rotation.z = Math.PI / 2;
+    bigKeyChestLid.position.set(0, 1.38, 0);
+    bigKeyChestLid.material = goldKeyMat;
+    bigKeyChestLid.parent = bigKeyChestRoot;
+
+    const bigKeyChestSealRing = MeshBuilder.CreateTorus(
+      "bigKeyChestSealRing",
+      { diameter: 3.1, thickness: 0.14, tessellation: 24 },
+      scene
+    );
+    bigKeyChestSealRing.position.set(0, 0.48, 0);
+    bigKeyChestSealRing.material = glowingCrimsonMat;
+    bigKeyChestSealRing.parent = bigKeyChestRoot;
+
+    const bigKeyChestUnsealedRing = MeshBuilder.CreateTorus(
+      "bigKeyChestUnsealedRing",
+      { diameter: 3.2, thickness: 0.14, tessellation: 28 },
+      scene
+    );
+    bigKeyChestUnsealedRing.position.set(0, 0.48, 0);
+    bigKeyChestUnsealedRing.material = goldKeyMat;
+    bigKeyChestUnsealedRing.parent = bigKeyChestRoot;
+
+    const bigKeyChestItemNode = new TransformNode("bigKeyChestItemNode", scene);
+    bigKeyChestItemNode.parent = bigKeyChestRoot;
+    bigKeyChestItemNode.position.set(0, 2.35, 0);
+    {
+      const bkParts: Mesh[] = [];
+      const bkBow = MeshBuilder.CreateTorus(
+        "bigKeyItemBow",
+        { diameter: 0.82, thickness: 0.2, tessellation: 18 },
+        scene
+      );
+      bkBow.rotation.x = Math.PI / 2;
+      bkBow.position.set(0, 0.48, 0);
+      bkParts.push(bkBow);
+
+      const bkShaft = MeshBuilder.CreateCylinder(
+        "bigKeyItemShaft",
+        { diameter: 0.2, height: 1.05, tessellation: 10 },
+        scene
+      );
+      bkShaft.position.set(0, -0.15, 0);
+      bkParts.push(bkShaft);
+
+      const bkBit = MeshBuilder.CreateBox(
+        "bigKeyItemBit",
+        { width: 0.42, height: 0.24, depth: 0.16 },
+        scene
+      );
+      bkBit.position.set(0.22, -0.45, 0);
+      bkParts.push(bkBit);
+
+      mergeGroupWithMaterial("bigKeyItemMerged", bkParts, goldKeyMat, bigKeyChestItemNode);
+    }
+
+    const cryptShortcutGateNode = new TransformNode("cryptShortcutGateNode", scene);
+    cryptShortcutGateNode.parent = dungeonRoot;
+    cryptShortcutGateNode.position.set(CRYPT_SHORTCUT_DOOR_POS.x, 0, CRYPT_SHORTCUT_DOOR_POS.z);
+    cryptShortcutGateNode.rotation.y = Math.PI / 2;
+    {
+      const h = 4.4;
+      const w = 5.6;
+      const scParts: Mesh[] = [];
+      const barCount = 7;
+      for (let b = 0; b < barCount; b++) {
+        const bx = -2.3 + (b / (barCount - 1)) * 4.6;
+        const bar = MeshBuilder.CreateCylinder(
+          `cryptShortcutBar-${b}`,
+          { diameter: 0.22, height: h, tessellation: 10 },
+          scene
+        );
+        bar.position.set(bx, h / 2, 0);
+        scParts.push(bar);
+      }
+      const beamTop = MeshBuilder.CreateBox(
+        "cryptShortcutBeamTop",
+        { width: w, height: 0.34, depth: 0.44 },
+        scene
+      );
+      beamTop.position.set(0, h - 0.45, 0);
+      scParts.push(beamTop);
+
+      mergeGroupWithMaterial("mergedCryptShortcutIron", scParts, ironGateMat, cryptShortcutGateNode);
+    }
 
     const bossArenaRing = MeshBuilder.CreateTorus(
       "bossArenaRing",
@@ -1092,7 +1426,7 @@ export default function BabylonCanvas() {
     bossArenaRing.parent = dungeonRoot;
     bossArenaRing.isPickable = false;
 
-    // Locked Iron Gate in Dungeon (Southern entry to Room 3)
+    // Locked Iron Gate in Dungeon (Southern entry to Room 5 Boss Lair)
     const lockedGateNode = new TransformNode("lockedGateNode", scene);
     lockedGateNode.parent = dungeonRoot;
     lockedGateNode.position.set(LOCKED_GATE_POS.x, 0, LOCKED_GATE_POS.z);
@@ -1140,7 +1474,7 @@ export default function BabylonCanvas() {
       lockPlate.parent = lockedGateNode;
     }
 
-    // Northern Sanctum Exit Gate (unseals when Boss Malakor is defeated, opening the path to the Elderwood Frontier!)
+    // Northern Sanctum Exit Gate (unseals when Boss Ignis is defeated, opening the path to Map 3!)
     const bossExitGateNode = new TransformNode("bossExitGateNode", scene);
     bossExitGateNode.parent = dungeonRoot;
     bossExitGateNode.position.set(BOSS_EXIT_GATE_POS.x, 0, BOSS_EXIT_GATE_POS.z);
@@ -1189,7 +1523,7 @@ export default function BabylonCanvas() {
       sealEmblem.parent = bossExitGateNode;
     }
 
-    // --- BOSS CHEST & SEAL IN DUNGEON ROOM 3 (0, 33) ---
+    // --- BOSS CHEST & SEAL IN DUNGEON ROOM 5 (0, 32) ---
     const chestRoot = new TransformNode("bossChestRoot", scene);
     chestRoot.parent = dungeonRoot;
     chestRoot.position.set(BOSS_CHEST_POS.x, 0, BOSS_CHEST_POS.z);
@@ -4780,27 +5114,50 @@ export default function BabylonCanvas() {
       bucklerBoss.parent = woodShieldNode;
       woodShieldNode.setEnabled(false);
 
-      // Translucent Glacial Ice Armor Shell (blocks normal attacks until melted with the Flame Rod!)
+      // Translucent Glacial Ice / Bramble Armor Shell (blocks normal attacks until melted with the Flame Rod!)
       const iceArmorNode = new TransformNode(`enemyIceArmor-${id}`, scene);
-      iceArmorNode.position.set(0, kind === "knight" ? 1.22 : kind === "slime" ? 0.72 : 1.0, 0);
+      iceArmorNode.position.set(
+        0,
+        kind === "boss" ? 2.15 : kind === "knight" ? 1.22 : kind === "slime" ? 0.72 : 1.0,
+        0
+      );
       iceArmorNode.parent = body;
       const iceParts: Mesh[] = [];
       const iceShell = MeshBuilder.CreatePolyhedron(
         `iceShell-${id}`,
-        { type: 1, size: kind === "knight" ? 1.28 : kind === "slime" ? 0.96 : 1.06 },
+        {
+          type: 1,
+          size:
+            kind === "boss"
+              ? 1.95
+              : kind === "knight"
+              ? 1.28
+              : kind === "slime"
+              ? 0.96
+              : 1.06,
+        },
         scene
       );
-      iceShell.scaling.set(1.08, kind === "knight" ? 1.38 : 1.15, 1.08);
+      iceShell.scaling.set(
+        1.08,
+        kind === "boss" ? 1.42 : kind === "knight" ? 1.38 : 1.15,
+        1.08
+      );
       iceParts.push(iceShell);
 
       for (let c = 0; c < 4; c++) {
         const ang = (c / 4) * Math.PI * 2 + 0.4;
         const shard = MeshBuilder.CreateCylinder(
           `iceShard-${id}-${c}`,
-          { diameterTop: 0.04, diameterBottom: 0.34, height: 0.75, tessellation: 6 },
+          {
+            diameterTop: 0.04,
+            diameterBottom: kind === "boss" ? 0.52 : 0.34,
+            height: kind === "boss" ? 1.15 : 0.75,
+            tessellation: 6,
+          },
           scene
         );
-        const rad = kind === "knight" ? 0.95 : 0.78;
+        const rad = kind === "boss" ? 1.48 : kind === "knight" ? 0.95 : 0.78;
         shard.position.set(Math.cos(ang) * rad, 0.25, Math.sin(ang) * rad);
         shard.rotation.z = -Math.cos(ang) * 0.55;
         shard.rotation.x = Math.sin(ang) * 0.55;
@@ -5850,34 +6207,33 @@ export default function BabylonCanvas() {
         sanctumPointLight.intensity = 0;
         heroLanternDisc.setEnabled(false);
       } else {
-        // Dark Room Visibility Cone & Lantern Illumination in Dungeon Room II (Dark Hall of Lanterns)
+        // Dark Room Visibility Cone & Lantern Illumination in Dungeon Room 4 (The Dark Archery Crypt)
         // Zero extra dynamic PointLights or shadow maps — scales existing scene light uniforms!
-        if (snap.dungeonRoom === "hall" && !snap.editorMode) {
-          let litHallTorches = 0;
+        if (snap.dungeonRoom === "crypt" && !snap.editorMode) {
+          let litCryptTorches = 0;
           for (const p of snap.mapProps) {
             if (
               p.zone === "dungeon" &&
               p.prefab === "wall_torch" &&
-              p.z >= -15.5 &&
-              p.z <= -1.2 &&
+              p.id.startsWith("prop-dg-crypt-torch") &&
               p.lit !== false
             ) {
-              litHallTorches++;
+              litCryptTorches++;
             }
           }
-          const hallLightRatio = Math.min(1, litHallTorches / 4);
+          const cryptLightRatio = Math.min(1, litCryptTorches / 4);
           scene.clearColor.set(
-            0.015 + hallLightRatio * 0.035,
-            0.015 + hallLightRatio * 0.035,
-            0.03 + hallLightRatio * 0.06,
+            0.015 + cryptLightRatio * 0.035,
+            0.015 + cryptLightRatio * 0.035,
+            0.03 + cryptLightRatio * 0.06,
             1
           );
-          hemiLight.intensity = 0.22 + hallLightRatio * 0.48;
-          dirLight.intensity = 0.16 + hallLightRatio * 0.42;
+          hemiLight.intensity = 0.22 + cryptLightRatio * 0.48;
+          dirLight.intensity = 0.16 + cryptLightRatio * 0.42;
           sanctumPointLight.intensity = snap.flags.bossDefeated ? 1.35 : 0.45;
-          heroLanternDisc.setEnabled(hallLightRatio < 1);
-          if (hallLightRatio < 1) {
-            const discScale = 1.0 + hallLightRatio * 0.65 + Math.sin(t * 9) * 0.03;
+          heroLanternDisc.setEnabled(cryptLightRatio < 1);
+          if (cryptLightRatio < 1) {
+            const discScale = 1.0 + cryptLightRatio * 0.65 + Math.sin(t * 9) * 0.03;
             heroLanternDisc.scaling.set(discScale, 1, discScale);
           }
         } else {
@@ -6258,7 +6614,7 @@ export default function BabylonCanvas() {
         }
       }
 
-       // 6. Sync Sanctum Key & Flame Rod Pedestal (Map 1B Grove), Gates & Boss Chest
+      // 6. Sync Sanctum Entry Key Pedestal (Map 1B Grove), 5-Room Dungeon Keys/Doors/Chests & Boss Chest
       keyNode.setEnabled(isGrove && !snap.flags.keyPickedUp);
       keyBeaconRing.setEnabled(isGrove && !snap.flags.keyPickedUp);
       if (!snap.flags.keyPickedUp) {
@@ -6273,6 +6629,72 @@ export default function BabylonCanvas() {
           );
         }
       }
+
+      // Room 2 (West Wing) Small Key on Pedestal Across Chasm (`DG_SMALL_KEY_POS = -31.2, 0.0`)
+      const showDgSmallKey = isDungeon && !snap.flags.dgSmallKeyPickedUp;
+      dgSmallKeyNode.setEnabled(showDgSmallKey);
+      dgSmallKeyBeaconRing.setEnabled(showDgSmallKey);
+      if (showDgSmallKey) {
+        dgSmallKeyNode.rotation.y = t * 2.5;
+        if (snap.boomerang?.carryingDgSmallKey && snap.boomerang.zone === "dungeon") {
+          dgSmallKeyNode.position.set(snap.boomerang.x, 1.35, snap.boomerang.z);
+        } else {
+          dgSmallKeyNode.position.set(
+            DG_SMALL_KEY_POS.x,
+            1.65 + Math.sin(t * 3.4) * 0.18,
+            DG_SMALL_KEY_POS.z
+          );
+        }
+      }
+
+      // Room 1 -> Room 3 East Small Key Door (`EAST_WING_DOOR_POS = 14.0, 0.0`)
+      const isEastDoorOpen =
+        snap.flags.eastWingDoorUnlocked && !snap.flags.eastWingArenaLocked;
+      const targetEastDoorY = isEastDoorOpen ? -4.8 : 0;
+      eastWingDoorNode.position.y +=
+        (targetEastDoorY - eastWingDoorNode.position.y) *
+        Math.min(1, dt * (isEastDoorOpen ? 7 : 26));
+
+      // Room 3 (East Wing: Ember Sanctum) Center Flame Rod Chest (`FIRE_ROD_CHEST_POS = 26.0, 1.5`)
+      if (snap.flags.fireRodChestOpened) {
+        fireRodChestLid.position.set(0, 1.65, 0.42);
+        fireRodChestSealRing.setEnabled(false);
+        fireRodChestRelicNode.setEnabled(false);
+      } else {
+        fireRodChestLid.position.set(0, 1.32, 0);
+        fireRodChestSealRing.setEnabled(true);
+        fireRodChestSealRing.rotation.y = t * 2.0;
+        fireRodChestRelicNode.setEnabled(true);
+        fireRodChestRelicNode.rotation.y = t * 2.6;
+        fireRodChestRelicNode.position.y = 2.25 + Math.sin(t * 3.2) * 0.16;
+      }
+
+      // Room 4 (Dark Archery Crypt) Center Big Boss Key Chest (`BIG_KEY_CHEST_POS = 26.0, -24.0`) & West Shortcut Door
+      const eyeSolved = Boolean(snap.flags.dungeonEyeStatuesSolved);
+      if (snap.flags.bigKeyChestOpened) {
+        bigKeyChestLid.position.set(0, 1.72, 0.45);
+        bigKeyChestSealRing.setEnabled(false);
+        bigKeyChestUnsealedRing.setEnabled(true);
+        bigKeyChestItemNode.setEnabled(false);
+      } else {
+        bigKeyChestLid.position.set(0, 1.38, 0);
+        bigKeyChestSealRing.setEnabled(!eyeSolved);
+        bigKeyChestSealRing.rotation.y = t * 2.0;
+        bigKeyChestUnsealedRing.setEnabled(eyeSolved);
+        if (eyeSolved) {
+          bigKeyChestUnsealedRing.scaling.setAll(1 + Math.sin(t * 4.2) * 0.06);
+        }
+        bigKeyChestItemNode.setEnabled(eyeSolved);
+        if (eyeSolved) {
+          bigKeyChestItemNode.rotation.y = t * 2.8;
+          bigKeyChestItemNode.position.y = 2.38 + Math.sin(t * 3.5) * 0.18;
+        }
+      }
+
+      const targetCryptShortcutY = eyeSolved ? -4.8 : 0;
+      cryptShortcutGateNode.position.y +=
+        (targetCryptShortcutY - cryptShortcutGateNode.position.y) *
+        Math.min(1, dt * 7);
 
       const isOwEntryOpen = Boolean(
         snap.flags.dungeonEntryUnlocked ||
@@ -6395,7 +6817,9 @@ export default function BabylonCanvas() {
           rig.woodShieldNode.setEnabled(enemy.shieldArmor === "wood");
         }
         if (rig.iceArmorNode) {
-          const hasIce = enemy.shieldArmor === "ice";
+          const hasIce =
+            enemy.shieldArmor === "ice" ||
+            (enemy.kind === "boss" && snap.flags.bossState === "ARMORED");
           rig.iceArmorNode.setEnabled(hasIce);
           if (hasIce) {
             rig.iceArmorNode.rotation.y = t * 1.1;

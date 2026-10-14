@@ -160,7 +160,7 @@ const MONSTER_PALETTE: Array<{
   { prefab: "enemy:goblin", label: "Goblin Fighter", weightLabel: "Medium (2.0)" },
   { prefab: "enemy:minion", label: "Shadow Minion", weightLabel: "Medium (2.2)" },
   { prefab: "enemy:knight", label: "Sentinel Knight", weightLabel: "Heavy (12.0)" },
-  { prefab: "enemy:boss", label: "Boss: Malakor", weightLabel: "Immovable (100)" },
+  { prefab: "enemy:boss", label: "Boss: Ignis (Eye-Golem)", weightLabel: "Immovable (100)" },
 ];
 
 const TERRAIN_SWATCHES = [
@@ -356,18 +356,17 @@ export default function GameOverlay() {
     (e) => e.kind === "minion" && e.zone === zone && e.state !== "dead"
   ).length;
 
-  // Dark Room (Room II: Dark Lantern Puzzle Room) & Timed 8-Second Torch Square Status
+  // Dark Room (Room 4: The Dark Archery Crypt) & Timed 8-Second Torch Square Status
   const inDarkHall =
-    phase === "playing" && !editorMode && zone === "dungeon" && dungeonRoom === "hall";
+    phase === "playing" && !editorMode && zone === "dungeon" && dungeonRoom === "crypt";
   const hallTorches = mapProps.filter(
     (p) =>
       p.zone === "dungeon" &&
       p.prefab === "wall_torch" &&
-      p.z >= -15.5 &&
-      p.z <= -1.2
+      p.id.startsWith("prop-dg-crypt-torch")
   );
   const litHallTorchesCount = hallTorches.filter((p) => p.lit !== false).length;
-  const hallLightRatio = Math.min(1, litHallTorchesCount / 4);
+  const hallLightRatio = Math.min(1, litHallTorchesCount / Math.max(1, hallTorches.length));
 
   const zoneTimedTorches = mapProps.filter(
     (p) =>
@@ -387,7 +386,7 @@ export default function GameOverlay() {
   );
 
   let currentObjective =
-    "Hub Goal: Take the West Exit to Forest Grove (Map 1B) to earn the Sanctum Key & Flame Rod (or earn 100 Rupees for the Shop Upgrade)!";
+    "Hub Goal: Take the West Exit to Forest Grove (Map 1B) to earn the Sanctum Entry Key (or earn 100 Rupees for the Shop Upgrade)!";
   if (zone === "frontier") {
     currentObjective =
       "Map 3 (The Burned Pass): Melt Ice Armor & Burn Wooden Shields with Flame Rod (R), or dig Dirt Patches (G)!";
@@ -395,30 +394,60 @@ export default function GameOverlay() {
     currentObjective = !flags.grovePuzzleSolved
       ? "Map 1B (Forest Grove): Hit the Crystal Orb Switch across the stream with Boomerang (Q) OR defeat all 3 Ambush Monsters!"
       : !flags.keyPickedUp
-      ? "Claim the Sanctum Key & Flame Rod from the North Shrine Pedestal (or snag it with Boomerang Q)!"
+      ? "Claim the Sanctum Entry Key from the North Shrine Pedestal (or snag it with Boomerang Q)!"
       : "Return East to the Crossroads Hub and unlock the North Dungeon Gate!";
   } else if (flags.chestUnlocked || flags.bossDefeated) {
     currentObjective = !flags.eastExitBurned
-      ? "Boss Defeated (+1 Heart)! Return to Map 1 Hub and burn the East Exit Dry Vines / Torches with Flame Rod (R) to enter Map 3!"
+      ? "Boss Ignis Defeated (+1 Heart)! Take the North Sanctuary Portal or return to Map 1 and burn the East Vines with Flame Rod (R)!"
       : "Step through the East Exit of Map 1 into Map 3: The Burned Pass!";
-  } else if (zone === "dungeon" && flags.gateUnlocked) {
+  } else if (zone === "dungeon" && dungeonRoom === "sanctum") {
     currentObjective =
-      "Room IV (Boss Room): Shoot Malakor's Glowing Open Eye with your Bow (E) to claim a Full Heart Container (+1 Max HP)!";
-  } else if (zone === "dungeon" && !flags.gateUnlocked) {
-    currentObjective =
-      dungeonRoom === "entry"
-        ? "Room I (Push-Block Room): Push the Carved Stone Block (WASD 1s) onto the Floor Switch!"
-        : dungeonRoom === "hall"
-        ? "Room II (Dark Lantern Room): Light all 4 Timed Lanterns within 8s with Flame Rod (R)!"
-        : hero.hasDungeonKey
-        ? "Room III (Mini-Arena): Approach the North Boss Gate to unlock it with your Key!"
-        : "Room III (Mini-Arena): Defeat the Arena Guards or shoot both Wall Eye Statues with Bow (E) to unseal the Boss Gate!";
+      flags.bossState === "ARMORED"
+        ? "Room 5 (Boss Lair): Ignis's Ice/Bramble Carapace deflects Swords & Arrows — burn it off with Flame Rod (R)!"
+        : flags.bossState === "EXPOSED_EYE"
+        ? "Room 5 (Boss Lair): Ignis's Eye is OPEN! Shoot it with Bow (E) or Boomerang (Q) to crash it to the floor!"
+        : "Room 5 (Boss Lair): IGNIS IS STUNNED! Rush in and slash with Sword (Space / LMB) for 3x Melee Damage!";
+  } else if (zone === "dungeon") {
+    if (dungeonRoom === "west_wing") {
+      currentObjective =
+        !flags.dgSmallKeyPickedUp
+          ? "Room 2 (The Chasm Gallery): Stun Spiked Beetles with Boomerang (Q), then throw Boomerang across the chasm to snag the Small Key!"
+          : "Small Key snagged! Return East to Room 1 (Central Hub) and unlock the East Wing Door!";
+    } else if (dungeonRoom === "east_wing") {
+      currentObjective =
+        !flags.fireRodChestOpened
+          ? "Room 3 (The Ember Sanctum): Defeat all 3 Shielded Goblins to unlock the Center Chest and claim the Flame Rod!"
+          : !flags.dungeonTorchPuzzleSolved || !flags.webBarrierBurned
+          ? "Flame Rod Tutorial: Shoot both Unlit South Lanterns with Flame Rod (R) and burn the Thick Spiderwebs to open Room 4!"
+          : "Head South into Room 4 (The Dark Archery Crypt)!";
+    } else if (dungeonRoom === "crypt") {
+      currentObjective =
+        !flags.dungeonEyeStatuesSolved
+          ? "Room 4 (Dark Archery Crypt): Light the 4 Corner Lanterns & melt Ice Knights with Flame Rod (R), then shoot the South Eye Statue with Bow (E)!"
+          : !flags.bigKeyChestOpened
+          ? "Open the Center Chest to claim the Big Boss Key, then take the West Shortcut back to Room 1!"
+          : "Return West to Room 1 (Central Hub), light all 4 Hub Lanterns within 8s, and unlock the North Boss Door!";
+    } else {
+      // Room 1: Central Hub
+      currentObjective =
+        !flags.dgSmallKeyPickedUp && !flags.eastWingDoorUnlocked
+          ? "Room 1 (Central Hub): Block North Turret fireballs with Shield (RMB) and take the Open West Door to Room 2!"
+          : flags.hasSmallKey && !flags.eastWingDoorUnlocked
+          ? "Room 1 (Central Hub): Approach the East Wing Door to unlock it with your Small Key!"
+          : !flags.fireRodChestOpened
+          ? "Room 1 (Central Hub): Enter the East Wing (Room 3) to find the Dungeon's signature Flame Rod!"
+          : !flags.bigKeyChestOpened
+          ? "Room 1 (Central Hub): Head through Room 3 South into Room 4 (Archery Crypt) to earn the Big Boss Key!"
+          : !flags.dungeonTimedTorchSolved
+          ? "Room 1 (Central Hub): Light all 4 Center Hub Lanterns within 8s using Flame Rod (R) to drop the North Iron Bars!"
+          : "Room 1 (Central Hub): Approach the North Boss Door to unlock it with your Big Boss Key!";
+    }
   } else if (flags.keyPickedUp && !flags.dungeonEntryUnlocked) {
     currentObjective =
-      "Key & Flame Rod Acquired! Deflect the North Bridge Turret's rocks with Shield (RMB) and unlock the North Dungeon Gate!";
+      "Sanctum Entry Key Acquired! Deflect the North Bridge Turret's rocks with Shield (RMB) and unlock the North Dungeon Gate!";
   } else if (flags.dungeonEntryUnlocked) {
     currentObjective =
-      "North Gate Unlocked! Step into the Sunken Sanctum Portal (Map 2) or burn the East Vines (R) for Map 3!";
+      "North Gate Unlocked! Step into the Sunken Sanctum Portal (Map 2)!";
   }
 
   const zoneLabel =
@@ -428,13 +457,15 @@ export default function GameOverlay() {
       ? "Map 1B: Whispering Forest Grove (West)"
       : zone === "frontier"
       ? "Map 3: The Burned Pass (East Frontier)"
-      : dungeonRoom === "entry"
-      ? "Map 2: Sunken Sanctum — I. Push-Block Room"
-      : dungeonRoom === "hall"
-      ? "Map 2: Sunken Sanctum — II. Dark Lantern Room"
-      : dungeonRoom === "arena"
-      ? "Map 2: Sunken Sanctum — III. Mini-Arena"
-      : "Map 2: Sunken Sanctum — IV. Boss Room";
+      : dungeonRoom === "hub"
+      ? "Map 2: Sunken Sanctum — Room 1: Central Lantern Hub"
+      : dungeonRoom === "west_wing"
+      ? "Map 2: Sunken Sanctum — Room 2: The Chasm Gallery (West)"
+      : dungeonRoom === "east_wing"
+      ? "Map 2: Sunken Sanctum — Room 3: The Ember Sanctum (East)"
+      : dungeonRoom === "crypt"
+      ? "Map 2: Sunken Sanctum — Room 4: The Dark Archery Crypt"
+      : "Map 2: Sunken Sanctum — Room 5: Boss Lair (Ignis)";
 
   // Lookup currently selected entity for the Right Inspector Dock
   const selectedProp =
@@ -551,17 +582,21 @@ export default function GameOverlay() {
 
             <div
               className={`gear-slot ${
-                (hero.fireRodChargeTimer ?? 0) >= 0.55
+                !hero.hasFireRod
+                  ? "gear-slot-locked"
+                  : (hero.fireRodChargeTimer ?? 0) >= 0.55
                   ? "gear-slot-active"
                   : (hero.mp ?? 100) >= 12
                   ? "gear-slot-owned"
                   : "gear-slot-warn"
               }`}
-              title="Tap R or 3 for a quick fireball (lights torches, burns briars/webs, melts ice/wood shields, 1 DMG). HOLD R or 3 to charge a heavy explosive fireball (2 DMG + burning ground fire)!"
+              title="Found in Dungeon Room 3 (The Ember Sanctum). Tap R or 3 for a fireball (lights lanterns, burns spiderwebs/vines, melts ice armor, burns Ignis's shell)."
             >
               <span className="gear-key">R</span>
               <span className="gear-name">
-                {(hero.fireRodChargeTimer ?? 0) >= 0.55
+                {!hero.hasFireRod
+                  ? "Flame Rod (Rm 3)"
+                  : (hero.fireRodChargeTimer ?? 0) >= 0.55
                   ? "FLAME MAX!"
                   : (hero.fireRodChargeTimer ?? 0) > 0.1
                   ? "Charging..."
@@ -724,8 +759,8 @@ export default function GameOverlay() {
               }}
             >
               {hallLightRatio >= 1
-                ? `🕯 Dark Hall Illuminated (${litHallTorchesCount}/${hallTorches.length} Lanterns Lit) — Floor Traps Revealed!`
-                : `🕯 Shrouded Dark Hall (${litHallTorchesCount}/${hallTorches.length} Lanterns Lit) — Shoot Lanterns with Flame Rod (R) to See Floor Traps!`}
+                ? `🕯 Dark Archery Crypt Illuminated (${litHallTorchesCount}/${hallTorches.length} Lanterns Lit) — Shoot South Eye Statue with Bow (E)!`
+                : `🕯 Shrouded Archery Crypt (${litHallTorchesCount}/${hallTorches.length} Lanterns Lit) — Light Corner Lanterns with Flame Rod (R) to See Spikes & Eye Statue!`}
             </div>
           )}
 
@@ -748,7 +783,7 @@ export default function GameOverlay() {
                   boxShadow: "0 6px 18px rgba(0,0,0,0.45)",
                 }}
               >
-                🔥 Timed Torch Square: {litTimedTorches.length}/{zoneTimedTorches.length} Lit •{" "}
+                🔥 Central Hub Lanterns: {litTimedTorches.length}/{zoneTimedTorches.length} Lit •{" "}
                 {minTimedLeft.toFixed(1)}s before extinguish!
               </div>
             )}
@@ -780,17 +815,15 @@ export default function GameOverlay() {
             bossEnemy && (
               <div className="hud-panel boss-bar-panel">
                 <div className="boss-bar-header">
-                  <span className="boss-name">MALAKOR, WARDEN OF THE ECLIPSE</span>
+                  <span className="boss-name">IGNIS, THE ARMORED EYE-GOLEM</span>
                   <span className="minion-tag">
-                    {bossEnemy.state === "stunned"
-                      ? "STUNNED — SHOOT OPEN EYE WITH BOW (E)!"
-                      : bossEnemy.state === "charge_aim" ||
-                        bossEnemy.state === "charge_lock" ||
-                        bossEnemy.state === "charge_lunge"
-                      ? "CHARGING — SHOOT OPEN EYE WITH BOW (E)!"
+                    {flags.bossState === "STUNNED" || bossEnemy.state === "stunned"
+                      ? "PHASE 3: STUNNED ON FLOOR — SLASH WITH SWORD (SPACE / LMB) FOR 3X DMG!"
+                      : flags.bossState === "EXPOSED_EYE"
+                      ? `PHASE 2: EYE OPEN (${(flags.bossArmorTimer ?? 0).toFixed(1)}s) — SHOOT WITH BOW (E) OR BOOMERANG (Q)!`
                       : activeMinions > 0
-                      ? `OPEN EYE WEAKNESS (BOW E) • +${activeMinions} Minion${activeMinions > 1 ? "s" : ""}`
-                      : "DREAD PLATE — SHOOT OPEN EYE WITH BOW (E)"}
+                      ? `PHASE 1: ICE/BRAMBLE SHELL — BURN WITH FLAME ROD (R)! • +${activeMinions} Minion${activeMinions > 1 ? "s" : ""}`
+                      : "PHASE 1: ICE/BRAMBLE SHELL — BURN WITH FLAME ROD (R)!"}
                   </span>
                 </div>
                 <div className="boss-hp-track">
@@ -805,7 +838,7 @@ export default function GameOverlay() {
             )}
         </div>
 
-        {/* Right: Rupees, Sanctum Key, Character Sheet Button, Shop Toggle, FPS, Objective, Mute */}
+        {/* Right: Rupees, Keys, Character Sheet Button, Shop Toggle, FPS, Objective, Mute */}
         <div className="hud-panel hud-right">
           <div className="hud-counters">
             <div className="counter-chip" title="Collected Rupees">
@@ -825,13 +858,13 @@ export default function GameOverlay() {
 
             <div
               className={`counter-chip ${
-                hero.hasDungeonKey
+                flags.hasBigKey || flags.hasSmallKey || hero.hasDungeonKey
                   ? "key-chip-active"
-                  : flags.gateUnlocked
+                  : flags.gateUnlocked || flags.eastWingDoorUnlocked || flags.dungeonEntryUnlocked
                   ? "key-chip-used"
                   : "key-chip-empty"
               }`}
-              title="Sanctum Key Status"
+              title="Dungeon & Sanctum Key Status (Small Key unlocks Room 3; Big Boss Key unlocks Room 5)"
             >
               <svg width="22" height="22" viewBox="0 0 24 24">
                 <circle
@@ -839,21 +872,41 @@ export default function GameOverlay() {
                   cy="12"
                   r="5"
                   fill="none"
-                  stroke={hero.hasDungeonKey || flags.gateUnlocked ? "#ffd24c" : "#6c6a7c"}
+                  stroke={
+                    flags.hasBigKey ||
+                    flags.hasSmallKey ||
+                    hero.hasDungeonKey ||
+                    flags.gateUnlocked
+                      ? "#ffd24c"
+                      : "#6c6a7c"
+                  }
                   strokeWidth="2.4"
                 />
                 <path
                   d="M13 12H22M18 12V16M21 12V15"
-                  stroke={hero.hasDungeonKey || flags.gateUnlocked ? "#ffd24c" : "#6c6a7c"}
+                  stroke={
+                    flags.hasBigKey ||
+                    flags.hasSmallKey ||
+                    hero.hasDungeonKey ||
+                    flags.gateUnlocked
+                      ? "#ffd24c"
+                      : "#6c6a7c"
+                  }
                   strokeWidth="2.4"
                   strokeLinecap="round"
                 />
               </svg>
               <span className="key-status-text">
-                {hero.hasDungeonKey
-                  ? "Sanctum Key"
+                {flags.hasBigKey
+                  ? "Big Boss Key"
+                  : flags.hasSmallKey
+                  ? "Small Key (1)"
+                  : hero.hasDungeonKey && !flags.dungeonEntryUnlocked
+                  ? "Entry Key"
                   : flags.gateUnlocked
-                  ? "Gate Opened"
+                  ? "Boss Gate Open"
+                  : flags.eastWingDoorUnlocked
+                  ? "East Wing Open"
                   : "No Key"}
               </span>
             </div>
@@ -2959,13 +3012,14 @@ export default function GameOverlay() {
             <p className="game-subtitle">The Whispering Vale &amp; The Sunken Sanctum</p>
 
             <p className="story-blurb">
-              Darkness stirs beneath the northern cliffs. Dread Warden Malakor has stolen
-              the radiant <strong>Zeldo Crest</strong> and sealed it within the Sunken
-              Sanctum. Every weapon is a puzzle solver: hold your{" "}
-              <strong>Shield (RMB / Shift)</strong> to deflect Bridge Turret boulders, throw
-              your <strong>Boomerang (Q)</strong> to fetch keys &amp; rupees over water and
-              stun Electrified Slimes for 2s, and fire your <strong>Bow (E)</strong> into
-              Wall Eye Statues and Malakor&apos;s Open Eye!
+              Darkness stirs beneath the northern cliffs. <strong>Ignis, the Armored Eye-Golem</strong>{" "}
+              guards the Sunken Sanctum — a 5-room cross-shaped puzzle box where every
+              weapon unlocks the next path: hold your{" "}
+              <strong>Shield (RMB / Shift)</strong> against Turret fire, throw your{" "}
+              <strong>Boomerang (Q)</strong> across chasms to fetch keys &amp; stun Spiked
+              Beetles, claim the <strong>Flame Rod (R)</strong> to light lanterns &amp; burn
+              spiderwebs/armor, and fire your <strong>Bow (E)</strong> into Cyclops Eye
+              Statues and Ignis&apos;s Open Eye!
             </p>
 
             <div className="controls-grid">
@@ -2975,7 +3029,7 @@ export default function GameOverlay() {
               </div>
               <div className="control-box">
                 <span className="control-key">Q (Boomerang) • E (Bow &amp; Arrows)</span>
-                <span className="control-desc">Fetch Over Water, Stun Shock Foes &amp; Shoot Eyes</span>
+                <span className="control-desc">Fetch Over Chasms, Stun Beetles &amp; Shoot Eyes</span>
               </div>
               <div className="control-box">
                 <span className="control-key">F (Lift / Throw) • B (Bombs)</span>
@@ -3038,8 +3092,8 @@ export default function GameOverlay() {
             <div className="episode-pill">EPISODE I COMPLETE</div>
             <h2 className="victory-title">THE ZELDO CREST RESTORED!</h2>
             <p className="victory-sub">
-              With Dread Warden Malakor defeated and the Sanctum Chest unsealed, golden
-              light washes across the Whispering Vale once more.
+              With Ignis, the Armored Eye-Golem defeated and the Sanctum Chest unsealed,
+              golden light washes across the Whispering Vale once more.
             </p>
 
             <div className="stats-row">

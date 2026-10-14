@@ -1,20 +1,26 @@
 import { create } from "zustand";
 import {
+  BIG_KEY_CHEST_POS,
   BOSS_CHEST_POS,
   BOSS_EXIT_GATE_POS,
   BOSS_MAX_LUNGE_RANGE,
+  BossArmorState,
   buildInitialMapProps,
   buildObstaclesFromMapProps,
   BuriedRewardKind,
   computeBossChargePathLength,
   computeEnemyChargePathLength,
-   computePathfindingMoveDir,
+  computePathfindingMoveDir,
+  CRYPT_SHORTCUT_DOOR_POS,
   CustomModelAsset,
+  DG_SMALL_KEY_POS,
   DUNGEON_ENTRY_GATE_POS,
   DUNGEON_KEY_POS,
   DungeonRoomId,
+  EAST_WING_DOOR_POS,
   EnemyKind,
   EnemyShieldArmor,
+  FIRE_ROD_CHEST_POS,
   getDefaultEnemyWeight,
   GUIDE_NPC_POS,
   HEIRLOOM_NPC_POS,
@@ -218,9 +224,9 @@ export interface EnemyState {
   initialShieldArmor?: EnemyShieldArmor;
   shockArmor?: boolean;
   initialShockArmor?: boolean;
-   isBounty?: boolean;
+  isBounty?: boolean;
   initialIsBounty?: boolean;
-  questGroup?: "heirloom" | "grove_ambush";
+  questGroup?: "heirloom" | "grove_ambush" | "ember_guards";
   provoked?: boolean;
   // Boss & Goblin Lunge combat state
   chargeAngle: number;
@@ -242,6 +248,7 @@ export interface BoomerangState {
   hitEnemyIds: string[];
   carriedRupeeIds?: string[];
   carryingKey?: boolean;
+  carryingDgSmallKey?: boolean;
 }
 
 export interface ArrowProjectileState {
@@ -365,7 +372,7 @@ export interface GameFlags {
   dungeonCrystalPuzzleSolved?: boolean;
   frontierCrystalPuzzleSolved?: boolean;
   dungeonEyeStatuesSolved?: boolean;
-   secretStashClaimed?: boolean;
+  secretStashClaimed?: boolean;
   heirloomQuestStarted?: boolean;
   heirloomMonstersCleared?: boolean;
   heirloomQuestClaimed?: boolean;
@@ -374,6 +381,19 @@ export interface GameFlags {
   grovePuzzleSolved?: boolean;
   bossHeartAwarded?: boolean;
   eastExitBurned?: boolean;
+  // 5-Room Cross Dungeon Progression Flags
+  hasSmallKey?: boolean;
+  dgSmallKeyPickedUp?: boolean;
+  eastWingDoorUnlocked?: boolean;
+  eastWingArenaLocked?: boolean;
+  eastWingCleared?: boolean;
+  fireRodChestOpened?: boolean;
+  hasFireRod?: boolean;
+  webBarrierBurned?: boolean;
+  hasBigKey?: boolean;
+  bigKeyChestOpened?: boolean;
+  bossState?: BossArmorState;
+  bossArmorTimer?: number;
 }
 
 export interface GameStats {
@@ -736,7 +756,7 @@ function createInitialState(
   return {
     phase,
     zone: "overworld",
-    dungeonRoom: "entry",
+    dungeonRoom: "hub",
     hero: {
       x: HERO_SPAWN.x,
       z: HERO_SPAWN.z,
@@ -804,22 +824,22 @@ function createInitialState(
     thrownObjects: [],
     activeBombs: [],
     projectiles: [],
-    // Persistent floor traps in Dungeon Room II (Hall of Pillars) so lighting the Dark Room illuminates traps & monsters!
+    // Persistent floor spike traps in Room 4 (The Dark Archery Crypt) so lighting the 4 Corner Lanterns reveals the floor hazards!
     hazards: [
       {
-        id: "dg-hall-trap-w",
+        id: "dg-crypt-trap-w",
         zone: "dungeon",
-        x: -3.4,
-        z: 1.5,
+        x: 22.5,
+        z: -26.5,
         radius: 1.75,
         timer: 999999,
         maxTimer: 999999,
       },
       {
-        id: "dg-hall-trap-e",
+        id: "dg-crypt-trap-e",
         zone: "dungeon",
-        x: 3.4,
-        z: 1.5,
+        x: 29.5,
+        z: -26.5,
         radius: 1.75,
         timer: 999999,
         maxTimer: 999999,
@@ -833,7 +853,7 @@ function createInitialState(
     mapProps: buildInitialMapProps(),
     portals: INITIAL_PORTALS.map((p) => ({ ...p })),
     customModels: createBuiltInCustomModels(),
-     terrainCells: {
+    terrainCells: {
       overworld: {},
       grove: {},
       dungeon: {},
@@ -864,6 +884,18 @@ function createInitialState(
       grovePuzzleSolved: false,
       bossHeartAwarded: false,
       eastExitBurned: false,
+      hasSmallKey: false,
+      dgSmallKeyPickedUp: false,
+      eastWingDoorUnlocked: false,
+      eastWingArenaLocked: false,
+      eastWingCleared: false,
+      fireRodChestOpened: false,
+      hasFireRod: true,
+      webBarrierBurned: false,
+      hasBigKey: false,
+      bigKeyChestOpened: false,
+      bossState: "ARMORED",
+      bossArmorTimer: 0,
     },
     stats: {
       enemiesDefeated: 0,
@@ -901,7 +933,7 @@ function createInitialState(
   };
 }
 
-const MAP_STORAGE_KEY = "zeldo-authored-map-v7";
+const MAP_STORAGE_KEY = "zeldo-authored-map-v8";
 
 function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   if (p.prefab === "dirt_patch") {
@@ -928,7 +960,13 @@ function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   if (p.timedDuration && p.timedDuration > 0) {
     return { ...p, lit: false, litTimer: 0, timedSolved: false };
   }
-  if (p.zone === "dungeon" && p.prefab === "wall_torch" && Math.abs(p.z - 10.2) < 0.5) {
+  if (
+    p.zone === "dungeon" &&
+    p.prefab === "wall_torch" &&
+    (p.id.startsWith("prop-dg-crypt-torch") ||
+      p.id.startsWith("prop-dg-boss-torch") ||
+      p.id.startsWith("prop-dg-puzzle-torch"))
+  ) {
     return { ...p, lit: false };
   }
   if (p.puzzleTarget) {
@@ -1916,26 +1954,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
       projectiles: [],
       hazards: [
         {
-          id: "dg-hall-trap-w",
+          id: "dg-crypt-trap-w",
           zone: "dungeon",
-          x: -3.4,
-          z: 1.5,
+          x: 22.5,
+          z: -26.5,
           radius: 1.75,
           timer: 999999,
           maxTimer: 999999,
         },
         {
-          id: "dg-hall-trap-e",
+          id: "dg-crypt-trap-e",
           zone: "dungeon",
-          x: 3.4,
-          z: 1.5,
+          x: 29.5,
+          z: -26.5,
           radius: 1.75,
           timer: 999999,
           maxTimer: 999999,
         },
       ],
       boomerang: null,
-       flags: {
+      flags: {
         ...state.flags,
         keyPickedUp: false,
         gateUnlocked: false,
@@ -1960,6 +1998,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
         grovePuzzleSolved: false,
         bossHeartAwarded: false,
         eastExitBurned: false,
+        hasSmallKey: false,
+        dgSmallKeyPickedUp: false,
+        eastWingDoorUnlocked: false,
+        eastWingArenaLocked: false,
+        eastWingCleared: false,
+        fireRodChestOpened: false,
+        hasFireRod: true,
+        webBarrierBurned: false,
+        hasBigKey: false,
+        bigKeyChestOpened: false,
+        bossState: "ARMORED",
+        bossArmorTimer: 0,
       },
       hero: {
         ...state.hero,
@@ -2408,7 +2458,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         mapPropsMutated = true;
       }
     };
-    let dynamicObstacles = buildObstaclesFromMapProps(mapProps);
 
     const hero: HeroState = {
       ...state.hero,
@@ -2416,6 +2465,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
       bottles: [...(state.hero.bottles ?? ["red_potion", "fairy", "bee", "empty"])],
     };
     const flags: GameFlags = { ...state.flags };
+    flags.bossState = flags.bossState ?? "ARMORED";
+    flags.bossArmorTimer = flags.bossArmorTimer ?? 0;
+
+    const getActiveObstacles = (props: MapPropInstance[]) => {
+      return buildObstaclesFromMapProps(props).filter((obs) => {
+        if (obs.id === "dg-east-key-door") {
+          // Passable when unlocked with the Small Key AND not slammed shut during the Room 3 Ambush!
+          return !(flags.eastWingDoorUnlocked && !flags.eastWingArenaLocked);
+        }
+        if (obs.id === "dg-crypt-shortcut-door") {
+          // Passable once the Cyclops Eye Statue in Room 4 is pierced!
+          return !flags.dungeonEyeStatuesSolved;
+        }
+        return true;
+      });
+    };
+    let dynamicObstacles = getActiveObstacles(mapProps);
+
     const stats: GameStats = {
       ...state.stats,
       elapsedSeconds: state.stats.elapsedSeconds + dt,
@@ -2619,6 +2686,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hitEnemyIds: [...state.boomerang.hitEnemyIds],
           carriedRupeeIds: [...(state.boomerang.carriedRupeeIds ?? [])],
           carryingKey: state.boomerang.carryingKey ?? false,
+          carryingDgSmallKey: state.boomerang.carryingDgSmallKey ?? false,
         }
       : null;
     let arrows: ArrowProjectileState[] = state.arrows.map((a) => ({ ...a }));
@@ -2673,12 +2741,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const reward: PotRewardKind = potReward ?? "random";
       if (reward === "small_key") {
         flags.keyPickedUp = true;
+        flags.hasSmallKey = true;
+        flags.dgSmallKeyPickedUp = true;
         hero.hasDungeonKey = true;
         soundEngine.playKeyPickup();
         pushBanner(
           "Found a Small Key Inside the Clay Pot!",
-          "Use this Small Key to unlock the Sanctum Gate to the next room!",
+          "Use this Small Key to unlock the East Door in Room 1 (Central Hub)!",
           5.2
+        );
+      } else if (reward === "arrows_10") {
+        hero.arrows = Math.min(99, (hero.arrows ?? 0) + 10);
+        hero.mp = Math.min(hero.maxMp || 100, (hero.mp ?? 0) + 50);
+        soundEngine.playKeyPickup();
+        pushBanner(
+          `Found +10 Arrows & +50% Magic Refill! (Quiver: ${hero.arrows})`,
+          "Your Bow quiver and Flame Rod Magic Power were replenished from the shattered vessel!",
+          4.2
         );
       } else if (reward === "bombs_5") {
         hero.bombs = Math.min(hero.maxBombs || 30, (hero.bombs ?? 0) + 5);
@@ -2738,7 +2817,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       );
       if (zoneSwitches.length === 0) return false;
 
-       const allMatchTarget =
+      const allMatchTarget =
         (targetZone === "grove" && Boolean(flags.grovePuzzleSolved)) ||
         zoneSwitches.every(
           (s) => (s.switchState ?? "blue") === (s.switchTarget ?? "orange")
@@ -2755,7 +2834,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           prop.y = 0;
         }
       }
-      dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+      dynamicObstacles = getActiveObstacles(mapProps);
 
       if (allMatchTarget) {
         if (targetZone === "grove" && !flags.grovePuzzleSolved) {
@@ -2829,8 +2908,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             {
               id: `crystal-dg-reward-1-${stats.elapsedSeconds.toFixed(2)}`,
               zone: "dungeon",
-              x: 8.8,
-              z: -1.5,
+              x: -19.5,
+              z: 8.6,
               tier: "red",
               value: 20,
               collected: false,
@@ -2839,8 +2918,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             {
               id: `crystal-dg-reward-2-${stats.elapsedSeconds.toFixed(2)}`,
               zone: "dungeon",
-              x: 8.8,
-              z: -0.4,
+              x: -18.5,
+              z: 8.6,
               tier: "heart",
               value: 2,
               collected: false,
@@ -2848,8 +2927,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             }
           );
           pushBanner(
-            "Sanctum Crystal Barriers Lowered!",
-            "Both Crystal Switches are aligned to Orange — the Eastern Alcove is now open!",
+            "Chasm Crystal Switch Activated! (Bonus Alcove Unlocked!)",
+            "The Crystal Barrier in Room 2 lowered — smash the Bonus Pot for +10 Arrows & Magic Refill!",
             5.0
           );
           return true;
@@ -2913,7 +2992,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return true;
     };
 
-    // Helper: Pierce a Dungeon Wall Eye Statue (`eye_statue`) with an Arrow -> unlocks the Sanctum Gate when all are pierced!
+    // Helper: Pierce the Room 4 Cyclops Eye Statue (`eye_statue`) with an Arrow -> Spawns Big Key Chest & Drops West Shortcut Door to Room 1!
     const activateEyeStatue = (propId: string): boolean => {
       ensureMutableMapProps();
       const eyeProp = mapProps.find((p) => p.id === propId);
@@ -2931,17 +3010,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (activeCount >= totalCount && totalCount > 0) {
         if (eyeProp.zone === "dungeon" && !flags.dungeonEyeStatuesSolved) {
           flags.dungeonEyeStatuesSolved = true;
-          if (!flags.gateUnlocked) {
-            flags.gateUnlocked = true;
-            soundEngine.playGateUnlock();
-          }
+          dynamicObstacles = getActiveObstacles(mapProps);
+          soundEngine.playGateUnlock();
           soundEngine.playSecretSolve();
           rupees.push(
             {
               id: `eye-statue-dg-reward-1-${stats.elapsedSeconds.toFixed(2)}`,
               zone: "dungeon",
-              x: -0.9,
-              z: 9.8,
+              x: BIG_KEY_CHEST_POS.x - 1.3,
+              z: BIG_KEY_CHEST_POS.z - 1.4,
               tier: "red",
               value: 20,
               collected: false,
@@ -2950,8 +3027,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             {
               id: `eye-statue-dg-reward-2-${stats.elapsedSeconds.toFixed(2)}`,
               zone: "dungeon",
-              x: 0.9,
-              z: 9.8,
+              x: BIG_KEY_CHEST_POS.x + 1.3,
+              z: BIG_KEY_CHEST_POS.z - 1.4,
               tier: "heart",
               value: 2,
               collected: false,
@@ -2959,9 +3036,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
             }
           );
           pushBanner(
-            "All Sanctum Eye Statues Pierced! (Sanctum Gate Unlocked!)",
-            "Both wall eyes have been blinded by your Bow — the Sanctum Gate iron bars descend!",
-            5.8
+            "Cyclops Eye Statue Pierced! (Big Key Chest & Shortcut Unlocked!)",
+            "Claim the Big Boss Key Chest in the center of Room 4, then take the West Shortcut Door back to Room 1!",
+            6.2
           );
           return true;
         } else if (!wasAlreadyActivated) {
@@ -2976,7 +3053,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       } else {
         pushBanner(
           `Sanctum Eye Statue Pierced! (${activeCount}/${totalCount})`,
-          "Shoot the remaining Wall Eye Statue with your Bow [E / 2] to unlock the Sanctum Gate!",
+          "Shoot the remaining Wall Eye Statue with your Bow [E / 2]!",
           4.2
         );
       }
@@ -3177,7 +3254,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           if (mProp) {
             mProp.smashed = true;
             mProp.hasCollider = false;
-            dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+            dynamicObstacles = getActiveObstacles(mapProps);
             hero.heldObject = {
               kind: mProp.prefab as "clay_pot" | "light_rock",
               propId: mProp.id,
@@ -3831,7 +3908,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
         }
       }
-      dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+      dynamicObstacles = getActiveObstacles(mapProps);
     }
 
     if (mag > 0.15 && !hero.heldObject && !isUsingAnyWeapon && !isKnockbackLocked) {
@@ -3872,7 +3949,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             destZ = targetBlock.puzzleTargetZ;
           }
 
-          const obstaclesWithoutSelf = buildObstaclesFromMapProps(
+          const obstaclesWithoutSelf = getActiveObstacles(
             mapProps.filter((p) => p.id !== targetBlock.id)
           );
           const checkDest = resolveWorldCollisions(
@@ -3924,17 +4001,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       shopDismissedOnRug = false;
     }
 
-     // Update Dungeon Room indicator (4 Rooms: Room I Entry, Room II Dark Hall, Room III Mini-Arena, Room IV Boss Sanctum)
-    if (zone === "dungeon") {
-      if (hero.z < -14.5) {
-        dungeonRoom = "entry";
-      } else if (hero.z < -1.5) {
-        dungeonRoom = "hall";
-      } else if (hero.z < 12.2) {
-        dungeonRoom = "arena";
-      } else {
-        dungeonRoom = "sanctum";
+    // Helper: 5-Room Spatial Cross Dungeon Room Detection
+    const getDungeonRoomAt = (x: number, z: number): DungeonRoomId => {
+      if (z >= 12.2) return "sanctum"; // Room 5: Boss Lair
+      if (x <= -14.0) return "west_wing"; // Room 2: The Chasm Gallery (West Wing)
+      if (x >= 14.0) {
+        return z < -12.0 ? "crypt" : "east_wing"; // Room 4: Dark Archery Crypt vs Room 3: Ember Sanctum
       }
+      return "hub"; // Room 1: Central Lantern Hub
+    };
+
+    if (zone === "dungeon") {
+      dungeonRoom = getDungeonRoomAt(hero.x, hero.z);
     }
 
     // 3. Check Dynamic Portal Transitions
@@ -3948,8 +4026,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
               gateNoticeCooldown = 3.2;
               soundEngine.playGateLocked();
               pushBanner(
-                "The Sanctum Back Door is Sealed!",
-                "Vanquish Malakor and his minions to unseal the Back Door Portal to Map 1 Crossroads.",
+                "The North Sanctuary Door is Sealed!",
+                "Vanquish Ignis, the Armored Eye-Golem, to unseal the North Sanctuary Door to Map 3!",
                 3.6
               );
             }
@@ -3957,14 +4035,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
           zone = portal.targetZone;
           if (zone === "dungeon") {
-            dungeonRoom =
-              portal.targetZ < -14.5
-                ? "entry"
-                : portal.targetZ < -1.5
-                ? "hall"
-                : portal.targetZ < 12.2
-                ? "arena"
-                : "sanctum";
+            dungeonRoom = getDungeonRoomAt(portal.targetX, portal.targetZ);
           }
           hero.x = portal.targetX;
           hero.z = portal.targetZ;
@@ -4034,30 +4105,204 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 5. Check Locked Boss Sanctum Gate in Dungeon
-    if (zone === "dungeon" && !flags.gateUnlocked) {
-      const distToGate = Math.hypot(
-        hero.x - LOCKED_GATE_POS.x,
-        hero.z - LOCKED_GATE_POS.z
+    // 4c. Room 2 (`west_wing`): Walk-up fallback for Small Key Pedestal (`DG_SMALL_KEY_POS = -31.2, 0.0`)
+    if (zone === "dungeon" && !flags.dgSmallKeyPickedUp) {
+      const distToDgSmallKey = Math.hypot(
+        hero.x - DG_SMALL_KEY_POS.x,
+        hero.z - DG_SMALL_KEY_POS.z
       );
-      if (distToGate < 3.1) {
-        if (hero.hasDungeonKey) {
-          flags.gateUnlocked = true;
-          hero.hasDungeonKey = false;
+      if (distToDgSmallKey < 1.95) {
+        flags.dgSmallKeyPickedUp = true;
+        flags.hasSmallKey = true;
+        hero.hasDungeonKey = true;
+        soundEngine.playKeyPickup();
+        pushBanner(
+          "Acquired the Small Key! (Room 2: Chasm Gallery)",
+          "Return East to Room 1 (Central Hub) and unlock the Locked East Door into Room 3 (The Ember Sanctum)!",
+          5.5
+        );
+      }
+    }
+
+    // 4d. Room 1 -> Room 3 East Small Key Door (`EAST_WING_DOOR_POS = 14.0, 0.0`) & Room 3 Ambush Slam!
+    if (zone === "dungeon") {
+      const distToEastDoor = Math.hypot(
+        hero.x - EAST_WING_DOOR_POS.x,
+        hero.z - EAST_WING_DOOR_POS.z
+      );
+
+      if (!flags.eastWingDoorUnlocked && distToEastDoor < 3.1) {
+        if (flags.hasSmallKey || flags.dgSmallKeyPickedUp) {
+          flags.eastWingDoorUnlocked = true;
+          flags.hasSmallKey = false;
+          dynamicObstacles = getActiveObstacles(mapProps);
           soundEngine.playGateUnlock();
           pushBanner(
-            "Sanctum Gate Unlocked!",
-            "The iron bars descend. Enter Room IV: Sanctum of the Dread Warden!",
-            4.5
+            "East Wing Door Unlocked! (Room 3: The Ember Sanctum)",
+            "Your Small Key turned the lock — step East into Room 3 to claim the Flame Rod!",
+            4.8
           );
         } else if (gateNoticeCooldown <= 0) {
           gateNoticeCooldown = 3.2;
           soundEngine.playGateLocked();
           pushBanner(
-            "The Sanctum Gate is Locked",
-            "Shoot both Wall Eye Statues with your Bow [E], light all 4 Timed Lanterns [R], or bring a Small Key!",
+            "Locked Small Key Door (To Room 3: East Wing)",
+            "Explore the Open West Door (Room 2: The Chasm Gallery) first and throw your Boomerang [Q] across the pit to snag the Small Key!",
+            4.6
+          );
+        }
+      }
+
+      // Stepping inside Room 3 (`east_wing`) slams the West Door shut behind the Hero!
+      if (
+        flags.eastWingDoorUnlocked &&
+        !flags.eastWingCleared &&
+        !flags.eastWingArenaLocked &&
+        hero.x > 16.5 &&
+        Math.abs(hero.z) < 8.5
+      ) {
+        flags.eastWingArenaLocked = true;
+        hero.x = Math.max(16.6, hero.x);
+        dynamicObstacles = getActiveObstacles(mapProps);
+        soundEngine.playGateLocked();
+        pushBanner(
+          "Ambush in the Ember Sanctum! (West Door Slammed Shut!)",
+          "Defeat the 3 Shielded Goblins (Stun with Boomerang [Q] or burn with Flame Rod [R]) to unlock the Flame Rod Chest!",
+          5.4
+        );
+      } else if (
+        flags.eastWingArenaLocked &&
+        !flags.eastWingCleared &&
+        distToEastDoor < 2.8 &&
+        gateNoticeCooldown <= 0
+      ) {
+        gateNoticeCooldown = 3.2;
+        soundEngine.playGateLocked();
+        pushBanner(
+          "The West Door Slammed Shut Behind You!",
+          "Defeat the 3 guards to open the Flame Rod Chest, then shoot the 2 Unlit South Lanterns [R] to reopen the door!",
+          4.2
+        );
+      }
+
+      // Room 3 Center Treasure Chest (`FIRE_ROD_CHEST_POS = 26.0, 1.5`): Rewards the Flame Rod + Full Magic!
+      if (!flags.fireRodChestOpened) {
+        const distToFireChest = Math.hypot(
+          hero.x - FIRE_ROD_CHEST_POS.x,
+          hero.z - FIRE_ROD_CHEST_POS.z
+        );
+        const remainingEmberGuards = enemies.filter(
+          (e) => e.questGroup === "ember_guards" && e.state !== "dead"
+        );
+        if (distToFireChest < 2.5) {
+          if (remainingEmberGuards.length === 0) {
+            flags.fireRodChestOpened = true;
+            flags.hasFireRod = true;
+            hero.hasFireRod = true;
+            hero.mp = hero.maxMp;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Acquired the Flame Rod! (+100% Magic Refill)",
+              "Immediate Tutorial: Shoot the 2 Unlit South Lanterns with Flame Rod [R / 3] to reopen the West Door, and burn the South Spiderwebs into Room 4!",
+              6.5
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Flame Rod Chest is Guarded!",
+              `Defeat the ${remainingEmberGuards.length} Shielded Goblin${remainingEmberGuards.length === 1 ? "" : "s"} in Room 3 (Stun with Boomerang [Q], then slash with Sword)!`,
+              4.0
+            );
+          }
+        }
+      }
+
+      // Room 4 Center Big Boss Key Chest (`BIG_KEY_CHEST_POS = 26.0, -24.0`): Unsealed after piercing the Cyclops Eye Statue!
+      if (!flags.bigKeyChestOpened) {
+        const distToBigKeyChest = Math.hypot(
+          hero.x - BIG_KEY_CHEST_POS.x,
+          hero.z - BIG_KEY_CHEST_POS.z
+        );
+        if (distToBigKeyChest < 2.5) {
+          if (flags.dungeonEyeStatuesSolved) {
+            flags.bigKeyChestOpened = true;
+            flags.hasBigKey = true;
+            hero.arrows = Math.min(99, (hero.arrows ?? 0) + 15);
+            hero.mp = hero.maxMp;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Acquired the Big Boss Key! (+15 Arrows & Full Magic)",
+              "Take the West Shortcut Door back to Room 1, light all 4 Hub Lanterns [R] within 8s, and unlock the North Boss Door!",
+              6.5
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "Big Key Chest Sealed by the Cyclops Eye!",
+              "Light the 4 Corner Lanterns [R], melt the 2 Ice-Armored Knights [R], and shoot the South Cyclops Eye Statue with your Bow [E / 2]!",
+              4.4
+            );
+          }
+        }
+      }
+
+      // Room 4 -> Room 1 West Shortcut Door (`CRYPT_SHORTCUT_DOOR_POS = 14.0, -24.0`) notice when still sealed
+      if (!flags.dungeonEyeStatuesSolved) {
+        const distToShortcutDoor = Math.hypot(
+          hero.x - CRYPT_SHORTCUT_DOOR_POS.x,
+          hero.z - CRYPT_SHORTCUT_DOOR_POS.z
+        );
+        if (distToShortcutDoor < 2.9 && gateNoticeCooldown <= 0) {
+          gateNoticeCooldown = 3.2;
+          soundEngine.playGateLocked();
+          pushBanner(
+            "Sealed Crypt Shortcut Door (Room 4 <-> Room 1)",
+            "Enter Room 4 from the South of Room 3 and shoot the Cyclops Eye Statue with your Bow [E] to open this shortcut!",
             4.2
           );
+        }
+      }
+    }
+
+    // 5. Check North Boss Door in Room 1 (`LOCKED_GATE_POS = 0, 12.0` -> requires 4 Lit Hub Lanterns AND Big Boss Key!)
+    if (zone === "dungeon" && !flags.gateUnlocked) {
+      const distToGate = Math.hypot(
+        hero.x - LOCKED_GATE_POS.x,
+        hero.z - LOCKED_GATE_POS.z
+      );
+      if (distToGate < 3.2) {
+        if (flags.dungeonTimedTorchSolved && flags.hasBigKey) {
+          flags.gateUnlocked = true;
+          soundEngine.playGateUnlock();
+          pushBanner(
+            "North Boss Door Unlocked! (Room 5: Lair of Ignis)",
+            "The 4 Hub Lantern iron bars dropped and your Big Boss Key turned the lock — step North to face Ignis!",
+            5.2
+          );
+        } else if (gateNoticeCooldown <= 0) {
+          gateNoticeCooldown = 3.2;
+          soundEngine.playGateLocked();
+          if (!flags.dungeonTimedTorchSolved && !flags.hasBigKey) {
+            pushBanner(
+              "North Boss Door Blocked (Iron Bars + Big Boss Key Lock)",
+              "Light all 4 Central Hub Lanterns [R] within 8s AND bring the Big Boss Key from Room 4 (Dark Archery Crypt)!",
+              4.6
+            );
+          } else if (!flags.dungeonTimedTorchSolved) {
+            pushBanner(
+              "Heavy Iron Bars Block the North Boss Door!",
+              "You have the Big Boss Key — now light all 4 Central Hub Lanterns around the raised platform with your Flame Rod [R] within 8s!",
+              4.6
+            );
+          } else {
+            pushBanner(
+              "Big Boss Lock Sealed!",
+              "The 4 Hub Lantern iron bars are down! Now earn the Big Boss Key in Room 4 (South-East Dark Archery Crypt)!",
+              4.6
+            );
+          }
         }
       }
     } else if (
@@ -4074,23 +4319,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
         gateNoticeCooldown = 3.5;
         soundEngine.playGateLocked();
         pushBanner(
-          "The Sanctum Gate is Sealed Shut!",
-          "You are locked in with Malakor — shoot his Open Eye with your Bow [E] and defeat his minions!",
-          3.6
+          "The Boss Lair Door is Sealed Shut!",
+          "1. Burn Ignis's Carapace with Flame Rod [R] -> 2. Shoot Open Eye with Bow [E] -> 3. Slash with Sword [Space]!",
+          4.0
         );
       }
     }
 
-    // 6. Check Boss Awakening immediately when stepping past the doorway threshold into Room IV
+    // 6. Check Boss Awakening immediately when stepping past the doorway threshold into Room 5
     if (zone === "dungeon" && flags.gateUnlocked && !flags.bossAwakened && hero.z > 13.05) {
       flags.bossAwakened = true;
+      flags.bossState = "ARMORED";
+      flags.bossArmorTimer = 0;
       hero.z = Math.max(13.58, hero.z);
       soundEngine.playGateLocked();
       soundEngine.playBossRoar();
       pushBanner(
-        "Malakor, Warden of the Eclipse",
-        "His Dread Plate deflects melee & fire — shoot his glowing Open Eye with your Bow [E / 2]!",
-        5.5
+        "Ignis, the Armored Eye-Golem",
+        "Phase 1: Burn its Carapace with Flame Rod [R] • Phase 2: Shoot Open Eye with Bow [E] • Phase 3: Slash with Sword [Space]!",
+        6.0
       );
     }
 
@@ -4176,7 +4423,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 8. Update Boomerang Flight (flies over low `water_tile` moats & drags snagged Rupees/Hearts & the Sanctum Key back to the Hero!)
+    // 8. Update Boomerang Flight (flies over low `water_tile` moats & drags snagged Rupees/Hearts & Keys back to the Hero!)
     if (boomerang) {
       if (boomerang.zone !== zone) {
         boomerang = null;
@@ -4211,7 +4458,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const toHz = hero.z - boomerang.z;
           const distH = Math.hypot(toHx, toHz);
           if (distH < 1.2) {
-            // Deliver any snagged Sanctum Key or Rupees directly into the Hero's hands!
+            // Deliver any snagged Sanctum Key, Room 2 Small Key, or Rupees directly into the Hero's hands!
             if (boomerang.carryingKey && !flags.keyPickedUp) {
               flags.keyPickedUp = true;
               hero.hasDungeonKey = true;
@@ -4222,6 +4469,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 "Boomerang Fetched the Sanctum Key & Flame Rod!",
                 "Return East to Map 1 Crossroads and take the North Exit to unlock Map 2 (Sunken Sanctum)!",
                 5.5
+              );
+            }
+            if (boomerang.carryingDgSmallKey && !flags.dgSmallKeyPickedUp) {
+              flags.dgSmallKeyPickedUp = true;
+              flags.hasSmallKey = true;
+              hero.hasDungeonKey = true;
+              soundEngine.playKeyPickup();
+              pushBanner(
+                "Boomerang Fetched the Small Key Across the Chasm!",
+                "Return East to Room 1 (Central Hub) and unlock the Locked East Door into Room 3 (The Ember Sanctum)!",
+                5.8
               );
             }
             for (const cId of boomerang.carriedRupeeIds) {
@@ -4236,7 +4494,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 soundEngine.playRupeePickup(r.tier);
                 if (r.id === "rupee-ow-river-gap" || r.id === "rupee-dg-water-gap") {
                   pushBanner(
-                    "Boomerang Snagged Treasure Across the Water! (+20 Rupees)",
+                    "Boomerang Snagged Treasure Across the Chasm! (+20 Rupees)",
                     "Your Gale Boomerang pulled the distant Red Rupee right across the gap!",
                     4.0
                   );
@@ -4251,7 +4509,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
         }
 
-        // Boomerang snags & drags the Map 1B Grove Sanctum Key and Rupees/Recovery Hearts in flight!
+        // Boomerang snags & drags the Map 1B Grove Key, Room 2 Dungeon Small Key, and Rupees/Recovery Hearts in flight!
         if (boomerang) {
           if (
             zone === "grove" &&
@@ -4266,6 +4524,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
               "Boomerang Snagged the Sanctum Key!",
               "Pulling the golden key from the Grove Shrine pedestal...",
               3.2
+            );
+          }
+
+          if (
+            zone === "dungeon" &&
+            !flags.dgSmallKeyPickedUp &&
+            !boomerang.carryingDgSmallKey &&
+            Math.hypot(DG_SMALL_KEY_POS.x - boomerang.x, DG_SMALL_KEY_POS.z - boomerang.z) < 1.85
+          ) {
+            boomerang.carryingDgSmallKey = true;
+            boomerang.returning = true;
+            soundEngine.playLift();
+            pushBanner(
+              "Boomerang Snagged the Small Key Across the Chasm!",
+              "Pulling the gleaming Small Key from the West Chasm pedestal...",
+              3.4
             );
           }
 
@@ -4440,13 +4714,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // Helper to handle enemy defeat & rupee / recovery heart drops (including 5x Bounty Monster Fountain & Heirloom Sub-Quest!)
+    // Helper to handle enemy defeat & rupee / recovery heart drops (including 5x Bounty Monster Fountain, Heirloom Sub-Quest, & Room 3 Ember Guards!)
     const handleEnemyDeath = (enemy: EnemyState) => {
       enemy.hp = 0;
       enemy.state = "dead";
       stats.enemiesDefeated += 1;
 
       if (enemy.kind === "boss") {
+        flags.bossState = "DEAD";
+        flags.bossArmorTimer = 0;
         soundEngine.playBossDefeat();
         const bossDrops: Array<{
           tier: RupeeTier;
@@ -4534,7 +4810,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
-       // Check if all Eastern Bandit Cave monsters (`questGroup === "heirloom"`) are now cleared!
+      // Check if all Eastern Bandit Cave monsters (`questGroup === "heirloom"`) are now cleared!
       if (enemy.questGroup === "heirloom" && !flags.heirloomMonstersCleared) {
         const remainingHeirloomFoes = enemies.filter(
           (e) => e.questGroup === "heirloom" && e.state !== "dead"
@@ -4567,11 +4843,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
               mp.y = -2.45;
             }
           }
-          dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+          dynamicObstacles = getActiveObstacles(mapProps);
           soundEngine.playSecretSolve();
           pushBanner(
             "Grove Ambush Cleared! (Shrine Barrier Lowered!)",
             "All 3 Forest Grove ambush monsters vanquished — claim the Sanctum Entry Key & Flame Rod at the pedestal!",
+            5.5
+          );
+        }
+      }
+
+      // Check if all 3 Room 3 Ember Sanctum Shielded Goblins (`questGroup === "ember_guards"`) are defeated!
+      if (enemy.questGroup === "ember_guards" && !flags.fireRodChestOpened) {
+        const remainingEmberGuards = enemies.filter(
+          (e) => e.questGroup === "ember_guards" && e.state !== "dead"
+        );
+        if (remainingEmberGuards.length === 0) {
+          soundEngine.playSecretSolve();
+          pushBanner(
+            "Ember Sanctum Guards Vanquished! (Flame Rod Chest Unsealed!)",
+            "Walk up to the center Treasure Chest in Room 3 to claim the Flame Rod & Full Magic!",
             5.5
           );
         }
@@ -4683,8 +4974,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
               if (armorNoticeCooldown <= 0) {
                 armorNoticeCooldown = 3.5;
                 pushBanner(
-                  "Enter the Dread Sanctum!",
-                  "Step through the Sanctum Gate to challenge Malakor and his minions!",
+                  "Enter Room 5: Lair of Ignis!",
+                  "Step through the North Boss Door to challenge Ignis, the Armored Eye-Golem!",
                   3.2
                 );
               }
@@ -4712,8 +5003,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   handleEnemyDeath(enemy);
                   if (enemy.kind === "turret") {
                     pushBanner(
-                      "Bridge Stone Turret Shattered! (+20 Rupees)",
-                      "Your deflected rock shots pulverized the Stone Spitter Turret!",
+                      "Stone Spitter Turret Shattered! (+20 Rupees)",
+                      "Your Shield-deflected rock shots pulverized the Stone Spitter Turret!",
                       4.5
                     );
                   }
@@ -4733,25 +5024,49 @@ export const useGameStore = create<GameStore>((set, get) => ({
             } else {
               enemy.provoked = true;
               if (enemy.kind === "boss") {
-                // Dungeon Boss Malakor's Open Eye Weakness: Arrows pierce his glowing Open Eye!
-                const eyeDamage = enemy.state === "stunned" ? 3 : 2;
-                enemy.hp -= eyeDamage;
-                enemy.hitFlashTimer = 0.28;
-                soundEngine.playEyeStatueHit();
-                if (enemy.hp <= 0) {
-                  handleEnemyDeath(enemy);
-                } else {
-                  soundEngine.playEnemyHit(true);
+                // Boss Ignis 3-Step Vulnerability Loop:
+                // - ARMORED: Ice/Bramble Carapace deflects Arrows! Must burn with Flame Rod [R] first!
+                // - EXPOSED_EYE: Arrow pierces the giant glowing chest Eye and crashes Ignis to the floor ("STUNNED") for 4.0s!
+                // - STUNNED: Arrow deals 2 damage while Ignis is down!
+                if (flags.bossState === "ARMORED") {
+                  soundEngine.playArmorDeflect();
                   soundEngine.playArrowStick();
+                  enemy.hitFlashTimer = 0.16;
                   if (armorNoticeCooldown <= 0) {
-                    armorNoticeCooldown = 2.6;
+                    armorNoticeCooldown = 2.8;
                     pushBanner(
-                      enemy.state === "stunned"
-                        ? "Critical Bow Shot in Malakor's Open Eye! (-3 HP)"
-                        : "Bullseye! Arrow Pierced Malakor's Open Eye! (-2 HP)",
-                      "Malakor's glowing Open Eye is his only weak spot — keep firing your Bow [E / 2]!",
-                      3.4
+                      "Ignis's Ice/Bramble Carapace Deflects Arrows!",
+                      "Phase 1: Shoot Ignis with your Flame Rod [R / 3] first to burn away its outer shell!",
+                      3.6
                     );
+                  }
+                } else if (flags.bossState === "EXPOSED_EYE") {
+                  flags.bossState = "STUNNED";
+                  enemy.state = "stunned";
+                  enemy.stateTimer = 4.0;
+                  enemy.hp -= 2;
+                  enemy.hitFlashTimer = 0.35;
+                  soundEngine.playEyeStatueHit();
+                  soundEngine.playBossWallCrash();
+                  if (enemy.hp <= 0) {
+                    handleEnemyDeath(enemy);
+                  } else {
+                    soundEngine.playArrowStick();
+                    pushBanner(
+                      "Phase 2 Complete: Open Eye Pierced — Ignis Stunned! (-2 HP)",
+                      "Phase 3: Rush in and slash Ignis with your Sword [Space / LMB] or Charged Spin Attack while it is dazed on the floor!",
+                      4.4
+                    );
+                  }
+                } else {
+                  enemy.hp -= 2;
+                  enemy.hitFlashTimer = 0.28;
+                  soundEngine.playEyeStatueHit();
+                  if (enemy.hp <= 0) {
+                    handleEnemyDeath(enemy);
+                  } else {
+                    soundEngine.playEnemyHit(true);
+                    soundEngine.playArrowStick();
                   }
                 }
               } else if (enemy.shieldArmor === "wood" || enemy.shieldArmor === "ice") {
@@ -4767,7 +5082,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
                     enemy.shieldArmor === "ice"
                       ? "Glacial Ice Armor Deflects Your Arrow!"
                       : "Wooden Shield Blocks Your Arrow!",
-                    "Cast the Flame Rod [R / 3] to melt or burn their defense first!",
+                    enemy.shieldArmor === "ice"
+                      ? "Cast the Flame Rod [R / 3] to melt their Ice Armor first!"
+                      : "Stun with your Boomerang [Q / 1] or burn with the Flame Rod [R / 3] first!",
                     3.4
                   );
                 }
@@ -4844,7 +5161,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
           if (arrow.isRock) {
             if (canBlockArrow) {
-              // SHIELD DEFLECTS TURRET ROCK SHOT BACK DOWN THE BRIDGE!
+              // SHIELD DEFLECTS TURRET ROCK SHOT BACK DOWN THE AISLE / BRIDGE!
               soundEngine.playShieldBlock();
               bushBursts.push({
                 id: `rock-deflect-burst-${arrow.id}`,
@@ -4873,8 +5190,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
               if (armorNoticeCooldown <= 0) {
                 armorNoticeCooldown = 3.2;
                 pushBanner(
-                  "Shield Deflected the Turret Rock!",
-                  "Keep holding Shield [RMB / Shift] while walking forward to cross the bridge!",
+                  "Shield Deflected the Turret Projectile!",
+                  "Keep holding Shield [RMB / Shift] while crossing to deflect turret shots right back!",
                   3.2
                 );
               }
@@ -4902,8 +5219,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
               if (armorNoticeCooldown <= 0) {
                 armorNoticeCooldown = 3.2;
                 pushBanner(
-                  "Pelted by the Bridge Stone Turret!",
-                  "Hold Shield [RMB / Shift] facing the Turret and walk slowly forward to deflect its rocks!",
+                  "Pelted by the Stone Turret!",
+                  "Hold Shield [RMB / Shift] facing the Turret to block and deflect its shots!",
                   3.8
                 );
               }
@@ -5019,6 +5336,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           );
         }
       } else if (zone === "dungeon" && !flags.dungeonTorchPuzzleSolved) {
+        // Room 3 (The Ember Sanctum): Lighting the 2 South Lanterns (`prop-dg-puzzle-torch-1..2`) reopens the West Door!
         const dgPuzzleTorches = mapProps.filter(
           (p) =>
             p.zone === "dungeon" &&
@@ -5032,23 +5350,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
           )
         ) {
           flags.dungeonTorchPuzzleSolved = true;
+          flags.eastWingArenaLocked = false;
+          flags.eastWingCleared = true;
+          dynamicObstacles = getActiveObstacles(mapProps);
+          soundEngine.playGateUnlock();
           soundEngine.playSecretSolve();
           rupees.push(
             {
               id: `dg-torch-secret-1-${stats.elapsedSeconds.toFixed(2)}`,
               zone: "dungeon",
-              x: -1.2,
-              z: -12.6,
-              tier: "red",
-              value: 20,
-              collected: false,
-              spawnBounceTimer: 0.45,
-            },
-            {
-              id: `dg-torch-secret-2-${stats.elapsedSeconds.toFixed(2)}`,
-              zone: "dungeon",
-              x: 1.2,
-              z: -12.6,
+              x: 24.8,
+              z: -8.0,
               tier: "red",
               value: 20,
               collected: false,
@@ -5057,8 +5369,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             {
               id: `dg-torch-secret-heart-${stats.elapsedSeconds.toFixed(2)}`,
               zone: "dungeon",
-              x: 0,
-              z: -12.2,
+              x: 27.2,
+              z: -8.0,
               tier: "heart",
               value: 2,
               collected: false,
@@ -5066,9 +5378,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
             }
           );
           pushBanner(
-            "Sanctum Brazier Secret Solved!",
-            "The twin dungeon braziers flare to life, revealing +40 Rupees & a Recovery Heart!",
-            5.5
+            "Ember Sanctum Lanterns Lit! (West Door Reopened!)",
+            "Now shoot the Thick Spiderwebs on the South Door with your Flame Rod [R / 3] to enter Room 4 (The Dark Archery Crypt)!",
+            5.8
           );
         }
       }
@@ -5106,10 +5418,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
         if (zone === "dungeon") {
           flags.dungeonTimedTorchSolved = true;
-          if (!flags.gateUnlocked) {
-            flags.gateUnlocked = true;
-            soundEngine.playGateUnlock();
-          }
           rupees.push(
             {
               id: `timed-torch-dg-1-${stats.elapsedSeconds.toFixed(2)}`,
@@ -5132,11 +5440,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
               spawnBounceTimer: 0.46,
             }
           );
-          pushBanner(
-            "4-Lantern Timed Square Solved! (Sanctum Gate Unlocked!)",
-            "All 4 timed lanterns were lit within 8 seconds — the room blazes with light and the Sanctum Gate opens!",
-            5.8
-          );
+          if (flags.hasBigKey && !flags.gateUnlocked) {
+            flags.gateUnlocked = true;
+            soundEngine.playGateUnlock();
+            pushBanner(
+              "4 Hub Lanterns Lit & Big Key Ready! (Boss Lair Unlocked!)",
+              "The heavy iron bars dropped and your Big Boss Key unlocked the North Door — enter Room 5 to challenge Ignis!",
+              6.2
+            );
+          } else {
+            pushBanner(
+              "4 Central Hub Lanterns Lit! (Iron Bars Lowered!)",
+              "The heavy iron bars on the North Boss Door dropped! Now bring the Big Boss Key from Room 4 to unlock the Boss Lock!",
+              5.8
+            );
+          }
         } else {
           flags.overworldTimedTorchSolved = true;
           rupees.push(
@@ -5217,7 +5535,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           mp.smashed = true;
           mp.hasCollider = false;
           mp.burningTimer = 0;
-          dynamicObstacles = buildObstaclesFromMapProps(mapProps);
+          if (mp.prefab === "spiderweb_barrier") {
+            flags.webBarrierBurned = true;
+            flags.eastWingArenaLocked = false;
+            flags.eastWingCleared = true;
+          }
+          dynamicObstacles = getActiveObstacles(mapProps);
           bushBursts.push({
             id: `burn-finish-${mp.id}-${stats.elapsedSeconds.toFixed(3)}`,
             zone,
@@ -5228,11 +5551,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
             seed: Math.floor(Math.abs(mp.x * 53 + mp.z * 89) + stats.elapsedSeconds * 120),
             isDirt: mp.prefab === "briar_barrier",
           });
-           if (mp.prefab === "spiderweb_barrier") {
+          if (mp.prefab === "spiderweb_barrier") {
             pushBanner(
-              "Thick Spiderwebs Incinerated!",
-              "The Flame Rod burned away the web barrier — the path to the Elderwood Frontier is open!",
-              4.8
+              "Thick Spiderwebs Incinerated! (Room 4: Dark Archery Crypt Open!)",
+              "The Flame Rod burned away the web barrier — step South into Room 4 and light the 4 Corner Lanterns [R]!",
+              5.4
             );
           } else if (mp.id.startsWith("prop-ow-east-exit-briar")) {
             flags.eastExitBurned = true;
@@ -5310,6 +5633,43 @@ export const useGameStore = create<GameStore>((set, get) => ({
         3.5
       );
       return true;
+    };
+
+    // Helper: Burn away Boss Ignis's outer Ice/Bramble Carapace with the Flame Rod (`R`) -> transitions `bossState` from `"ARMORED"` to `"EXPOSED_EYE"` for 8.0s!
+    const burnBossIgnisCarapace = (bossEnemy: EnemyState) => {
+      if (flags.bossState === "ARMORED" || !flags.bossState) {
+        flags.bossState = "EXPOSED_EYE";
+        flags.bossArmorTimer = 8.0;
+        bossEnemy.hitFlashTimer = 0.32;
+        soundEngine.playBurnBarrier();
+        bushBursts.push({
+          id: `boss-carapace-burn-${stats.elapsedSeconds.toFixed(3)}`,
+          zone,
+          x: bossEnemy.x,
+          z: bossEnemy.z,
+          timer: 0.85,
+          maxTimer: 0.85,
+          seed: Math.floor(stats.elapsedSeconds * 150),
+          isDirt: true,
+        });
+        pushBanner(
+          "Phase 1 Complete: Ignis's Carapace Burned Away! (8s)",
+          "Phase 2: Its Giant Chest Eye is OPEN — shoot it with your Bow [E / 2] (or Boomerang [Q]) to knock it down!",
+          4.5
+        );
+      } else if (flags.bossState === "EXPOSED_EYE") {
+        flags.bossArmorTimer = Math.max(flags.bossArmorTimer ?? 0, 7.5);
+        bossEnemy.hitFlashTimer = 0.2;
+        soundEngine.playBurnBarrier();
+      } else if (flags.bossState === "STUNNED") {
+        bossEnemy.hp -= 1;
+        bossEnemy.hitFlashTimer = 0.24;
+        if (bossEnemy.hp <= 0) {
+          handleEnemyDeath(bossEnemy);
+        } else {
+          soundEngine.playEnemyHit(false);
+        }
+      }
     };
 
     const lightTorchAtPropIndex = (pIdx: number) => {
@@ -5404,7 +5764,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           igniteBurnableBarrier(pIdx);
         }
       }
-      // Immediate splash damage on explosion (also melts Ice Armor / burns Wooden Shields)!
+      // Immediate splash damage on explosion (also melts Ice Armor, burns Wooden Shields, & burns Boss Ignis's Carapace)!
       for (const enemy of enemies) {
         if (enemy.zone !== zone || enemy.state === "dead") continue;
         const eRad = enemy.kind === "boss" ? 1.5 : 0.9;
@@ -5415,15 +5775,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           enemy.provoked = true;
           meltOrBurnEnemyShield(enemy);
           if (enemy.kind === "boss") {
-            soundEngine.playArmorDeflect();
-            if (armorNoticeCooldown <= 0) {
-              armorNoticeCooldown = 3.2;
-              pushBanner(
-                "Malakor's Dread Plate Deflects Fire!",
-                "Shoot his glowing Open Eye with your Bow & Arrow [E / 2]!",
-                3.4
-              );
-            }
+            burnBossIgnisCarapace(enemy);
           } else {
             enemy.hp -= 2;
             enemy.hitFlashTimer = 0.26;
@@ -5560,15 +5912,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               enemy.provoked = true;
               meltOrBurnEnemyShield(enemy);
               if (enemy.kind === "boss") {
-                soundEngine.playArmorDeflect();
-                if (armorNoticeCooldown <= 0) {
-                  armorNoticeCooldown = 3.2;
-                  pushBanner(
-                    "Malakor's Dread Plate Deflects Fire!",
-                    "Shoot his glowing Open Eye with your Bow & Arrow [E / 2]!",
-                    3.4
-                  );
-                }
+                burnBossIgnisCarapace(enemy);
               } else {
                 enemy.hp -= fb.damage;
                 enemy.hitFlashTimer = 0.24;
@@ -5630,7 +5974,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             enemy.provoked = true;
             meltOrBurnEnemyShield(enemy);
             if (enemy.kind === "boss") {
-              soundEngine.playArmorDeflect();
+              burnBossIgnisCarapace(enemy);
             } else {
               enemy.hp -= 1;
               enemy.hitFlashTimer = 0.2;
@@ -5953,7 +6297,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           dynamicObstacles = buildObstaclesFromMapProps(mapProps);
         }
 
-        // 2. Deal 3 Heavy Blast Damage to Enemies in blast radius (and stun Malakor so his Open Eye is exposed!)
+        // 2. Deal 3 Heavy Blast Damage to Enemies in blast radius (and crack/stagger Boss Ignis!)
         for (const enemy of enemies) {
           if (enemy.zone !== zone || enemy.state === "dead") continue;
           const eRad = enemy.kind === "boss" ? 1.5 : 0.85;
@@ -5966,16 +6310,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
             if (isSanctumFoe && !flags.bossAwakened) continue;
             enemy.provoked = true;
             if (enemy.kind === "boss") {
-              soundEngine.playBossWallCrash();
-              enemy.state = "stunned";
-              enemy.stateTimer = 3.2;
-              enemy.hitFlashTimer = 0.28;
-              pushBanner(
-                "Bomb Blast Staggered Malakor!",
-                "Shoot his glowing Open Eye with your Bow [E / 2] for Critical 3x Damage!",
-                3.4
-              );
+              if (flags.bossState === "ARMORED") {
+                burnBossIgnisCarapace(enemy);
+              } else {
+                soundEngine.playBossWallCrash();
+                flags.bossState = "STUNNED";
+                flags.bossArmorTimer = 3.8;
+                enemy.state = "stunned";
+                enemy.stateTimer = 3.8;
+                enemy.hitFlashTimer = 0.28;
+                pushBanner(
+                  "Bomb Blast Knocked Down Ignis! (Phase 3: Melee Punish!)",
+                  "Rush in and slash with your Sword [Space / LMB] before his carapace regenerates!",
+                  3.6
+                );
+              }
             } else {
+              if (enemy.shieldArmor) {
+                enemy.shieldArmor = undefined;
+              }
               enemy.hp -= 3;
               enemy.hitFlashTimer = 0.28;
               if (enemy.kind !== "turret") {
@@ -6026,7 +6379,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const enemyRadius =
         enemy.kind === "boss" ? 1.35 : enemy.kind === "knight" || enemy.kind === "turret" ? 0.85 : 0.7;
 
-      // Check if Boomerang hits this enemy -> stuns Electrified (`shockArmor`) enemies for 2 full seconds!
+      // Check if Boomerang hits this enemy -> stuns Electrified (`shockArmor`), Wooden-Shielded Goblins, or Boss Ignis's Open Eye!
       if (boomerang && !boomerang.hitEnemyIds.includes(enemy.id)) {
         if (Math.hypot(enemy.x - boomerang.x, enemy.z - boomerang.z) <= enemyRadius + 0.65) {
           boomerang.hitEnemyIds.push(enemy.id);
@@ -6038,16 +6391,41 @@ export const useGameStore = create<GameStore>((set, get) => ({
           } else {
             enemy.provoked = true;
             if (enemy.kind === "boss") {
-              soundEngine.playArmorDeflect();
-              if (armorNoticeCooldown <= 0) {
-                armorNoticeCooldown = 3.2;
+              if (flags.bossState === "EXPOSED_EYE") {
+                // Phase 2 -> Phase 3: Stunning Ignis's Open Eye with the Boomerang!
+                flags.bossState = "STUNNED";
+                flags.bossArmorTimer = 4.0;
+                enemy.state = "stunned";
+                enemy.stateTimer = 4.0;
+                enemy.hitFlashTimer = 0.35;
+                enemy.knockbackVx = 0;
+                enemy.knockbackVz = 0;
+                soundEngine.playEyeStatueHit();
+                soundEngine.playBossWallCrash();
                 pushBanner(
-                  "Malakor's Dread Plate Deflects Your Boomerang!",
-                  "Shoot his glowing Open Eye with your Bow & Arrow [E / 2]!",
+                  "Boomerang Stunned Ignis's Open Eye! (Phase 3: Melee Punish!)",
+                  "Ignis crashed to the ground dazed for 4s — rush in and slash with your Sword [Space / LMB]!",
+                  4.2
+                );
+              } else if (flags.bossState === "STUNNED" || enemy.state === "stunned") {
+                soundEngine.playEyeStatueHit();
+                pushBanner(
+                  "Ignis is Stunned on the Floor!",
+                  "Phase 3: Rush in and slash with your Sword [Space / LMB] for massive damage!",
                   3.2
                 );
+              } else {
+                soundEngine.playArmorDeflect();
+                if (armorNoticeCooldown <= 0) {
+                  armorNoticeCooldown = 3.2;
+                  pushBanner(
+                    "Ignis's Ice/Bramble Carapace Deflects Boomerang!",
+                    "Phase 1: Shoot Ignis with your Flame Rod [R / 3] to burn away his outer shell first!",
+                    3.4
+                  );
+                }
               }
-            } else if (enemy.shieldArmor === "wood" || enemy.shieldArmor === "ice") {
+            } else if (enemy.shieldArmor === "ice") {
               soundEngine.playShieldBlock();
               enemy.hitFlashTimer = 0.16;
               if (enemy.state === "idle") {
@@ -6056,13 +6434,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
               if (armorNoticeCooldown <= 0) {
                 armorNoticeCooldown = 2.8;
                 pushBanner(
-                  enemy.shieldArmor === "ice"
-                    ? "Glacial Ice Armor Deflects Boomerang!"
-                    : "Wooden Shield Blocks Boomerang!",
-                  "Cast the Flame Rod [R / 3] to melt or burn their defense first!",
+                  "Glacial Ice Armor Deflects Boomerang!",
+                  "Cast the Flame Rod [R / 3] to melt their Glacial Ice Armor first!",
                   3.2
                 );
               }
+            } else if (enemy.shieldArmor === "wood") {
+              // Boomerang stuns Wooden-Shielded Goblins for 2.0s so the player can slash past their guard in Room 3!
+              enemy.stunTimer = 2.0;
+              enemy.hitFlashTimer = 0.24;
+              if (enemy.state !== "stunned") {
+                enemy.state = "aggro";
+              }
+              enemy.actionCooldown = Math.min(enemy.actionCooldown, 0.2);
+              soundEngine.playEyeStatueHit();
+              soundEngine.playEnemyHit(false);
+              pushBanner(
+                "Shielded Goblin Stunned for 2 Seconds!",
+                "Its wooden shield is lowered while dizzy — slash it with your Sword now!",
+                3.2
+              );
             } else if (enemy.shockArmor) {
               // Boomerang Utility: Stun Electrified / Spiked Enemy for 2.0 full seconds so it is safe to slash with the Sword!
               enemy.stunTimer = 2.0;
@@ -6074,7 +6465,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               soundEngine.playEyeStatueHit();
               soundEngine.playEnemyHit(false);
               pushBanner(
-                "Electrified Enemy Stunned for 2 Seconds!",
+                "Spiked Beetle Stunned for 2 Seconds!",
                 "Its electric spike shell is disabled while dizzy — slash it with your Sword now!",
                 3.4
               );
@@ -6124,17 +6515,47 @@ export const useGameStore = create<GameStore>((set, get) => ({
             const strikeDamage = (hero.swordDamage || 1) * (isSpin ? 2 : 1);
 
             if (enemy.kind === "boss") {
-              // Boss Malakor only takes damage when shot in his Open Eye with the Bow [E / 2]!
+              // Boss Ignis 3-Step Vulnerability Loop: Phase 3 Melee Punish when STUNNED!
               enemy.knockbackVx = 0;
               enemy.knockbackVz = 0;
-              soundEngine.playArmorDeflect();
-              if (armorNoticeCooldown <= 0) {
-                armorNoticeCooldown = 3.5;
-                pushBanner(
-                  "Malakor's Dread Plate Deflects Your Sword!",
-                  "Only an Arrow [E / 2] shot into his glowing Open Eye can wound him!",
-                  3.8
-                );
+              if (flags.bossState === "STUNNED" || enemy.state === "stunned") {
+                const bossPunishDamage = strikeDamage * 3;
+                enemy.hp -= bossPunishDamage;
+                enemy.hitFlashTimer = 0.3;
+                if (enemy.hp <= 0) {
+                  flags.bossState = "DEAD";
+                  handleEnemyDeath(enemy);
+                  continue;
+                } else {
+                  soundEngine.playEnemyHit(true);
+                  pushBanner(
+                    isSpin
+                      ? `Spin Attack Punish on Ignis! (-${bossPunishDamage} HP!)`
+                      : `Sword Punish on Stunned Ignis! (-${bossPunishDamage} HP!)`,
+                    "Keep slashing with your Sword before his Ice/Bramble carapace regenerates!",
+                    2.8
+                  );
+                }
+              } else if (flags.bossState === "EXPOSED_EYE") {
+                soundEngine.playArmorDeflect();
+                if (armorNoticeCooldown <= 0) {
+                  armorNoticeCooldown = 3.0;
+                  pushBanner(
+                    "Ignis's Chest Eye is Open — Shoot to Stun Him First!",
+                    "Phase 2: Shoot his glowing Open Eye with your Bow [E / 2] or Boomerang [Q / 1] to knock him down!",
+                    3.5
+                  );
+                }
+              } else {
+                soundEngine.playArmorDeflect();
+                if (armorNoticeCooldown <= 0) {
+                  armorNoticeCooldown = 3.2;
+                  pushBanner(
+                    "Ignis's Ice/Bramble Carapace Deflects Your Sword!",
+                    "Phase 1: Shoot Ignis with your Flame Rod [R / 3] to burn away his outer shell first!",
+                    3.6
+                  );
+                }
               }
             } else if (enemy.shockArmor && enemy.stunTimer <= 0) {
               // Slashing an active Electrified / Spiked Enemy without stunning it with the Boomerang shocks the Hero!
@@ -6161,8 +6582,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   3.8
                 );
               }
-            } else if (enemy.shieldArmor === "wood" || enemy.shieldArmor === "ice") {
-              // Wooden Shield or Glacial Ice Armor blocks Sword & Spin Attack strikes!
+            } else if (
+              enemy.shieldArmor === "ice" ||
+              (enemy.shieldArmor === "wood" && enemy.stunTimer <= 0 && !isSpin)
+            ) {
+              // Glacial Ice Armor or an active Wooden Shield blocks frontal Sword strikes!
               soundEngine.playShieldBlock();
               enemy.hitFlashTimer = 0.16;
               const kbDirX = dist > 0.01 ? dx / dist : Math.sin(hero.facing);
@@ -6177,12 +6601,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 pushBanner(
                   enemy.shieldArmor === "ice"
                     ? "Glacial Ice Armor Deflects Your Sword!"
-                    : "Wooden Shield Blocks Your Sword!",
-                  "Cast the Flame Rod [R / 3] to melt or burn their defense first!",
+                    : "Wooden Shield Blocks Frontal Slash!",
+                  enemy.shieldArmor === "ice"
+                    ? "Cast the Flame Rod [R / 3] to melt their Glacial Ice Armor first!"
+                    : "Stun with Boomerang [Q], unleash a Spin Attack [Hold Space], or burn with Flame Rod [R]!",
                   3.5
                 );
               }
             } else {
+              // If Wooden-Shielded Goblin was hit by a Charged Spin Attack or while stunned, shatter its wooden shield!
+              if (enemy.shieldArmor === "wood") {
+                enemy.shieldArmor = undefined;
+              }
               // Weight-based knockback system!
               enemy.hp -= strikeDamage;
               enemy.hitFlashTimer = 0.22;
@@ -6256,7 +6686,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
-      // Boss Phase 2 Minion Summon at 50% HP (spawns 3 tougher Eclipse Minions!)
+      // Boss Rage Phase at 50% HP (spawns 2 Shadow Skeletons & intensifies Ignis!)
       if (
         enemy.kind === "boss" &&
         enemy.hp <= Math.ceil(enemy.maxHp / 2) &&
@@ -6265,14 +6695,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         flags.bossPhase2 = true;
         soundEngine.playBossRoar();
         pushBanner(
-          "Malakor Channels the Eclipse!",
-          "Three Elite Shadow Minions rise to defend their master!",
-          3.8
+          "Ignis Enters His Molten Rage Phase!",
+          "Two Shadow Guards rise in the corners — keep burning his shell [R], stunning his Eye [E], and slashing [Space]!",
+          4.2
         );
         const wave2Coords = [
-          { id: "dg-minion-wave2-1", x: -7.5, z: 27.5 },
-          { id: "dg-minion-wave2-2", x: 7.5, z: 27.5 },
-          { id: "dg-minion-wave2-3", x: 0, z: 29.5 },
+          { id: "dg-minion-wave2-1", x: -8.5, z: 28.5 },
+          { id: "dg-minion-wave2-2", x: 8.5, z: 28.5 },
         ];
         wave2Coords.forEach((wc) => {
           enemies.push({
@@ -6284,8 +6713,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             spawnX: wc.x,
             spawnZ: wc.z,
             facing: Math.PI,
-            hp: 5,
-            maxHp: 5,
+            hp: 4,
+            maxHp: 4,
             weight: 2.2,
             state: "aggro",
             stateTimer: 0,
@@ -6296,7 +6725,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             knockbackVx: 0,
             knockbackVz: 0,
             aggroRadius: 15,
-            speed: 5.7,
+            speed: 5.5,
             damage: 1,
             rupeeDrop: "blue",
             provoked: true,
@@ -6316,9 +6745,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const enemyWeight = enemy.weight ?? getDefaultEnemyWeight(enemy.kind);
 
       // =====================================================
-      // DEDICATED BOSS AI STATE MACHINE (WITH A* + STEERING PATHFINDING)
+      // DEDICATED BOSS AI STATE MACHINE ("IGNIS, THE ARMORED EYE-GOLEM")
       // =====================================================
       if (enemy.kind === "boss") {
+        // Tick Phase 2 Exposed Eye countdown -> regenerates carapace if not stunned in time!
+        if (flags.bossState === "EXPOSED_EYE" && enemy.state !== "stunned") {
+          flags.bossArmorTimer = Math.max(0, (flags.bossArmorTimer ?? 0) - dt);
+          if (flags.bossArmorTimer <= 0) {
+            flags.bossState = "ARMORED";
+            soundEngine.playArmorDeflect();
+            pushBanner(
+              "Ignis's Ice/Bramble Carapace Regenerated!",
+              "Phase 1: Shoot Ignis with your Flame Rod [R / 3] to burn off his shell again!",
+              3.4
+            );
+          }
+        }
+
         if (enemy.state === "idle") {
           if (flags.bossAwakened || enemy.provoked) {
             enemy.state = "aggro";
@@ -6537,15 +6980,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
           if (resolvedB.hitObstacle || hitSouthBarrier) {
             soundEngine.playBossWallCrash();
-            enemy.state = "stunned";
-            enemy.stateTimer = 3.3;
             enemy.actionCounter += 1;
             enemy.actionCooldown = 1.1;
-            pushBanner(
-              "Malakor Crashed into the Wall!",
-              "His Open Eye is wide open — shoot him with your Bow [E / 2] for Critical 3x Damage!",
-              3.5
-            );
+            if (flags.bossState === "EXPOSED_EYE") {
+              flags.bossState = "STUNNED";
+              flags.bossArmorTimer = 3.8;
+              enemy.state = "stunned";
+              enemy.stateTimer = 3.8;
+              pushBanner(
+                "Ignis Crashed into the Wall! (Phase 3: Melee Punish!)",
+                "He is dazed on the floor — rush in and slash with your Sword [Space / LMB]!",
+                3.6
+              );
+            } else {
+              enemy.state = "recover";
+              enemy.stateTimer = 0.85;
+              pushBanner(
+                "Ignis Slammed into the Wall! (Carapace Still Intact)",
+                "Phase 1: Burn his shell with the Flame Rod [R / 3], then shoot his Open Eye with Bow [E]!",
+                3.5
+              );
+            }
           } else if (
             enemy.chargeDistanceTraveled >= BOSS_MAX_LUNGE_RANGE ||
             enemy.stateTimer <= 0
@@ -6556,9 +7011,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
             enemy.actionCooldown = 1.1;
           }
         } else if (enemy.state === "stunned") {
+          flags.bossState = "STUNNED";
+          flags.bossArmorTimer = Math.max(0, enemy.stateTimer);
           if (enemy.stateTimer <= 0) {
             enemy.state = "aggro";
-            enemy.actionCooldown = 0.85;
+            enemy.actionCooldown = 0.95;
+            flags.bossState = "ARMORED";
+            flags.bossArmorTimer = 0;
+            soundEngine.playArmorDeflect();
+            pushBanner(
+              "Ignis Recovered & Regenerated His Carapace!",
+              "Phase 1: Shoot Ignis with your Flame Rod [R / 3] to burn off his shell again!",
+              3.5
+            );
           }
         } else if (enemy.state === "recover") {
           if (enemy.stateTimer <= 0) {
@@ -7163,14 +7628,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return true;
     });
 
-     // 11. Check if Boss and all Sanctum Minions are defeated -> Drops +1 Full Heart Container & Opens Back Door Portal!
+    // 11. Check if Boss Ignis and all Sanctum Minions (spawnZ > 13) are defeated -> Drops +1 Full Heart Container & Opens North Sanctuary Door!
     if (!flags.bossDefeated) {
       const bossEnemy = enemies.find((e) => e.kind === "boss");
       const aliveSanctumMinions = enemies.filter(
-        (e) => e.zone === "dungeon" && e.kind === "minion" && e.state !== "dead"
+        (e) => e.zone === "dungeon" && e.kind === "minion" && e.spawnZ > 13 && e.state !== "dead"
       );
       if (bossEnemy && bossEnemy.state === "dead" && aliveSanctumMinions.length === 0) {
         flags.bossDefeated = true;
+        flags.bossState = "DEAD";
+        flags.bossArmorTimer = 0;
         if (!flags.bossHeartAwarded) {
           flags.bossHeartAwarded = true;
           hero.maxHp += 2;
@@ -7180,9 +7647,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         soundEngine.playVictoryFanfare();
         soundEngine.playGateUnlock();
         pushBanner(
-          "Malakor Vanquished! (+1 Full Heart Container & Back Door Opened!)",
-          "Max HP permanently increased! Claim the Relic Chest or take the Back Door Portal to Map 1 Crossroads and burn the East Exit to Map 3!",
-          6.8
+          "Ignis, the Armored Eye-Golem Vanquished! (+1 Full Heart Container!)",
+          "Max HP permanently increased! Claim the Sanctum Relic Chest or step through the North Sanctuary Door to Map 1 Crossroads and burn the East Exit to Map 3!",
+          7.0
         );
       }
     }
@@ -7232,15 +7699,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
           soundEngine.playVictoryFanfare();
           pushBanner(
             "Claimed the Zeldo Crest Relic! (+50 Rupees & Full Restore)",
-            "Step through the open North Back Door Portal to return to Map 1 Crossroads, burn the East Exit vines [R], and enter Map 3!",
+            "Step through the open North Sanctuary Door to return to Map 1 Crossroads, burn the East Exit vines [R], and enter Map 3!",
             7.5
           );
         } else if (chestNoticeCooldown <= 0) {
           chestNoticeCooldown = 3.2;
           soundEngine.playGateLocked();
           pushBanner(
-            "Sealed by the Warden's Curse!",
-            "Defeat Malakor and his minions to unlock the Sanctum Relic Chest.",
+            "Sealed by Ignis's Curse!",
+            "Defeat Ignis, the Armored Eye-Golem to unlock the Sanctum Relic Chest.",
             3.5
           );
         }
@@ -7266,7 +7733,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         soundEngine.playSecretSolve();
         pushBanner(
           "Grove Ambush Cleared! (Shrine Barrier Lowered!)",
-          "All 3 Forest Grove ambush monsters vanquished — claim the Sanctum Entry Key & Flame Rod at the pedestal!",
+          "All 3 Forest Grove ambush monsters vanquished — claim the Sanctum Entry Key at the pedestal!",
           5.5
         );
       }
@@ -7371,13 +7838,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (!flags.keyPickedUp) {
           pushBanner(
             "Scout Lyra: \"Take the WEST EXIT (Map 1B: Forest Grove) first!\"",
-            "Hit the Crystal Switch with your Boomerang [Q] or defeat the 3 ambush monsters to claim the Dungeon Key & Flame Rod!",
+            "Hit the Crystal Switch with your Boomerang [Q] or defeat the 3 ambush monsters to claim the Dungeon Entry Key!",
             6.0
           );
         } else if (!flags.bossDefeated) {
           pushBanner(
             "Scout Lyra: \"You have the Key! Take the NORTH EXIT (Map 2: Sunken Sanctum)!\"",
-            "Unlock the North Gate, conquer the 4 Dungeon Rooms, and defeat Malakor for +1 Full Heart Container!",
+            "Conquer the 5-Room Cross Dungeon, claim the Flame Rod in Room 3 & Big Key in Room 4, and defeat Ignis for +1 Heart Container!",
             6.0
           );
         } else {
@@ -7476,6 +7943,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
         zone === "overworld" &&
         !flags.dungeonEntryUnlocked &&
         Math.hypot(DUNGEON_ENTRY_GATE_POS.x - hero.x, DUNGEON_ENTRY_GATE_POS.z - hero.z) <= 5.5;
+      const nearDgSmallKeyAcrossGap =
+        zone === "dungeon" &&
+        !flags.dgSmallKeyPickedUp &&
+        Math.hypot(DG_SMALL_KEY_POS.x - hero.x, DG_SMALL_KEY_POS.z - hero.z) <= 13.5;
+      const nearDgEastDoor =
+        zone === "dungeon" &&
+        !flags.eastWingDoorUnlocked &&
+        Math.hypot(EAST_WING_DOOR_POS.x - hero.x, EAST_WING_DOOR_POS.z - hero.z) <= 4.5;
+      const nearFireRodChest =
+        zone === "dungeon" &&
+        !flags.fireRodChestOpened &&
+        Math.hypot(FIRE_ROD_CHEST_POS.x - hero.x, FIRE_ROD_CHEST_POS.z - hero.z) <= 4.5;
+      const nearBigKeyChest =
+        zone === "dungeon" &&
+        !flags.bigKeyChestOpened &&
+        Math.hypot(BIG_KEY_CHEST_POS.x - hero.x, BIG_KEY_CHEST_POS.z - hero.z) <= 4.5;
+      const nearNorthBossGate =
+        zone === "dungeon" &&
+        !flags.gateUnlocked &&
+        Math.hypot(LOCKED_GATE_POS.x - hero.x, LOCKED_GATE_POS.z - hero.z) <= 4.8;
       const nearWaterGapRupee = rupees.find(
         (r) =>
           r.zone === zone &&
@@ -7518,12 +8005,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
           flags.keyPickedUp || hero.hasDungeonKey
             ? "North Dungeon Entrance Gate — Walk Forward to Unlock Map 2!"
             : "North Dungeon Entrance Gate (Locked) — Get the Key from West Exit (Map 1B: Forest Grove)!";
+      } else if (nearDgSmallKeyAcrossGap) {
+        hero.interactPrompt =
+          "Small Key on Pedestal Across Chasm — Throw Boomerang [Q / 1] Across the Gap to Snag It!";
+      } else if (nearDgEastDoor) {
+        hero.interactPrompt = flags.hasSmallKey
+          ? "Room 3 East Wing Key Door — Walk Forward to Unlock with Your Small Key!"
+          : "Room 3 East Wing (Locked Small Key Door) — Fetch the Small Key in Room 2 (West Wing) via Boomerang [Q]!";
+      } else if (nearFireRodChest) {
+        hero.interactPrompt =
+          "Ember Sanctum Chest (Flame Rod) — Defeat the 3 Shielded Goblins & Walk Up to Open!";
+      } else if (nearBigKeyChest) {
+        hero.interactPrompt = flags.dungeonEyeStatuesSolved
+          ? "Big Boss Key Chest (Unsealed!) — Walk Up to Claim the Big Boss Key!"
+          : "Big Boss Key Chest (Sealed) — Light the 4 Crypt Lanterns [R] & Shoot the South Eye Statue with Bow [E]!";
+      } else if (nearNorthBossGate) {
+        hero.interactPrompt =
+          flags.dungeonTimedTorchSolved && flags.hasBigKey
+            ? "North Boss Gate Ready — Step Forward to Unlock & Face Ignis!"
+            : `North Boss Gate (Locked) — Requires 4 Hub Lanterns (${flags.dungeonTimedTorchSolved ? "DONE" : "Unlit"}) + Big Boss Key (${flags.hasBigKey ? "READY" : "In Room 4"})!`;
       } else if (nearBridgeTurret) {
         hero.interactPrompt =
-          "Bridge Stone Turret — Hold Shield [RMB / Shift] and walk forward to deflect rocks!";
+          "Wall Stone Turret — Hold Shield [RMB / Shift] while crossing to deflect projectiles!";
       } else if (nearGroveKey) {
         hero.interactPrompt =
-          "Sanctum Entry Key & Flame Rod Pedestal — Walk Up or Throw Boomerang [Q / 1] to Claim!";
+          "Sanctum Entry Key Pedestal — Walk Up or Throw Boomerang [Q / 1] to Claim!";
       } else if (nearGroveSwitch) {
         hero.interactPrompt =
           "Grove Crystal Switch — Throw Boomerang [Q / 1] Across the Stream (or Clear 3 Ambush Monsters) to Open Shrine!";
@@ -7532,10 +8038,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
           "Red Rupee (+20) Across Water — Throw Boomerang [Q / 1] to Snag & Pull It Back!";
       } else if (nearEyeStatue) {
         hero.interactPrompt =
-          "Sanctum Eye Statue — Shoot its Open Eye with your Bow & Arrow [E / 2]!";
+          "Cyclops Eye Statue — Shoot its Open Eye with your Bow & Arrow [E / 2]!";
       } else if (nearShockEnemy) {
         hero.interactPrompt =
-          "Electrified Enemy — Throw Boomerang [Q / 1] to Stun for 2s Before Slashing!";
+          "Armored Spiked Beetle — Throw Boomerang [Q / 1] to Stun for 2s Before Slashing!";
       } else if (nearBountyEnemy) {
         hero.interactPrompt =
           "Gold/Crimson Bounty Monster — Defeat for 5x Rupee Drops!";
@@ -7547,7 +8053,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       } else if (nearBurnableBarrier) {
         hero.interactPrompt =
           nearBurnableBarrier.prefab === "spiderweb_barrier"
-            ? "Thick Spiderwebs — Shoot with Flame Rod [R] to Burn!"
+            ? "Thick Spiderwebs (To Room 4 Crypt) — Shoot with Flame Rod [R] to Burn!"
             : nearBurnableBarrier.id.startsWith("prop-ow-east-exit-briar")
             ? "East Exit Dry Vines (Map 3: Burned Pass) — Burn with Flame Rod [R] or Light Both Torches!"
             : nearBurnableBarrier.id === "prop-ow-ledge-briar"
@@ -7556,7 +8062,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       } else if (nearUnlitTorch) {
         hero.interactPrompt =
           (nearUnlitTorch.timedDuration ?? 0) > 0
-            ? `Timed Lantern (${nearUnlitTorch.timedDuration}s) — Shoot with Flame Rod [R] to Light All 4!`
+            ? `Timed Hub Lantern (${nearUnlitTorch.timedDuration}s) — Shoot with Flame Rod [R] to Light All 4!`
             : nearUnlitTorch.id.startsWith("prop-ow-east-exit-torch")
             ? "East Exit Gate Torch — Light Both Torches with Flame Rod [R] to Burn the East Barrier!"
             : "Unlit Lantern — Shoot with Flame Rod [R] to Illuminate!";
