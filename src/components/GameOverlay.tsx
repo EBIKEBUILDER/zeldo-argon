@@ -199,6 +199,8 @@ export default function GameOverlay() {
   const resetPlaySimulation = useGameStore((s) => s.resetPlaySimulation);
   const exportMapJson = useGameStore((s) => s.exportMapJson);
   const importMapJson = useGameStore((s) => s.importMapJson);
+  const saveMapToBrowserStorage = useGameStore((s) => s.saveMapToBrowserStorage);
+  const resetMapToDefaults = useGameStore((s) => s.resetMapToDefaults);
 
   const objInputRef = useRef<HTMLInputElement | null>(null);
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
@@ -273,10 +275,15 @@ export default function GameOverlay() {
 
   let currentObjective =
     "Visit Bramble's Shop in the East Clearing or find the Sanctum Key in the West";
-  if (flags.chestUnlocked) {
-    currentObjective = "The Zeldo Crest has been restored!";
+  if (zone === "frontier") {
+    currentObjective =
+      "Explore the Elderwood Frontier — press Tab / Map Editor anytime to build & customize!";
+  } else if (flags.chestUnlocked) {
+    currentObjective =
+      "Zeldo Crest Restored! Walk North through the Sanctum Exit to the Elderwood Frontier!";
   } else if (flags.bossDefeated) {
-    currentObjective = "Open the Golden Chest at the North Altar!";
+    currentObjective =
+      "Open the Golden Chest or step North through the unsealed Sanctum Exit!";
   } else if (zone === "dungeon" && flags.gateUnlocked) {
     currentObjective = "Defeat Malakor, Warden of the Eclipse & his minions";
   } else if (zone === "dungeon" && !flags.gateUnlocked) {
@@ -290,6 +297,8 @@ export default function GameOverlay() {
   const zoneLabel =
     zone === "overworld"
       ? "Whispering Vale (Overworld)"
+      : zone === "frontier"
+      ? "Elderwood Frontier (Beyond the Sanctum)"
       : dungeonRoom === "entry"
       ? "Sunken Sanctum — I. Antechamber"
       : dungeonRoom === "hall"
@@ -348,11 +357,11 @@ export default function GameOverlay() {
           <div className="gear-slots-row">
             <div
               className={`gear-slot ${hero.isBlocking ? "gear-slot-blocking" : "gear-slot-owned"}`}
-              title="Hold Right-Click or Shift to Block (-50% Damage)"
+              title={`Hold Right-Click or Shift to Block (-${hero.shieldBlock ?? 1} Physical Damage)`}
             >
               <span className="gear-key">RMB</span>
               <span className="gear-name">
-                {hero.isBlocking ? "GUARDING" : "Shield"}
+                {hero.isBlocking ? "GUARDING" : `Shield (-${hero.shieldBlock ?? 1})`}
               </span>
             </div>
 
@@ -560,14 +569,21 @@ export default function GameOverlay() {
                   onClick={() => setEditorZone("overworld", true)}
                   className={`zone-switch-btn ${zone === "overworld" ? "active" : ""}`}
                 >
-                  Overworld Map
+                  Overworld
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditorZone("dungeon", true)}
                   className={`zone-switch-btn ${zone === "dungeon" ? "active" : ""}`}
                 >
-                  Dungeon Map
+                  Dungeon
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorZone("frontier", true)}
+                  className={`zone-switch-btn ${zone === "frontier" ? "active" : ""}`}
+                >
+                  Frontier
                 </button>
               </div>
             </div>
@@ -690,91 +706,96 @@ export default function GameOverlay() {
                 <div className="editor-section-title">ASSET BROWSER PALETTE</div>
                 <div className="asset-tabs-row">
                   {(
-                    [
-                      { id: "props", label: "3D Props" },
-                      { id: "monsters", label: "Monsters" },
-                      { id: "rupees", label: "Rupees" },
-                      { id: "portals", label: "Portals" },
-                      { id: "custom", label: "3D Import" },
-                    ] as Array<{ id: EditorPlaceCategory; label: string }>
-                  ).map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => {
-                        if (tab.id === "props") setEditorPlaceItem("props", "pine_tree");
-                        else if (tab.id === "monsters")
-                          setEditorPlaceItem("monsters", "enemy:slime");
-                        else if (tab.id === "rupees")
-                          setEditorPlaceItem("rupees", "rupee:blue");
-                        else if (tab.id === "portals")
-                          setEditorPlaceItem("portals", "portal:new");
-                        else
-                          setEditorPlaceItem(
-                            "custom",
-                            `custom:${customModels[0]?.id ?? "custom-crystal-obelisk"}`
-                          );
-                      }}
-                      className={`asset-tab-btn ${
-                        editorPlaceCategory === tab.id ? "active" : ""
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="asset-items-scroll">
-                  {editorPlaceCategory === "props" &&
-                    PROP_PALETTE.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setEditorPlaceItem("props", item.id)}
-                        className={`asset-card-btn ${
-                          editorPlacePrefab === item.id ? "active" : ""
-                        }`}
-                      >
-                        <span className="asset-card-name">{item.label}</span>
-                        <span className="asset-card-tag">{item.tag}</span>
-                      </button>
-                    ))}
-
-                  {editorPlaceCategory === "monsters" &&
-                    MONSTER_PALETTE.map((m) => (
-                      <button
-                        key={m.prefab}
-                        type="button"
-                        onClick={() => setEditorPlaceItem("monsters", m.prefab)}
-                        className={`asset-card-btn ${
-                          editorPlacePrefab === m.prefab ? "active" : ""
-                        }`}
-                      >
-                        <span className="asset-card-name">{m.label}</span>
-                        <span className="asset-card-tag">Wt: {m.weightLabel}</span>
-                      </button>
-                    ))}
-
-                  {editorPlaceCategory === "rupees" &&
-                    (
                       [
-                        { id: "rupee:green", label: "Green Rupee (+1)", tag: "Value: 1" },
-                        { id: "rupee:blue", label: "Blue Rupee (+5)", tag: "Value: 5" },
-                        { id: "rupee:red", label: "Red Rupee (+20)", tag: "Value: 20" },
-                      ] as const
-                    ).map((r) => (
+                        { id: "props", label: "3D Props" },
+                        { id: "monsters", label: "Monsters" },
+                        { id: "rupees", label: "Pickups" },
+                        { id: "portals", label: "Portals" },
+                        { id: "custom", label: "3D Import" },
+                      ] as Array<{ id: EditorPlaceCategory; label: string }>
+                    ).map((tab) => (
                       <button
-                        key={r.id}
+                        key={tab.id}
                         type="button"
-                        onClick={() => setEditorPlaceItem("rupees", r.id)}
-                        className={`asset-card-btn ${
-                          editorPlacePrefab === r.id ? "active" : ""
+                        onClick={() => {
+                          if (tab.id === "props") setEditorPlaceItem("props", "pine_tree");
+                          else if (tab.id === "monsters")
+                            setEditorPlaceItem("monsters", "enemy:slime");
+                          else if (tab.id === "rupees")
+                            setEditorPlaceItem("rupees", "rupee:heart");
+                          else if (tab.id === "portals")
+                            setEditorPlaceItem("portals", "portal:new");
+                          else
+                            setEditorPlaceItem(
+                              "custom",
+                              `custom:${customModels[0]?.id ?? "custom-crystal-obelisk"}`
+                            );
+                        }}
+                        className={`asset-tab-btn ${
+                          editorPlaceCategory === tab.id ? "active" : ""
                         }`}
                       >
-                        <span className="asset-card-name">{r.label}</span>
-                        <span className="asset-card-tag">{r.tag}</span>
+                        {tab.label}
                       </button>
                     ))}
+                  </div>
+
+                  <div className="asset-items-scroll">
+                    {editorPlaceCategory === "props" &&
+                      PROP_PALETTE.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setEditorPlaceItem("props", item.id)}
+                          className={`asset-card-btn ${
+                            editorPlacePrefab === item.id ? "active" : ""
+                          }`}
+                        >
+                          <span className="asset-card-name">{item.label}</span>
+                          <span className="asset-card-tag">{item.tag}</span>
+                        </button>
+                      ))}
+
+                    {editorPlaceCategory === "monsters" &&
+                      MONSTER_PALETTE.map((m) => (
+                        <button
+                          key={m.prefab}
+                          type="button"
+                          onClick={() => setEditorPlaceItem("monsters", m.prefab)}
+                          className={`asset-card-btn ${
+                            editorPlacePrefab === m.prefab ? "active" : ""
+                          }`}
+                        >
+                          <span className="asset-card-name">{m.label}</span>
+                          <span className="asset-card-tag">Wt: {m.weightLabel}</span>
+                        </button>
+                      ))}
+
+                    {editorPlaceCategory === "rupees" &&
+                      (
+                        [
+                          {
+                            id: "rupee:heart",
+                            label: "Recovery Heart",
+                            tag: "Heal: +1 Heart",
+                          },
+                          { id: "rupee:green", label: "Green Rupee (+1)", tag: "Value: 1" },
+                          { id: "rupee:blue", label: "Blue Rupee (+5)", tag: "Value: 5" },
+                          { id: "rupee:red", label: "Red Rupee (+20)", tag: "Value: 20" },
+                        ] as const
+                      ).map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => setEditorPlaceItem("rupees", r.id)}
+                          className={`asset-card-btn ${
+                            editorPlacePrefab === r.id ? "active" : ""
+                          }`}
+                        >
+                          <span className="asset-card-name">{r.label}</span>
+                          <span className="asset-card-tag">{r.tag}</span>
+                        </button>
+                      ))}
 
                   {editorPlaceCategory === "portals" && (
                     <div className="portal-browser-box">
@@ -841,20 +862,44 @@ export default function GameOverlay() {
             )}
 
             {/* Map Save / Export Footer */}
-            <div className="editor-io-row">
+            <div className="editor-io-row" style={{ flexWrap: "wrap", gap: "6px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  saveMapToBrowserStorage();
+                  showEditorToast("Saved all maps to browser storage (auto-saves on every edit)!");
+                }}
+                className="editor-io-btn"
+                title="Save authored maps to browser storage"
+              >
+                💾 Save Map
+              </button>
               <button
                 type="button"
                 onClick={handleExportMapFile}
                 className="editor-io-btn"
+                title="Download JSON backup of all maps"
               >
-                ⬇ Export Map JSON
+                ⬇ Export JSON
               </button>
               <button
                 type="button"
                 onClick={() => jsonInputRef.current?.click()}
                 className="editor-io-btn"
+                title="Load a previously exported Map JSON file"
               >
-                ⬆ Import Map JSON
+                ⬆ Import JSON
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  resetMapToDefaults();
+                  showEditorToast("Restored default authored maps!");
+                }}
+                className="editor-io-btn"
+                title="Restore built-in default maps"
+              >
+                ↺ Default Map
               </button>
             </div>
           </aside>
@@ -1202,23 +1247,33 @@ export default function GameOverlay() {
               </div>
             )}
 
-            {/* 3. RUPEE INSPECTOR */}
+            {/* 3. PICKUP INSPECTOR */}
             {selectedRupee && (
               <div className="inspector-form">
-                <div className="inspector-type-pill">RUPEE PICKUP</div>
+                <div className="inspector-type-pill">
+                  {selectedRupee.tier === "heart" ? "HEART PICKUP" : "RUPEE PICKUP"}
+                </div>
                 <label className="inspector-field">
-                  <span>Rupee Tier</span>
+                  <span>Pickup Type</span>
                   <select
                     value={selectedRupee.tier}
                     onChange={(e) => {
                       const tier = e.target.value as RupeeTier;
-                      const value = tier === "red" ? 20 : tier === "blue" ? 5 : 1;
+                      const value =
+                        tier === "heart"
+                          ? 2
+                          : tier === "red"
+                            ? 20
+                            : tier === "blue"
+                              ? 5
+                              : 1;
                       updateRupeeInstance(selectedRupee.id, { tier, value });
                     }}
                   >
                     <option value="green">Green Rupee (+1)</option>
                     <option value="blue">Blue Rupee (+5)</option>
                     <option value="red">Red Rupee (+20)</option>
+                    <option value="heart">Recovery Heart (+1 Heart)</option>
                   </select>
                 </label>
 
@@ -1351,6 +1406,7 @@ export default function GameOverlay() {
                   >
                     <option value="overworld">Overworld (Whispering Vale)</option>
                     <option value="dungeon">Dungeon (Sunken Sanctum)</option>
+                    <option value="frontier">Elderwood Frontier (Beyond Sanctum)</option>
                   </select>
                 </label>
 

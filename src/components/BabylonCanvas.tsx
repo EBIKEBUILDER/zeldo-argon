@@ -26,6 +26,7 @@ import {
 } from "@/store/gameStore";
 import {
   BOSS_CHEST_POS,
+  BOSS_EXIT_GATE_POS,
   CustomModelAsset,
   DUNGEON_KEY_POS,
   EnemyKind,
@@ -51,10 +52,57 @@ interface EnemyMeshRig {
   materials: StandardMaterial[];
   baseColors: Color3[];
   chargeCorridorRoot?: TransformNode;
+  chargeCorridorBody?: TransformNode;
+  chargeCorridorTip?: Mesh;
   chargeCorridorMat?: StandardMaterial;
   lungeShieldMesh?: Mesh;
   stunStarsRoot?: TransformNode;
   archerAimLine?: Mesh;
+}
+
+/**
+ * Builds a flat 3D arrowhead mesh lying on the ground plane whose apex points
+ * strictly along +Z (0, y, +tipLen) and whose base spans (-halfWidth..+halfWidth, y, 0).
+ * Because +Z is the exact direction of (Math.sin(chargeAngle), Math.cos(chargeAngle)),
+ * this arrowhead never has a 90-degree cylinder-tessellation offset and never stretches.
+ */
+function createForwardArrowheadMesh(
+  name: string,
+  halfWidth: number,
+  tipLength: number,
+  scene: Scene
+): Mesh {
+  const mesh = new Mesh(name, scene);
+  const yTop = 0.085;
+  const yBot = 0.035;
+
+  const positions = [
+    // Top face (0, 1, 2)
+    0, yTop, tipLength,
+    -halfWidth, yTop, 0,
+    halfWidth, yTop, 0,
+    // Bottom face (3, 4, 5)
+    0, yBot, tipLength,
+    halfWidth, yBot, 0,
+    -halfWidth, yBot, 0,
+  ];
+  const indices = [
+    0, 1, 2,
+    3, 4, 5,
+    0, 2, 4, 0, 4, 3,
+    0, 3, 5, 0, 5, 1,
+    1, 5, 4, 1, 4, 2,
+  ];
+  const normals: number[] = [];
+  VertexData.ComputeNormals(positions, indices, normals);
+
+  const vData = new VertexData();
+  vData.positions = positions;
+  vData.indices = indices;
+  vData.normals = normals;
+  vData.applyToMesh(mesh);
+  mesh.isPickable = false;
+  return mesh;
 }
 
 interface PropVisualRig {
@@ -284,6 +332,9 @@ export default function BabylonCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Automatically hydrate any authored Map Editor layout saved in localStorage
+    useGameStore.getState().hydrateSavedMapFromStorage();
+
     const engine = new Engine(canvas, true, {
       preserveDrawingBuffer: true,
       stencil: true,
@@ -389,9 +440,11 @@ export default function BabylonCanvas() {
     // =========================================================
     const overworldRoot = new TransformNode("overworldRoot", scene);
     const dungeonRoot = new TransformNode("dungeonRoot", scene);
+    const frontierRoot = new TransformNode("frontierRoot", scene);
 
     const owBaseColor = new Color3(0.24, 0.55, 0.28);
     const dgBaseColor = new Color3(0.18, 0.19, 0.25);
+    const frBaseColor = new Color3(0.18, 0.46, 0.32);
 
     const owGroundMat = makeMat(
       "owGroundMat",
@@ -404,6 +457,12 @@ export default function BabylonCanvas() {
       new Color3(1, 1, 1),
       undefined,
       new Color3(0.08, 0.08, 0.1)
+    );
+    const frGroundMat = makeMat(
+      "frGroundMat",
+      new Color3(1, 1, 1),
+      undefined,
+      new Color3(0.06, 0.09, 0.07)
     );
 
     // Subdivided updatable ground meshes for real-time Terrain Brush sculpting & painting!
@@ -426,6 +485,16 @@ export default function BabylonCanvas() {
     dgGround.parent = dungeonRoot;
     dgGround.isPickable = true;
     applyTerrainCellsToGroundMesh(dgGround, dgBaseColor, {});
+
+    const frGround = MeshBuilder.CreateGround(
+      "frGround",
+      { width: 84, height: 84, subdivisions: 42, updatable: true },
+      scene
+    );
+    frGround.material = frGroundMat;
+    frGround.parent = frontierRoot;
+    frGround.isPickable = true;
+    applyTerrainCellsToGroundMesh(frGround, frBaseColor, {});
 
     // Shared Prop Materials
     const pathMat = makeMat("owPathMat", new Color3(0.75, 0.65, 0.46), undefined, new Color3(0.08, 0.08, 0.06));
@@ -663,7 +732,7 @@ export default function BabylonCanvas() {
     bossArenaRing.parent = dungeonRoot;
     bossArenaRing.isPickable = false;
 
-    // Locked Iron Gate in Dungeon
+    // Locked Iron Gate in Dungeon (Southern entry to Room 3)
     const lockedGateNode = new TransformNode("lockedGateNode", scene);
     lockedGateNode.parent = dungeonRoot;
     lockedGateNode.position.set(LOCKED_GATE_POS.x, 0, LOCKED_GATE_POS.z);
@@ -709,6 +778,55 @@ export default function BabylonCanvas() {
       lockPlate.position.set(0, h * 0.45, 0);
       lockPlate.material = goldKeyMat;
       lockPlate.parent = lockedGateNode;
+    }
+
+    // Northern Sanctum Exit Gate (unseals when Boss Malakor is defeated, opening the path to the Elderwood Frontier!)
+    const bossExitGateNode = new TransformNode("bossExitGateNode", scene);
+    bossExitGateNode.parent = dungeonRoot;
+    bossExitGateNode.position.set(BOSS_EXIT_GATE_POS.x, 0, BOSS_EXIT_GATE_POS.z);
+
+    {
+      const h = 4.8;
+      const w = 7.4;
+      const exitIronParts: Mesh[] = [];
+      const barCount = 9;
+      for (let b = 0; b < barCount; b++) {
+        const bx = -3.2 + (b / (barCount - 1)) * 6.4;
+        const bar = MeshBuilder.CreateCylinder(
+          `exitGateBar-${b}`,
+          { diameter: 0.26, height: h, tessellation: 12 },
+          scene
+        );
+        bar.position.set(bx, h / 2, 0);
+        exitIronParts.push(bar);
+      }
+      const crossBeamTop = MeshBuilder.CreateBox(
+        "exitGateBeamTop",
+        { width: w, height: 0.4, depth: 0.52 },
+        scene
+      );
+      crossBeamTop.position.set(0, h - 0.5, 0);
+      exitIronParts.push(crossBeamTop);
+
+      const crossBeamMid = MeshBuilder.CreateBox(
+        "exitGateBeamMid",
+        { width: w, height: 0.34, depth: 0.48 },
+        scene
+      );
+      crossBeamMid.position.set(0, h * 0.45, 0);
+      exitIronParts.push(crossBeamMid);
+
+      mergeGroupWithMaterial("mergedExitGateIron", exitIronParts, ironGateMat, bossExitGateNode);
+
+      const sealEmblem = MeshBuilder.CreateTorus(
+        "exitGateSealEmblem",
+        { diameter: 1.5, thickness: 0.18, tessellation: 20 },
+        scene
+      );
+      sealEmblem.rotation.x = Math.PI / 2;
+      sealEmblem.position.set(0, h * 0.48, 0);
+      sealEmblem.material = glowingCrimsonMat;
+      sealEmblem.parent = bossExitGateNode;
     }
 
     // --- BOSS CHEST & SEAL IN DUNGEON ROOM 3 (0, 33) ---
@@ -1485,6 +1603,30 @@ export default function BabylonCanvas() {
     slashArc.material = slashMat;
     slashArc.parent = heroRoot;
 
+    // --- 3D RANGER'S BOW ON HERO (SHOWN WHEN SHOOTING ARROWS) ---
+    const heroBowNode = new TransformNode("heroBowNode", scene);
+    heroBowNode.position.set(0, 0.96, 0.62);
+    heroBowNode.parent = heroRoot;
+
+    const heroBowArc = MeshBuilder.CreateTorus(
+      "heroBowArc",
+      { diameter: 1.15, thickness: 0.1, tessellation: 18 },
+      scene
+    );
+    heroBowArc.rotation.y = Math.PI / 2;
+    heroBowArc.material = goldKeyMat;
+    heroBowArc.parent = heroBowNode;
+
+    const heroBowString = MeshBuilder.CreateCylinder(
+      "heroBowString",
+      { diameter: 0.025, height: 1.08, tessellation: 6 },
+      scene
+    );
+    heroBowString.position.set(0, 0, -0.08);
+    heroBowString.material = whiteEyeMat;
+    heroBowString.parent = heroBowNode;
+    heroBowNode.setEnabled(false);
+
     // --- 3D SPINNING BOOMERANG PROJECTILE ---
     const boomerangNode = new TransformNode("boomerangNode", scene);
     const wing1 = MeshBuilder.CreateBox(
@@ -1543,6 +1685,56 @@ export default function BabylonCanvas() {
       new Color3(0.55, 0.08, 0.14),
       new Color3(1.0, 0.9, 0.9)
     );
+    const heartPickupMat = makeMat(
+      "heartPickupMat",
+      new Color3(1.0, 0.18, 0.38),
+      new Color3(0.62, 0.06, 0.18),
+      new Color3(1.0, 0.92, 0.95)
+    );
+
+    const buildPickupMesh = (id: string, isHeart: boolean): Mesh => {
+      if (isHeart) {
+        const leftLobe = MeshBuilder.CreateSphere(
+          `heartLobeL-${id}`,
+          { diameter: 0.44, segments: 12 },
+          scene
+        );
+        leftLobe.position.set(-0.14, 0.14, 0);
+
+        const rightLobe = MeshBuilder.CreateSphere(
+          `heartLobeR-${id}`,
+          { diameter: 0.44, segments: 12 },
+          scene
+        );
+        rightLobe.position.set(0.14, 0.14, 0);
+
+        const bottomPoint = MeshBuilder.CreateCylinder(
+          `heartTip-${id}`,
+          { diameterTop: 0.54, diameterBottom: 0.02, height: 0.48, tessellation: 16 },
+          scene
+        );
+        bottomPoint.position.set(0, -0.1, 0);
+
+        const merged =
+          Mesh.MergeMeshes([leftLobe, rightLobe, bottomPoint], true, true) ??
+          MeshBuilder.CreateSphere(`heartFallback-${id}`, { diameter: 0.6 }, scene);
+        merged.name = `heart-${id}`;
+        merged.scaling.set(1.08, 1.08, 0.58);
+        merged.metadata = { editorKind: "rupee", editorId: id, isHeart: true };
+        merged.isPickable = true;
+        return merged;
+      }
+
+      const mesh = MeshBuilder.CreatePolyhedron(
+        `rupee-${id}`,
+        { type: 1, size: 0.38 },
+        scene
+      );
+      mesh.scaling.set(0.75, 1.35, 0.55);
+      mesh.metadata = { editorKind: "rupee", editorId: id, isHeart: false };
+      mesh.isPickable = true;
+      return mesh;
+    };
 
     const buildArrowRig = (id: string, fromHero: boolean): TransformNode => {
       const node = new TransformNode(`arrow-${id}`, scene);
@@ -1564,6 +1756,24 @@ export default function BabylonCanvas() {
       tip.position.set(0, 0, 0.72);
       tip.material = fromHero ? slashMat : glowingCrimsonMat;
       tip.parent = node;
+
+      const fletchH = MeshBuilder.CreateBox(
+        `arrowFletchH-${id}`,
+        { width: 0.26, height: 0.03, depth: 0.28 },
+        scene
+      );
+      fletchH.position.set(0, 0, -0.52);
+      fletchH.material = fromHero ? slashMat : glowingCrimsonMat;
+      fletchH.parent = node;
+
+      const fletchV = MeshBuilder.CreateBox(
+        `arrowFletchV-${id}`,
+        { width: 0.03, height: 0.26, depth: 0.28 },
+        scene
+      );
+      fletchV.position.set(0, 0, -0.52);
+      fletchV.material = fromHero ? slashMat : glowingCrimsonMat;
+      fletchV.parent = node;
 
       return node;
     };
@@ -1594,10 +1804,77 @@ export default function BabylonCanvas() {
       weapon.parent = body;
 
       let chargeCorridorRoot: TransformNode | undefined;
+      let chargeCorridorBody: TransformNode | undefined;
+      let chargeCorridorTip: Mesh | undefined;
       let chargeCorridorMat: StandardMaterial | undefined;
       let lungeShieldMesh: Mesh | undefined;
       let stunStarsRoot: TransformNode | undefined;
       let archerAimLine: Mesh | undefined;
+
+      const buildCorridorRig = (corridorWidth: number, tipLength: number) => {
+        const cRoot = new TransformNode(`chargeCorridorRoot-${id}`, scene);
+        const cBody = new TransformNode(`chargeCorridorBody-${id}`, scene);
+        cBody.parent = cRoot;
+
+        const cMat = makeMat(
+          `chargeCorridorMat-${id}`,
+          new Color3(1.0, 0.36, 0.14),
+          new Color3(0.95, 0.26, 0.08),
+          new Color3(0, 0, 0),
+          0.54
+        );
+
+        const strip = MeshBuilder.CreateBox(
+          `chargeStrip-${id}`,
+          { width: corridorWidth, height: 0.04, depth: 1.0 },
+          scene
+        );
+        strip.position.set(0, 0.055, 0.5);
+        strip.material = cMat;
+        strip.isPickable = false;
+        strip.parent = cBody;
+
+        const railMat = makeMat(
+          `chargeRailMat-${id}`,
+          new Color3(1.0, 0.86, 0.26),
+          new Color3(1.0, 0.72, 0.16)
+        );
+        const railParts: Mesh[] = [];
+        const halfW = corridorWidth * 0.5;
+        for (const rx of [-halfW, halfW]) {
+          const rail = MeshBuilder.CreateBox(
+            `chargeRail-${id}-${rx}`,
+            { width: 0.1, height: 0.075, depth: 1.0 },
+            scene
+          );
+          rail.position.set(rx, 0.07, 0.5);
+          rail.isPickable = false;
+          railParts.push(rail);
+        }
+        const mergedRails = mergeGroupWithMaterial(
+          `chargeRailsMerged-${id}`,
+          railParts,
+          railMat,
+          cBody
+        );
+        if (mergedRails) mergedRails.isPickable = false;
+
+        // Forward-pointing +Z arrowhead parented directly to cRoot so scaling cBody.scaling.z never stretches the triangle!
+        const cTip = createForwardArrowheadMesh(
+          `chargeArrowTip-${id}`,
+          corridorWidth * 0.68,
+          tipLength,
+          scene
+        );
+        cTip.material = cMat;
+        cTip.parent = cRoot;
+
+        cRoot.setEnabled(false);
+        chargeCorridorRoot = cRoot;
+        chargeCorridorBody = cBody;
+        chargeCorridorTip = cTip;
+        chargeCorridorMat = cMat;
+      };
 
       if (kind === "slime") {
         const isDungeon = zone === "dungeon";
@@ -1878,154 +2155,425 @@ export default function BabylonCanvas() {
           }
           mergeGroupWithMaterial(`gobSpikes-${id}`, spikeParts, bladeMat, weapon);
 
-          // Ground Lunge Path Telegraph Corridor for Goblin Fighters
-          chargeCorridorRoot = new TransformNode(`gobChargeCorridor-${id}`, scene);
-          chargeCorridorMat = makeMat(
-            `gobChargeMat-${id}`,
-            new Color3(1.0, 0.38, 0.12),
-            new Color3(0.95, 0.28, 0.08),
-            new Color3(0, 0, 0),
-            0.55
-          );
-          const gobStrip = MeshBuilder.CreateBox(
-            `gobChargeStrip-${id}`,
-            { width: 1.25, height: 0.04, depth: 1.0 },
-            scene
-          );
-          gobStrip.position.set(0, 0.06, 0.5);
-          gobStrip.material = chargeCorridorMat;
-          gobStrip.isPickable = false;
-          gobStrip.parent = chargeCorridorRoot;
-
-          const gobTip = MeshBuilder.CreateCylinder(
-            `gobChargeTip-${id}`,
-            { diameterTop: 0.05, diameterBottom: 1.55, height: 0.32, tessellation: 3 },
-            scene
-          );
-          gobTip.rotation.x = Math.PI / 2;
-          gobTip.position.set(0, 0.07, 1.02);
-          gobTip.material = chargeCorridorMat;
-          gobTip.isPickable = false;
-          gobTip.parent = chargeCorridorRoot;
-
-          chargeCorridorRoot.setEnabled(false);
+          // Ground Lunge Path Telegraph Corridor for Goblin Fighters (with +Z aligned arrowhead!)
+          buildCorridorRig(1.25, 0.85);
         }
       } else if (kind === "knight") {
-        const armorMat = registerMat(
-          `knightMat-${id}`,
-          zone === "dungeon" ? new Color3(0.32, 0.38, 0.52) : new Color3(0.62, 0.22, 0.24),
-          new Color3(0.08, 0.04, 0.06),
-          new Color3(0.75, 0.78, 0.85),
+        // =====================================================
+        // MARIO RPG-INSPIRED HIGH-DEFINITION LOW-POLY SENTINEL KNIGHT
+        // Keeps the iconic chunky knight silhouette while adding multi-tone
+        // enameled plate, polished silver trim, gilded gold crown/crests,
+        // dark chainmail, heraldic heater shield, and glowing visor eyes!
+        // =====================================================
+        const knightPrimaryMat = registerMat(
+          `knightPrimaryMat-${id}`,
+          zone === "dungeon"
+            ? new Color3(0.22, 0.42, 0.84)
+            : zone === "frontier"
+            ? new Color3(0.16, 0.62, 0.52)
+            : new Color3(0.82, 0.16, 0.22),
+          new Color3(0.08, 0.03, 0.05),
+          new Color3(0.85, 0.88, 0.95),
           1.0,
-          64
+          72
         );
-        const armorParts: Mesh[] = [];
+        const knightSilverMat = registerMat(
+          `knightSilverMat-${id}`,
+          new Color3(0.86, 0.9, 0.96),
+          new Color3(0.08, 0.09, 0.12),
+          new Color3(1.0, 1.0, 1.0),
+          1.0,
+          96
+        );
+        const knightGoldMat = registerMat(
+          `knightGoldMat-${id}`,
+          new Color3(1.0, 0.82, 0.2),
+          new Color3(0.28, 0.18, 0.02),
+          new Color3(1.0, 0.95, 0.75),
+          1.0,
+          80
+        );
+        const knightPlumeMat = registerMat(
+          `knightPlumeMat-${id}`,
+          zone === "dungeon"
+            ? new Color3(0.95, 0.28, 0.42)
+            : new Color3(0.98, 0.22, 0.26),
+          new Color3(0.32, 0.05, 0.08)
+        );
 
-        for (const lx of [-0.28, 0.28]) {
-          const leg = MeshBuilder.CreateCylinder(
-            `knightLeg-${id}-${lx}`,
-            { diameterTop: 0.36, diameterBottom: 0.4, height: 0.65, tessellation: 12 },
+        const primaryParts: Mesh[] = [];
+        const silverParts: Mesh[] = [];
+        const goldParts: Mesh[] = [];
+        const chainmailParts: Mesh[] = [];
+        const plumeParts: Mesh[] = [];
+        const eyeParts: Mesh[] = [];
+
+        // 1. Articulated Sabatons, Greaves, Knee Poleyns & Thigh Cuisses
+        for (const lx of [-0.3, 0.3]) {
+          const sabaton = MeshBuilder.CreateBox(
+            `knightSabaton-${id}-${lx}`,
+            { width: 0.38, height: 0.22, depth: 0.56 },
             scene
           );
-          leg.position.set(lx, 0.32, 0);
-          armorParts.push(leg);
+          sabaton.position.set(lx, 0.11, 0.08);
+          silverParts.push(sabaton);
+
+          const sabatonToe = MeshBuilder.CreateCylinder(
+            `knightToe-${id}-${lx}`,
+            { diameterTop: 0.24, diameterBottom: 0.36, height: 0.2, tessellation: 12 },
+            scene
+          );
+          sabatonToe.rotation.x = Math.PI / 2;
+          sabatonToe.position.set(lx, 0.1, 0.38);
+          silverParts.push(sabatonToe);
+
+          const greave = MeshBuilder.CreateCylinder(
+            `knightGreave-${id}-${lx}`,
+            { diameterTop: 0.38, diameterBottom: 0.34, height: 0.52, tessellation: 14 },
+            scene
+          );
+          greave.position.set(lx, 0.42, 0);
+          primaryParts.push(greave);
+
+          const kneePoleyn = MeshBuilder.CreatePolyhedron(
+            `knightPoleyn-${id}-${lx}`,
+            { type: 1, size: 0.18 },
+            scene
+          );
+          kneePoleyn.scaling.set(1.15, 1.1, 0.75);
+          kneePoleyn.position.set(lx, 0.62, 0.22);
+          silverParts.push(kneePoleyn);
         }
 
+        // 2. Chainmail Hauberk Skirt & Segmented Silver Tassets / Faulds
+        const mailSkirt = MeshBuilder.CreateCylinder(
+          `knightMailSkirt-${id}`,
+          { diameterTop: 0.88, diameterBottom: 1.02, height: 0.38, tessellation: 16 },
+          scene
+        );
+        mailSkirt.position.set(0, 0.68, 0);
+        chainmailParts.push(mailSkirt);
+
+        const waistFauld = MeshBuilder.CreateCylinder(
+          `knightWaistFauld-${id}`,
+          { diameterTop: 0.94, diameterBottom: 1.08, height: 0.22, tessellation: 16 },
+          scene
+        );
+        waistFauld.scaling.set(1.06, 1.0, 0.86);
+        waistFauld.position.set(0, 0.84, 0);
+        silverParts.push(waistFauld);
+
+        // Golden Royal Belt & Buckle
+        const belt = MeshBuilder.CreateCylinder(
+          `knightBelt-${id}`,
+          { diameterTop: 0.98, diameterBottom: 0.98, height: 0.12, tessellation: 16 },
+          scene
+        );
+        belt.scaling.set(1.07, 1.0, 0.87);
+        belt.position.set(0, 0.94, 0);
+        goldParts.push(belt);
+
+        const beltBuckle = MeshBuilder.CreateBox(
+          `knightBuckle-${id}`,
+          { width: 0.28, height: 0.22, depth: 0.12 },
+          scene
+        );
+        beltBuckle.position.set(0, 0.94, 0.42);
+        goldParts.push(beltBuckle);
+
+        // 3. Broad Barrel Cuirass + Silver Plackart V-Guard + Gilded Sun Emblem
         const cuirass = MeshBuilder.CreateCylinder(
           `knightCuirass-${id}`,
-          { diameterTop: 1.24, diameterBottom: 0.88, height: 1.15, tessellation: 14 },
+          { diameterTop: 1.32, diameterBottom: 0.94, height: 0.88, tessellation: 18 },
           scene
         );
-        cuirass.scaling.set(1.08, 1.0, 0.82);
-        cuirass.position.set(0, 1.12, 0);
-        armorParts.push(cuirass);
+        cuirass.scaling.set(1.08, 1.0, 0.84);
+        cuirass.position.set(0, 1.32, 0);
+        primaryParts.push(cuirass);
 
-        for (const px of [-0.72, 0.72]) {
+        const plackart = MeshBuilder.CreateCylinder(
+          `knightPlackart-${id}`,
+          { diameterTop: 1.18, diameterBottom: 0.86, height: 0.52, tessellation: 12 },
+          scene
+        );
+        plackart.scaling.set(1.04, 1.0, 0.88);
+        plackart.position.set(0, 1.18, 0.04);
+        silverParts.push(plackart);
+
+        const chestEmblem = MeshBuilder.CreatePolyhedron(
+          `knightChestEmblem-${id}`,
+          { type: 1, size: 0.22 },
+          scene
+        );
+        chestEmblem.scaling.set(1.15, 1.35, 0.55);
+        chestEmblem.position.set(0, 1.42, 0.52);
+        goldParts.push(chestEmblem);
+
+        // Flowing Heraldic Back Mantle Cape
+        const cape = MeshBuilder.CreateBox(
+          `knightCape-${id}`,
+          { width: 1.18, height: 1.28, depth: 0.1 },
+          scene
+        );
+        cape.position.set(0, 1.12, -0.48);
+        cape.rotation.x = 0.2;
+        plumeParts.push(cape);
+
+        // 4. Layered Spherical Pauldrons with Silver Rims, Gold Spikes & Armored Gauntlets
+        for (const side of [-1, 1]) {
+          const px = side * 0.76;
           const pauldron = MeshBuilder.CreateSphere(
-            `knightPauldron-${id}-${px}`,
-            { diameter: 0.62, segments: 12 },
+            `knightPauldron-${id}-${side}`,
+            { diameter: 0.68, segments: 16 },
             scene
           );
-          pauldron.scaling.set(1.1, 0.85, 1.0);
-          pauldron.position.set(px, 1.52, 0);
-          armorParts.push(pauldron);
+          pauldron.scaling.set(1.14, 0.9, 1.04);
+          pauldron.position.set(px, 1.58, 0);
+          primaryParts.push(pauldron);
+
+          const pauldronRim = MeshBuilder.CreateTorus(
+            `knightPauldronRim-${id}-${side}`,
+            { diameter: 0.66, thickness: 0.09, tessellation: 18 },
+            scene
+          );
+          pauldronRim.rotation.z = -side * 0.35;
+          pauldronRim.position.set(px, 1.48, 0);
+          silverParts.push(pauldronRim);
+
+          const pauldronSpike = MeshBuilder.CreateCylinder(
+            `knightPauldronSpike-${id}-${side}`,
+            { diameterTop: 0.02, diameterBottom: 0.18, height: 0.34, tessellation: 10 },
+            scene
+          );
+          pauldronSpike.position.set(px + side * 0.18, 1.84, 0);
+          pauldronSpike.rotation.z = -side * 0.52;
+          goldParts.push(pauldronSpike);
+
+          const upperArm = MeshBuilder.CreateCylinder(
+            `knightArm-${id}-${side}`,
+            { diameterTop: 0.28, diameterBottom: 0.24, height: 0.48, tessellation: 12 },
+            scene
+          );
+          upperArm.position.set(px, 1.24, 0.1);
+          chainmailParts.push(upperArm);
+
+          const gauntlet = MeshBuilder.CreateCylinder(
+            `knightGauntlet-${id}-${side}`,
+            { diameterTop: 0.3, diameterBottom: 0.34, height: 0.38, tessellation: 12 },
+            scene
+          );
+          gauntlet.rotation.x = Math.PI / 3;
+          gauntlet.position.set(px, 1.06, 0.26);
+          silverParts.push(gauntlet);
         }
 
-        const helm = MeshBuilder.CreateCylinder(
-          `knightHelm-${id}`,
-          { diameterTop: 0.72, diameterBottom: 0.82, height: 0.78, tessellation: 14 },
+        // 5. Armored Gorget, Great-Helm, Sculpted Silver Bevor Faceplate, Gilded Crown & Glowing Visor Eyes
+        const gorget = MeshBuilder.CreateCylinder(
+          `knightGorget-${id}`,
+          { diameterTop: 0.82, diameterBottom: 0.96, height: 0.2, tessellation: 16 },
           scene
         );
-        helm.position.set(0, 1.98, 0);
-        armorParts.push(helm);
+        gorget.position.set(0, 1.78, 0);
+        silverParts.push(gorget);
+
+        const helmBarrel = MeshBuilder.CreateCylinder(
+          `knightHelm-${id}`,
+          { diameterTop: 0.76, diameterBottom: 0.84, height: 0.68, tessellation: 18 },
+          scene
+        );
+        helmBarrel.position.set(0, 2.1, 0);
+        primaryParts.push(helmBarrel);
 
         const helmDome = MeshBuilder.CreateSphere(
           `knightHelmDome-${id}`,
-          { diameter: 0.74, segments: 12 },
+          { diameter: 0.78, segments: 16 },
           scene
         );
-        helmDome.position.set(0, 2.32, 0);
-        armorParts.push(helmDome);
+        helmDome.scaling.set(1.0, 0.88, 1.0);
+        helmDome.position.set(0, 2.4, 0);
+        primaryParts.push(helmDome);
 
-        const knightShield = MeshBuilder.CreateBox(
-          `knightShield-${id}`,
-          { width: 0.18, height: 1.18, depth: 0.78 },
+        // Silver V-Bevor Lower Faceguard & Brow Visor Ridge
+        const bevorGuard = MeshBuilder.CreateCylinder(
+          `knightBevor-${id}`,
+          { diameterTop: 0.82, diameterBottom: 0.74, height: 0.36, tessellation: 12 },
           scene
         );
-        knightShield.position.set(-0.78, 1.12, 0.25);
-        knightShield.rotation.y = -0.22;
-        armorParts.push(knightShield);
+        bevorGuard.position.set(0, 1.94, 0.08);
+        silverParts.push(bevorGuard);
 
-        mergeGroupWithMaterial(`knightArmorMerged-${id}`, armorParts, armorMat, body);
-
-        const crimsonParts: Mesh[] = [];
-        const visorSlit = MeshBuilder.CreateBox(
-          `knightVisor-${id}`,
-          { width: 0.52, height: 0.1, depth: 0.16 },
+        const browRidge = MeshBuilder.CreateBox(
+          `knightBrow-${id}`,
+          { width: 0.66, height: 0.1, depth: 0.24 },
           scene
         );
-        visorSlit.position.set(0, 2.04, 0.36);
-        crimsonParts.push(visorSlit);
+        browRidge.position.set(0, 2.22, 0.34);
+        silverParts.push(browRidge);
 
-        const plume = MeshBuilder.CreateCylinder(
-          `knightPlume-${id}`,
-          { diameterTop: 0.08, diameterBottom: 0.42, height: 0.75, tessellation: 10 },
+        // Deep Dark Visor Recess + Glowing Mario-RPG Amber Eyes Inside!
+        const visorRecess = MeshBuilder.CreateBox(
+          `knightVisorRecess-${id}`,
+          { width: 0.58, height: 0.16, depth: 0.18 },
           scene
         );
-        plume.position.set(0, 2.68, -0.18);
-        plume.rotation.x = -0.55;
-        crimsonParts.push(plume);
-        mergeGroupWithMaterial(`knightCrimsonMerged-${id}`, crimsonParts, glowingCrimsonMat, body);
+        visorRecess.position.set(0, 2.13, 0.34);
+        chainmailParts.push(visorRecess);
 
-        const halberdParts: Mesh[] = [];
+        for (const ex of [-0.14, 0.14]) {
+          const visorEye = MeshBuilder.CreateSphere(
+            `knightEye-${id}-${ex}`,
+            { diameter: 0.13, segments: 10 },
+            scene
+          );
+          visorEye.scaling.set(1.2, 0.85, 0.6);
+          visorEye.position.set(ex, 2.13, 0.42);
+          eyeParts.push(visorEye);
+        }
+
+        // Gilded Royal Crown Circlet + 4 Crown Peaks atop the Helmet
+        const crownBand = MeshBuilder.CreateTorus(
+          `knightCrownBand-${id}`,
+          { diameter: 0.78, thickness: 0.08, tessellation: 20 },
+          scene
+        );
+        crownBand.position.set(0, 2.38, 0);
+        goldParts.push(crownBand);
+
+        for (let c = 0; c < 4; c++) {
+          const ca = (c / 4) * Math.PI * 2;
+          const peak = MeshBuilder.CreatePolyhedron(
+            `knightCrownPeak-${id}-${c}`,
+            { type: 1, size: 0.11 },
+            scene
+          );
+          peak.scaling.set(0.8, 1.45, 0.8);
+          peak.position.set(Math.sin(ca) * 0.37, 2.48, Math.cos(ca) * 0.37);
+          goldParts.push(peak);
+        }
+
+        // Ornate Golden Plume Holder + Sweeping Two-Tone Plume Crest
+        const plumeSocket = MeshBuilder.CreateCylinder(
+          `knightPlumeSocket-${id}`,
+          { diameterTop: 0.22, diameterBottom: 0.16, height: 0.22, tessellation: 10 },
+          scene
+        );
+        plumeSocket.position.set(0, 2.66, -0.04);
+        goldParts.push(plumeSocket);
+
+        const mainPlume = MeshBuilder.CreateCylinder(
+          `knightPlumeMain-${id}`,
+          { diameterTop: 0.12, diameterBottom: 0.46, height: 0.82, tessellation: 12 },
+          scene
+        );
+        mainPlume.position.set(0, 2.86, -0.24);
+        mainPlume.rotation.x = -0.62;
+        plumeParts.push(mainPlume);
+
+        const plumeTail = MeshBuilder.CreateSphere(
+          `knightPlumeTail-${id}`,
+          { diameter: 0.38, segments: 12 },
+          scene
+        );
+        plumeTail.scaling.set(0.65, 1.35, 1.1);
+        plumeTail.position.set(0, 2.68, -0.56);
+        plumeTail.rotation.x = 0.5;
+        goldParts.push(plumeTail);
+
+        // 6. Heraldic Heater Shield (Silver Frame, Primary Enamel Face, Gold Sun Boss & Corner Studs)
+        const shieldFrame = MeshBuilder.CreateBox(
+          `knightShieldFrame-${id}`,
+          { width: 0.16, height: 1.26, depth: 0.88 },
+          scene
+        );
+        shieldFrame.position.set(-0.84, 1.16, 0.28);
+        shieldFrame.rotation.y = -0.25;
+        silverParts.push(shieldFrame);
+
+        const shieldFace = MeshBuilder.CreateBox(
+          `knightShieldFace-${id}`,
+          { width: 0.19, height: 1.06, depth: 0.7 },
+          scene
+        );
+        shieldFace.position.set(-0.86, 1.16, 0.28);
+        shieldFace.rotation.y = -0.25;
+        primaryParts.push(shieldFace);
+
+        const shieldBoss = MeshBuilder.CreatePolyhedron(
+          `knightShieldBoss-${id}`,
+          { type: 1, size: 0.22 },
+          scene
+        );
+        shieldBoss.scaling.set(0.55, 1.25, 1.05);
+        shieldBoss.position.set(-0.95, 1.18, 0.31);
+        shieldBoss.rotation.y = -0.25;
+        goldParts.push(shieldBoss);
+
+        // Merge Knight body groups by material to keep draw calls minimal!
+        mergeGroupWithMaterial(`knightPrimaryMerged-${id}`, primaryParts, knightPrimaryMat, body);
+        mergeGroupWithMaterial(`knightSilverMerged-${id}`, silverParts, knightSilverMat, body);
+        mergeGroupWithMaterial(`knightGoldMerged-${id}`, goldParts, knightGoldMat, body);
+        mergeGroupWithMaterial(`knightChainmailMerged-${id}`, chainmailParts, darkObsidianMat, body);
+        mergeGroupWithMaterial(`knightPlumeMerged-${id}`, plumeParts, knightPlumeMat, body);
+        mergeGroupWithMaterial(`knightEyesMerged-${id}`, eyeParts, glowingYellowEyeMat, body);
+
+        // 7. Ornate Royal Halberd on `weapon` Pivot
+        const halberdSilverParts: Mesh[] = [];
+        const halberdGoldParts: Mesh[] = [];
+
         const shaft = MeshBuilder.CreateCylinder(
           `halberdShaft-${id}`,
-          { diameter: 0.12, height: 2.35, tessellation: 10 },
+          { diameter: 0.13, height: 2.45, tessellation: 12 },
           scene
         );
         shaft.rotation.x = Math.PI / 2;
-        shaft.position.set(0.75, 1.08, 0.65);
-        halberdParts.push(shaft);
+        shaft.position.set(0.8, 1.1, 0.68);
+        shaft.material = darkObsidianMat;
+        shaft.parent = weapon;
+
+        for (const gz of [0.25, 1.15, 1.68]) {
+          const ring = MeshBuilder.CreateTorus(
+            `halberdRing-${id}-${gz}`,
+            { diameter: 0.22, thickness: 0.06, tessellation: 14 },
+            scene
+          );
+          ring.rotation.x = Math.PI / 2;
+          ring.position.set(0.8, 1.1, gz);
+          halberdGoldParts.push(ring);
+        }
 
         const axeHead = MeshBuilder.CreateCylinder(
           `halberdAxe-${id}`,
-          { diameterTop: 0.75, diameterBottom: 0.15, height: 0.08, tessellation: 12 },
+          { diameterTop: 0.88, diameterBottom: 0.22, height: 0.1, tessellation: 16 },
           scene
         );
         axeHead.rotation.z = Math.PI / 2;
-        axeHead.position.set(0.75, 1.25, 1.45);
-        halberdParts.push(axeHead);
+        axeHead.scaling.set(1.15, 1.0, 0.72);
+        axeHead.position.set(0.8, 1.32, 1.48);
+        halberdSilverParts.push(axeHead);
+
+        const rearSpike = MeshBuilder.CreateCylinder(
+          `halberdRearSpike-${id}`,
+          { diameterTop: 0.02, diameterBottom: 0.16, height: 0.36, tessellation: 10 },
+          scene
+        );
+        rearSpike.position.set(0.8, 0.88, 1.48);
+        rearSpike.rotation.x = Math.PI;
+        halberdSilverParts.push(rearSpike);
 
         const spearTip = MeshBuilder.CreateCylinder(
           `halberdTip-${id}`,
-          { diameterTop: 0.02, diameterBottom: 0.22, height: 0.52, tessellation: 10 },
+          { diameterTop: 0.02, diameterBottom: 0.25, height: 0.62, tessellation: 12 },
           scene
         );
         spearTip.rotation.x = Math.PI / 2;
-        spearTip.position.set(0.75, 1.08, 1.95);
-        halberdParts.push(spearTip);
+        spearTip.position.set(0.8, 1.1, 2.04);
+        halberdSilverParts.push(spearTip);
 
-        mergeGroupWithMaterial(`knightHalberd-${id}`, halberdParts, bladeMat, weapon);
+        mergeGroupWithMaterial(`knightHalberdSilver-${id}`, halberdSilverParts, bladeMat, weapon);
+        mergeGroupWithMaterial(`knightHalberdGold-${id}`, halberdGoldParts, knightGoldMat, weapon);
+
+        // Ground Lunge Path Telegraph Corridor for Sentinel Knights (with +Z aligned arrowhead!)
+        buildCorridorRig(1.48, 0.95);
       } else if (kind === "minion") {
         const minionMat = registerMat(
           `minionMat-${id}`,
@@ -2260,40 +2808,8 @@ export default function BabylonCanvas() {
 
         mergeGroupWithMaterial(`bossGreataxeMerged-${id}`, axeParts, goldKeyMat, weapon);
 
-        chargeCorridorRoot = new TransformNode(`bossChargeCorridor-${id}`, scene);
-        chargeCorridorMat = makeMat(
-          `bossChargeCorridorMat-${id}`,
-          new Color3(1.0, 0.35, 0.15),
-          new Color3(0.95, 0.25, 0.1),
-          new Color3(0, 0, 0),
-          0.52
-        );
-        const corridorFill = MeshBuilder.CreateBox(
-          `bossCorridorFill-${id}`,
-          { width: 2.7, height: 0.05, depth: 1.0 },
-          scene
-        );
-        corridorFill.position.set(0, 0.06, 0.5);
-        corridorFill.material = chargeCorridorMat;
-        corridorFill.parent = chargeCorridorRoot;
-
-        const railMat = makeMat(
-          `bossCorridorRailMat-${id}`,
-          new Color3(1.0, 0.85, 0.25),
-          new Color3(1.0, 0.7, 0.15)
-        );
-        const railParts: Mesh[] = [];
-        for (const rx of [-1.35, 1.35]) {
-          const sideRail = MeshBuilder.CreateBox(
-            `bossCorridorRail-${id}-${rx}`,
-            { width: 0.14, height: 0.09, depth: 1.0 },
-            scene
-          );
-          sideRail.position.set(rx, 0.08, 0.5);
-          railParts.push(sideRail);
-        }
-        mergeGroupWithMaterial(`bossCorridorRails-${id}`, railParts, railMat, chargeCorridorRoot);
-        chargeCorridorRoot.setEnabled(false);
+        // Ground Lunge Path Telegraph Corridor for Boss Malakor (with +Z aligned arrowhead!)
+        buildCorridorRig(2.7, 1.35);
 
         lungeShieldMesh = MeshBuilder.CreateSphere(
           `bossLungeShield-${id}`,
@@ -2310,30 +2826,45 @@ export default function BabylonCanvas() {
         );
         lungeShieldMesh.parent = root;
         lungeShieldMesh.setEnabled(false);
+      }
 
-        stunStarsRoot = new TransformNode(`bossStunStars-${id}`, scene);
-        stunStarsRoot.position.set(0, 4.35, 0);
+      // Overhead Spinning Stun Stars for Boss & Charging Monsters when they crash into a wall/obstacle!
+      if (kind !== "archer") {
+        const starY =
+          kind === "boss" ? 4.35 : kind === "knight" ? 2.95 : kind === "goblin" ? 2.18 : 1.95;
+        const starOrbitRad = kind === "boss" ? 1.25 : kind === "knight" ? 0.82 : 0.68;
+        const starSize = kind === "boss" ? 0.3 : 0.2;
+
+        stunStarsRoot = new TransformNode(`stunStars-${id}`, scene);
+        stunStarsRoot.position.set(0, starY, 0);
         stunStarsRoot.parent = root;
         const starParts: Mesh[] = [];
         for (let s = 0; s < 4; s++) {
           const angle = (s / 4) * Math.PI * 2;
           const star = MeshBuilder.CreatePolyhedron(
             `stunStar-${id}-${s}`,
-            { type: 1, size: 0.3 },
+            { type: 1, size: starSize },
             scene
           );
-          star.position.set(Math.cos(angle) * 1.25, 0, Math.sin(angle) * 1.25);
+          star.position.set(Math.cos(angle) * starOrbitRad, 0, Math.sin(angle) * starOrbitRad);
+          star.isPickable = false;
           starParts.push(star);
         }
-        mergeGroupWithMaterial(`bossStunStarsMerged-${id}`, starParts, goldKeyMat, stunStarsRoot);
+        const mergedStars = mergeGroupWithMaterial(
+          `stunStarsMerged-${id}`,
+          starParts,
+          goldKeyMat,
+          stunStarsRoot
+        );
+        if (mergedStars) mergedStars.isPickable = false;
         stunStarsRoot.setEnabled(false);
       }
 
       const telegraphRing = MeshBuilder.CreateTorus(
         `telegraph-${id}`,
         {
-          diameter: kind === "boss" ? 4.6 : 2.1,
-          thickness: kind === "boss" ? 0.18 : 0.1,
+          diameter: kind === "boss" ? 4.6 : kind === "knight" ? 2.5 : 2.1,
+          thickness: kind === "boss" ? 0.18 : 0.11,
           tessellation: 28,
         },
         scene
@@ -2346,7 +2877,7 @@ export default function BabylonCanvas() {
       );
       telegraphRing.parent = root;
 
-      const barY = kind === "boss" ? 4.85 : kind === "knight" ? 2.95 : 2.25;
+      const barY = kind === "boss" ? 4.85 : kind === "knight" ? 3.2 : 2.25;
       const barW = kind === "boss" ? 2.8 : 1.25;
       const hpBarHolder = new TransformNode(`hpHolder-${id}`, scene);
       hpBarHolder.rotation.set(-0.72, 0, 0);
@@ -2386,6 +2917,8 @@ export default function BabylonCanvas() {
         materials,
         baseColors,
         chargeCorridorRoot,
+        chargeCorridorBody,
+        chargeCorridorTip,
         chargeCorridorMat,
         lungeShieldMesh,
         stunStarsRoot,
@@ -2625,7 +3158,12 @@ export default function BabylonCanvas() {
 
     const pickGroundPoint = (): { x: number; z: number } | null => {
       const snap = useGameStore.getState();
-      const targetGround = snap.zone === "overworld" ? owGround : dgGround;
+      const targetGround =
+        snap.zone === "overworld"
+          ? owGround
+          : snap.zone === "frontier"
+          ? frGround
+          : dgGround;
       const pick = scene.pick(
         scene.pointerX,
         scene.pointerY,
@@ -2853,8 +3391,8 @@ export default function BabylonCanvas() {
           const panSpeed = 24.0 * dt;
           const forwardX = -Math.cos(camera.alpha);
           const forwardZ = -Math.sin(camera.alpha);
-          const rightX = Math.sin(camera.alpha);
-          const rightZ = -Math.cos(camera.alpha);
+          const rightX = -Math.sin(camera.alpha);
+          const rightZ = Math.cos(camera.alpha);
           camera.target.x = Math.max(
             -42,
             Math.min(42, camera.target.x + (forwardX * moveZ + rightX * moveX) * panSpeed)
@@ -2905,17 +3443,26 @@ export default function BabylonCanvas() {
         syncedTerrainRevision = snap.terrainRevision;
         applyTerrainCellsToGroundMesh(owGround, owBaseColor, snap.terrainCells.overworld);
         applyTerrainCellsToGroundMesh(dgGround, dgBaseColor, snap.terrainCells.dungeon);
+        applyTerrainCellsToGroundMesh(frGround, frBaseColor, snap.terrainCells.frontier ?? {});
       }
 
       // 1. Zone visibility & lighting atmosphere
       const isOverworld = snap.zone === "overworld";
+      const isDungeon = snap.zone === "dungeon";
+      const isFrontier = snap.zone === "frontier";
       overworldRoot.setEnabled(isOverworld);
-      dungeonRoot.setEnabled(!isOverworld);
+      dungeonRoot.setEnabled(isDungeon);
+      frontierRoot.setEnabled(isFrontier);
 
       if (isOverworld) {
         scene.clearColor.set(0.08, 0.16, 0.11, 1);
         hemiLight.intensity = 0.92;
         dirLight.intensity = 0.76;
+        sanctumPointLight.intensity = 0;
+      } else if (isFrontier) {
+        scene.clearColor.set(0.06, 0.14, 0.12, 1);
+        hemiLight.intensity = 0.88;
+        dirLight.intensity = 0.74;
         sanctumPointLight.intensity = 0;
       } else {
         scene.clearColor.set(0.05, 0.05, 0.09, 1);
@@ -2992,22 +3539,28 @@ export default function BabylonCanvas() {
       // 4. Sync Hero 3D Model, Shield Block Posture & Sword Swing
       const stride = Math.sin(snap.hero.walkCycle);
       const heroGroundY = sampleTerrainHeight(activeCells, snap.hero.x, snap.hero.z);
+      const kbLock = snap.hero.knockbackLockTimer ?? 0;
+      const launchProgress = kbLock > 0 ? 1 - Math.min(1, kbLock / 0.65) : 0;
+      const launchArcY = kbLock > 0 ? Math.sin(launchProgress * Math.PI) * 1.15 : 0;
+
       heroRoot.position.set(
         snap.hero.x,
-        heroGroundY + Math.abs(stride) * 0.11,
+        heroGroundY + (kbLock > 0 ? launchArcY : Math.abs(stride) * 0.11),
         snap.hero.z
       );
       heroRoot.rotation.y = snap.hero.facing;
-      heroLeftBoot.position.z = stride * 0.22;
-      heroRightBoot.position.z = -stride * 0.22;
+      heroRoot.rotation.x = kbLock > 0 ? -Math.sin(launchProgress * Math.PI) * 0.42 : 0;
+      heroLeftBoot.position.z = kbLock > 0 ? 0.16 : stride * 0.22;
+      heroRightBoot.position.z = kbLock > 0 ? -0.16 : -stride * 0.22;
 
+      const heroHurtTimer = snap.hero.hurtFlashTimer ?? 0;
       const heroBlinkHide =
         !snap.editorMode &&
-        snap.hero.invulnerableTimer > 0 &&
-        Math.floor(snap.hero.invulnerableTimer * 18) % 2 === 0;
+        heroHurtTimer > 0 &&
+        Math.floor(heroHurtTimer * 18) % 2 === 0;
       heroRoot.setEnabled(!heroBlinkHide);
 
-      if (snap.hero.isBlocking) {
+      if (snap.hero.isBlocking || kbLock > 0) {
         heroShieldPivot.position.set(0, 0.96, 0.56);
         heroShieldPivot.rotation.y = Math.PI / 2;
         heroBlockWard.setEnabled(true);
@@ -3017,7 +3570,12 @@ export default function BabylonCanvas() {
         heroBlockWard.setEnabled(false);
       }
 
-      if (snap.hero.isAttacking) {
+      const isBowPose = (snap.hero.bowAnimTimer ?? 0) > 0;
+      const isThrowPose = (snap.hero.throwAnimTimer ?? 0) > 0;
+      heroBowNode.setEnabled(isBowPose);
+      swordPivot.setEnabled(!isBowPose && !isThrowPose);
+
+      if (snap.hero.isAttacking && !isBowPose && !isThrowPose) {
         const progress = 1 - snap.hero.attackTimer / 0.24;
         swordPivot.rotation.y = -1.25 + progress * 2.5;
         slashArc.setEnabled(true);
@@ -3035,41 +3593,6 @@ export default function BabylonCanvas() {
       } else {
         boomerangNode.setEnabled(false);
       }
-
-      // Sync 3D Arrows (Hero & Goblin Archer — including arrows stuck into walls!)
-      const activeArrowIds = new Set<string>();
-      for (const arrow of snap.arrows) {
-        activeArrowIds.add(arrow.id);
-        let aRig = arrowRigs.get(arrow.id);
-        if (!aRig) {
-          aRig = buildArrowRig(arrow.id, arrow.fromHero);
-          arrowRigs.set(arrow.id, aRig);
-        }
-        const showArrow = arrow.zone === snap.zone;
-        aRig.setEnabled(showArrow);
-        if (showArrow) {
-          const aGroundY = sampleTerrainHeight(activeCells, arrow.x, arrow.z);
-          aRig.position.set(arrow.x, aGroundY + 1.0, arrow.z);
-          aRig.rotation.y = arrow.angle;
-          if (arrow.stuck) {
-            const st = arrow.stuckTimer ?? 0;
-            // Subtle impact vibration right after sticking into a wall
-            const vib = st > 2.12 ? Math.sin(t * 72) * 0.085 * ((st - 2.12) / 0.28) : 0;
-            aRig.rotation.x = vib;
-            // Smooth shrink-out in the final 0.45s before disappearing
-            const scaleFade = st < 0.45 ? Math.max(0.01, st / 0.45) : 1.0;
-            aRig.scaling.setAll(scaleFade);
-          } else {
-            aRig.rotation.x = 0;
-            aRig.scaling.setAll(1.0);
-          }
-        }
-      }
-      arrowRigs.forEach((aRig, id) => {
-        if (!activeArrowIds.has(id)) {
-          aRig.setEnabled(false);
-        }
-      });
 
       // 5. Camera Follow in Play Mode vs Free Orbit in Editor Mode
       if (!snap.editorMode) {
@@ -3089,7 +3612,7 @@ export default function BabylonCanvas() {
         }
       }
 
-      // 6. Sync Sanctum Key, Gate & Boss Chest
+      // 6. Sync Sanctum Key, Gate, Northern Frontier Exit Gate & Boss Chest
       keyNode.setEnabled(isOverworld && !snap.flags.keyPickedUp);
       keyBeaconRing.setEnabled(isOverworld && !snap.flags.keyPickedUp);
       if (!snap.flags.keyPickedUp) {
@@ -3097,9 +3620,17 @@ export default function BabylonCanvas() {
         keyNode.position.y = 1.6 + Math.sin(t * 3.2) * 0.2;
       }
 
-      const targetGateY = snap.flags.gateUnlocked ? -4.8 : 0;
+      const isGateOpen =
+        snap.flags.gateUnlocked &&
+        (!snap.flags.bossAwakened || snap.flags.bossDefeated);
+      const targetGateY = isGateOpen ? -4.8 : 0;
       lockedGateNode.position.y +=
-        (targetGateY - lockedGateNode.position.y) * Math.min(1, dt * 6);
+        (targetGateY - lockedGateNode.position.y) *
+        Math.min(1, dt * (isGateOpen ? 6 : 26));
+
+      const targetExitGateY = snap.flags.bossDefeated ? -5.0 : 0;
+      bossExitGateNode.position.y +=
+        (targetExitGateY - bossExitGateNode.position.y) * Math.min(1, dt * 6);
 
       chestSealRing.setEnabled(!snap.flags.bossDefeated);
       chestSealRing.rotation.y = t * 1.8;
@@ -3133,6 +3664,7 @@ export default function BabylonCanvas() {
         if (!visible) {
           if (rig.chargeCorridorRoot) rig.chargeCorridorRoot.setEnabled(false);
           if (rig.archerAimLine) rig.archerAimLine.setEnabled(false);
+          if (rig.stunStarsRoot) rig.stunStarsRoot.setEnabled(false);
           continue;
         }
 
@@ -3166,33 +3698,56 @@ export default function BabylonCanvas() {
           rig.archerAimLine.setEnabled(enemy.state === "windup");
         }
 
-        if (enemy.kind === "goblin") {
-          const showGoblinCorridor = enemy.state === "windup";
-          if (rig.chargeCorridorRoot && rig.chargeCorridorMat) {
-            rig.chargeCorridorRoot.setEnabled(showGoblinCorridor);
-            if (showGoblinCorridor) {
+        if (enemy.kind === "goblin" || enemy.kind === "knight") {
+          const showCorridor = enemy.state === "windup";
+          if (
+            rig.chargeCorridorRoot &&
+            rig.chargeCorridorBody &&
+            rig.chargeCorridorTip &&
+            rig.chargeCorridorMat
+          ) {
+            rig.chargeCorridorRoot.setEnabled(showCorridor);
+            if (showCorridor) {
+              const pathLen = Math.max(
+                2.0,
+                enemy.chargePathLength || (enemy.kind === "knight" ? 5.2 : 4.5)
+              );
+              const tipLen = enemy.kind === "knight" ? 0.95 : 0.85;
+              const bodyLen = Math.max(0.6, pathLen - tipLen * 0.5);
+
               rig.chargeCorridorRoot.position.set(enemy.x, enemyGroundY, enemy.z);
               rig.chargeCorridorRoot.rotation.y = enemy.chargeAngle;
-              rig.chargeCorridorRoot.scaling.z = Math.max(2.5, enemy.chargePathLength || 4.0);
-              const lockedAim = enemy.stateTimer <= 0.56;
+              rig.chargeCorridorBody.scaling.z = bodyLen;
+              rig.chargeCorridorTip.position.z = bodyLen;
+
+              const lockThreshold = enemy.kind === "knight" ? 0.68 : 0.64;
+              const lockedAim = enemy.stateTimer <= lockThreshold;
               const pulse = Math.floor(t * 15) % 2 === 0;
               rig.chargeCorridorMat.emissiveColor.set(
                 lockedAim && pulse ? 1.0 : 0.95,
                 lockedAim && pulse ? 0.78 : 0.28,
                 lockedAim && pulse ? 0.25 : 0.08
               );
-              rig.chargeCorridorMat.alpha = lockedAim ? 0.68 : 0.45;
+              rig.chargeCorridorMat.alpha = lockedAim ? 0.7 : 0.46;
             }
           }
         } else if (enemy.kind === "boss") {
           const showCorridor =
             enemy.state === "charge_aim" || enemy.state === "charge_lock";
-          if (rig.chargeCorridorRoot && rig.chargeCorridorMat) {
+          if (
+            rig.chargeCorridorRoot &&
+            rig.chargeCorridorBody &&
+            rig.chargeCorridorTip &&
+            rig.chargeCorridorMat
+          ) {
             rig.chargeCorridorRoot.setEnabled(showCorridor);
             if (showCorridor) {
+              const pathLen = Math.max(2.0, enemy.chargePathLength || 10.0);
+              const bodyLen = Math.max(1.0, pathLen - 0.7);
               rig.chargeCorridorRoot.position.set(enemy.x, enemyGroundY, enemy.z);
               rig.chargeCorridorRoot.rotation.y = enemy.chargeAngle;
-              rig.chargeCorridorRoot.scaling.z = Math.max(1, enemy.chargePathLength);
+              rig.chargeCorridorBody.scaling.z = bodyLen;
+              rig.chargeCorridorTip.position.z = bodyLen;
 
               if (enemy.state === "charge_lock") {
                 const pulse = Math.floor(t * 16) % 2 === 0;
@@ -3212,16 +3767,17 @@ export default function BabylonCanvas() {
           if (rig.lungeShieldMesh) {
             rig.lungeShieldMesh.setEnabled(enemy.state === "charge_lunge");
           }
+        }
 
-          if (rig.stunStarsRoot) {
-            const isStunned = enemy.state === "stunned";
-            rig.stunStarsRoot.setEnabled(isStunned);
-            if (isStunned) {
-              rig.stunStarsRoot.rotation.y = t * 5.5;
-              rig.body.rotation.x = 0.25;
-            } else {
-              rig.body.rotation.x = 0;
-            }
+        // Sync spinning overhead stun stars & dizzy forward tilt for ANY monster stunned by crashing into a wall!
+        if (rig.stunStarsRoot) {
+          const isStunned = enemy.state === "stunned";
+          rig.stunStarsRoot.setEnabled(isStunned);
+          if (isStunned) {
+            rig.stunStarsRoot.rotation.y = t * 5.8;
+            rig.body.rotation.x = 0.24;
+          } else {
+            rig.body.rotation.x = 0;
           }
         }
 
@@ -3267,6 +3823,112 @@ export default function BabylonCanvas() {
           rig.hpBarHolder.setEnabled(false);
           if (rig.chargeCorridorRoot) rig.chargeCorridorRoot.setEnabled(false);
           if (rig.archerAimLine) rig.archerAimLine.setEnabled(false);
+        }
+      });
+
+      // 7b. Sync 3D Arrows (Hero & Goblin Archer — including arrows stuck into walls, enemies & the Hero's Shield!)
+      const activeArrowIds = new Set<string>();
+      for (const arrow of snap.arrows) {
+        let aRig = arrowRigs.get(arrow.id);
+        if (!aRig) {
+          aRig = buildArrowRig(arrow.id, arrow.fromHero);
+          arrowRigs.set(arrow.id, aRig);
+        }
+
+        if (arrow.zone !== snap.zone && !arrow.stuckInShield) {
+          aRig.setEnabled(false);
+          continue;
+        }
+
+        if (arrow.stuck && arrow.stuckInShield) {
+          activeArrowIds.add(arrow.id);
+          aRig.setEnabled(true);
+          if (aRig.parent !== heroShieldPivot) {
+            aRig.parent = heroShieldPivot;
+          }
+
+          const ry = Math.PI / 2 + (arrow.stuckShieldYaw ?? 0);
+          const embedDepth = 0.6;
+          const sy = arrow.stuckShieldY ?? 0;
+          const sz = arrow.stuckShieldZ ?? 0;
+          aRig.position.set(
+            -0.06 - Math.sin(ry) * embedDepth,
+            sy,
+            sz - Math.cos(ry) * embedDepth
+          );
+
+          const st = arrow.stuckTimer ?? 0;
+          const vib = st > 4.22 ? Math.sin(t * 72) * 0.085 * ((st - 4.22) / 0.28) : 0;
+          aRig.rotation.set(vib, ry, 0);
+          const scaleFade = st < 0.45 ? Math.max(0.01, st / 0.45) : 1.0;
+          aRig.scaling.setAll(scaleFade);
+          continue;
+        }
+
+        if (aRig.parent) {
+          aRig.parent = null;
+        }
+
+        if (arrow.stuck && arrow.stuckEnemyId) {
+          const hostEnemy = snap.enemies.find((e) => e.id === arrow.stuckEnemyId);
+          const hostRig = enemyRigs.get(arrow.stuckEnemyId);
+          if (!hostEnemy || hostEnemy.zone !== snap.zone || hostEnemy.state === "dead" || !hostRig) {
+            aRig.setEnabled(false);
+            continue;
+          }
+          activeArrowIds.add(arrow.id);
+          aRig.setEnabled(true);
+
+          const cosF = Math.cos(hostEnemy.facing);
+          const sinF = Math.sin(hostEnemy.facing);
+          const lx = arrow.stuckLocalX ?? 0;
+          const lz = arrow.stuckLocalZ ?? 0;
+          const squashXZ = hostEnemy.kind === "slime" ? hostRig.body.scaling.x : 1.0;
+          const stretchY = hostEnemy.kind === "slime" ? hostRig.body.scaling.y : 1.0;
+          const wx = hostEnemy.x + (lx * cosF + lz * sinF) * squashXZ;
+          const wz = hostEnemy.z + (-lx * sinF + lz * cosF) * squashXZ;
+          const bodyHitY =
+            hostEnemy.kind === "boss"
+              ? 1.45
+              : hostEnemy.kind === "knight"
+              ? 1.12
+              : hostEnemy.kind === "slime"
+              ? 0.64 * stretchY
+              : 0.96;
+
+          aRig.position.set(wx, hostRig.root.position.y + bodyHitY, wz);
+          aRig.rotation.y = hostEnemy.facing + (arrow.stuckLocalAngle ?? 0);
+
+          const st = arrow.stuckTimer ?? 0;
+          const vib = st > 3.72 ? Math.sin(t * 72) * 0.085 * ((st - 3.72) / 0.28) : 0;
+          aRig.rotation.x = vib;
+          const scaleFade = st < 0.45 ? Math.max(0.01, st / 0.45) : 1.0;
+          aRig.scaling.setAll(scaleFade);
+          continue;
+        }
+
+        activeArrowIds.add(arrow.id);
+        aRig.setEnabled(true);
+        const aGroundY = sampleTerrainHeight(activeCells, arrow.x, arrow.z);
+        aRig.position.set(arrow.x, aGroundY + 1.0, arrow.z);
+        aRig.rotation.y = arrow.angle;
+        if (arrow.stuck) {
+          const st = arrow.stuckTimer ?? 0;
+          // Subtle impact vibration right after sticking into a wall
+          const vib = st > 2.12 ? Math.sin(t * 72) * 0.085 * ((st - 2.12) / 0.28) : 0;
+          aRig.rotation.x = vib;
+          // Smooth shrink-out in the final 0.45s before disappearing
+          const scaleFade = st < 0.45 ? Math.max(0.01, st / 0.45) : 1.0;
+          aRig.scaling.setAll(scaleFade);
+        } else {
+          aRig.rotation.x = 0;
+          aRig.scaling.setAll(1.0);
+        }
+      }
+      arrowRigs.forEach((aRig, id) => {
+        if (!activeArrowIds.has(id)) {
+          aRig.dispose();
+          arrowRigs.delete(id);
         }
       });
 
@@ -3404,24 +4066,24 @@ export default function BabylonCanvas() {
         }
       });
 
-      // 10. Sync Rupees (pickable in Editor Mode, with parabolic pop-up arc when dropped!)
+      // 10. Sync Rupees & Heart Health Pickups (pickable in Editor Mode, with parabolic pop-up arc when dropped!)
       const activeRupeeIds = new Set<string>();
       for (const rupee of snap.rupees) {
         activeRupeeIds.add(rupee.id);
+        const isHeart = rupee.tier === "heart";
         let mesh = rupeeMeshes.get(rupee.id);
+        if (mesh && Boolean(mesh.metadata?.isHeart) !== isHeart) {
+          mesh.dispose();
+          mesh = undefined;
+        }
         if (!mesh) {
-          mesh = MeshBuilder.CreatePolyhedron(
-            `rupee-${rupee.id}`,
-            { type: 1, size: 0.38 },
-            scene
-          );
-          mesh.scaling.set(0.75, 1.35, 0.55);
-          mesh.metadata = { editorKind: "rupee", editorId: rupee.id };
-          mesh.isPickable = true;
+          mesh = buildPickupMesh(rupee.id, isHeart);
           rupeeMeshes.set(rupee.id, mesh);
         }
         mesh.material =
-          rupee.tier === "red"
+          rupee.tier === "heart"
+            ? heartPickupMat
+            : rupee.tier === "red"
             ? redRupeeMat
             : rupee.tier === "blue"
             ? blueRupeeMat
