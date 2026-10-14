@@ -123,6 +123,7 @@ function formatTime(seconds: number): string {
 }
 
 const PROP_PALETTE: Array<{ id: PropPrefabId; label: string; tag: string }> = [
+  { id: "eye_statue", label: "Wall Eye Statue (Shoot w/ Bow)", tag: "Puzzle" },
   { id: "clay_pot", label: "Clay Pot (Lift & Throw)", tag: "Interact" },
   { id: "light_rock", label: "Light Rock (Lift & Throw)", tag: "Interact" },
   { id: "push_block", label: "Pushable Puzzle Block", tag: "Puzzle" },
@@ -153,6 +154,7 @@ const MONSTER_PALETTE: Array<{
   label: string;
   weightLabel: string;
 }> = [
+  { prefab: "enemy:turret", label: "Stone Spitter Turret", weightLabel: "Heavy (18.0)" },
   { prefab: "enemy:slime", label: "Poring Blob Slime", weightLabel: "Light (0.5)" },
   { prefab: "enemy:archer", label: "Goblin Bowman Archer", weightLabel: "Light (0.6)" },
   { prefab: "enemy:goblin", label: "Goblin Fighter", weightLabel: "Medium (2.0)" },
@@ -385,7 +387,7 @@ export default function GameOverlay() {
   );
 
   let currentObjective =
-    "Light the Timed Torch Square (R), Burn Dry Briars (R), or find the Sanctum Key";
+    "Deflect Bridge Turret rocks with Shield (RMB), snag the Key over water with Boomerang (Q), or light the Torch Square (R)";
   if (zone === "frontier") {
     currentObjective =
       "Melt Ice Armor & Burn Wooden Shields with Flame Rod (R), or dig Dirt Patches (G)!";
@@ -396,13 +398,15 @@ export default function GameOverlay() {
     currentObjective =
       "Open the Golden Chest, then burn the North Exit Spiderwebs (R) to enter Map 3!";
   } else if (zone === "dungeon" && flags.gateUnlocked) {
-    currentObjective = "Defeat Malakor, Warden of the Eclipse & his minions";
+    currentObjective =
+      "Shoot Malakor's Glowing Open Eye with your Bow (E) to pierce his Dread Plate!";
   } else if (zone === "dungeon" && !flags.gateUnlocked) {
     currentObjective = hero.hasDungeonKey
       ? "Advance North through the Hall of Pillars to unlock the Gate"
-      : "Light all 4 Timed Lanterns in the Dark Hall within 8s (R) or find a Small Key!";
+      : "Shoot both Wall Eye Statues with Bow (E), light all 4 Timed Lanterns (R), or find a Small Key!";
   } else if (flags.keyPickedUp) {
-    currentObjective = "Head North across the bridge to enter the Sunken Sanctum";
+    currentObjective =
+      "Hold Shield (RMB / Shift) to deflect the Bridge Turret's rocks and enter the Sunken Sanctum!";
   }
 
   const zoneLabel =
@@ -763,14 +767,14 @@ export default function GameOverlay() {
                   <span className="boss-name">MALAKOR, WARDEN OF THE ECLIPSE</span>
                   <span className="minion-tag">
                     {bossEnemy.state === "stunned"
-                      ? "STUNNED — STRIKE NOW!"
+                      ? "STUNNED — SHOOT OPEN EYE WITH BOW (E)!"
                       : bossEnemy.state === "charge_aim" ||
                         bossEnemy.state === "charge_lock" ||
                         bossEnemy.state === "charge_lunge"
-                      ? "CHARGING — LURE INTO WALL!"
+                      ? "CHARGING — SHOOT OPEN EYE WITH BOW (E)!"
                       : activeMinions > 0
-                      ? `ARMORED • +${activeMinions} Minion${activeMinions > 1 ? "s" : ""}`
-                      : "ARMORED — BAIT CHARGE INTO WALL"}
+                      ? `OPEN EYE WEAKNESS (BOW E) • +${activeMinions} Minion${activeMinions > 1 ? "s" : ""}`
+                      : "DREAD PLATE — SHOOT OPEN EYE WITH BOW (E)"}
                   </span>
                 </div>
                 <div className="boss-hp-track">
@@ -1631,6 +1635,21 @@ export default function GameOverlay() {
                   </label>
                 )}
 
+                {selectedProp.prefab === "eye_statue" && (
+                  <label className="inspector-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedProp.eyeActivated)}
+                      onChange={(e) =>
+                        updatePropInstance(selectedProp.id, {
+                          eyeActivated: e.target.checked,
+                        })
+                      }
+                    />
+                    <span>Eye Pierced &amp; Activated (Shoot with Bow E to Unlock Gate)</span>
+                  </label>
+                )}
+
                 <div className="inspector-actions-row">
                   <button
                     type="button"
@@ -1650,7 +1669,7 @@ export default function GameOverlay() {
               </div>
             )}
 
-            {/* 2. MONSTER INSPECTOR (INCLUDING WEIGHT TUNING & ELEMENTAL ARMOR!) */}
+            {/* 2. MONSTER INSPECTOR (INCLUDING WEIGHT TUNING & ELEMENTAL / SHOCK ARMOR!) */}
             {selectedEnemy && (
               <div className="inspector-form">
                 <div className="inspector-type-pill">
@@ -1667,6 +1686,7 @@ export default function GameOverlay() {
                       })
                     }
                   >
+                    <option value="turret">Stone Spitter Turret (Shoots Rocks)</option>
                     <option value="slime">Poring Blob Slime</option>
                     <option value="archer">Goblin Bowman Archer</option>
                     <option value="goblin">Moss Goblin Fighter</option>
@@ -1677,23 +1697,38 @@ export default function GameOverlay() {
                 </label>
 
                 {selectedEnemy.kind !== "boss" && (
-                  <label className="inspector-field">
-                    <span>Elemental Shield / Armor (Melt/Burn with Flame Rod R)</span>
-                    <select
-                      value={selectedEnemy.shieldArmor ?? "none"}
-                      onChange={(e) => {
-                        const sa = e.target.value as EnemyShieldArmor;
-                        updateEnemyInstance(selectedEnemy.id, {
-                          shieldArmor: sa,
-                          initialShieldArmor: sa,
-                        });
-                      }}
-                    >
-                      <option value="none">None (Normal Vulnerability)</option>
-                      <option value="wood">Wooden Shield (Blocks Sword/Arrows — Burn w/ R)</option>
-                      <option value="ice">Glacial Ice Armor (Blocks Sword/Arrows — Melt w/ R)</option>
-                    </select>
-                  </label>
+                  <>
+                    <label className="inspector-field">
+                      <span>Elemental Shield / Armor (Melt/Burn with Flame Rod R)</span>
+                      <select
+                        value={selectedEnemy.shieldArmor ?? "none"}
+                        onChange={(e) => {
+                          const sa = e.target.value as EnemyShieldArmor;
+                          updateEnemyInstance(selectedEnemy.id, {
+                            shieldArmor: sa,
+                            initialShieldArmor: sa,
+                          });
+                        }}
+                      >
+                        <option value="none">None (Normal Vulnerability)</option>
+                        <option value="wood">Wooden Shield (Blocks Sword/Arrows — Burn w/ R)</option>
+                        <option value="ice">Glacial Ice Armor (Blocks Sword/Arrows — Melt w/ R)</option>
+                      </select>
+                    </label>
+                    <label className="inspector-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedEnemy.shockArmor)}
+                        onChange={(e) =>
+                          updateEnemyInstance(selectedEnemy.id, {
+                            shockArmor: e.target.checked,
+                            initialShockArmor: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Electrified / Spiked Shell (Stun for 2s w/ Boomerang Q to Slash!)</span>
+                    </label>
+                  </>
                 )}
 
                 <div className="inspector-xyz-grid">
@@ -2723,28 +2758,29 @@ export default function GameOverlay() {
             <p className="story-blurb">
               Darkness stirs beneath the northern cliffs. Dread Warden Malakor has stolen
               the radiant <strong>Zeldo Crest</strong> and sealed it within the Sunken
-              Sanctum. Lift &amp; throw <strong>Clay Pots &amp; Rocks (F)</strong>, slide{" "}
-              <strong>Pushable Blocks</strong>, strike <strong>Crystal Switches</strong>,
-              blast open secret caves with <strong>Bombs (B)</strong>, and customize your
-              loadout in the <strong>Character Sheet (C)</strong>!
+              Sanctum. Every weapon is a puzzle solver: hold your{" "}
+              <strong>Shield (RMB / Shift)</strong> to deflect Bridge Turret boulders, throw
+              your <strong>Boomerang (Q)</strong> to fetch keys &amp; rupees over water and
+              stun Electrified Slimes for 2s, and fire your <strong>Bow (E)</strong> into
+              Wall Eye Statues and Malakor&apos;s Open Eye!
             </p>
 
             <div className="controls-grid">
               <div className="control-box">
-                <span className="control-key">Tap / Hold Space or LMB</span>
-                <span className="control-desc">Sword Slash / 2x Spin Attack</span>
+                <span className="control-key">Space/LMB (Slash) • RMB/Shift (Shield)</span>
+                <span className="control-desc">Spin Attack &amp; Deflect Turret Rocks</span>
+              </div>
+              <div className="control-box">
+                <span className="control-key">Q (Boomerang) • E (Bow &amp; Arrows)</span>
+                <span className="control-desc">Fetch Over Water, Stun Shock Foes &amp; Shoot Eyes</span>
               </div>
               <div className="control-box">
                 <span className="control-key">F (Lift / Throw) • B (Bombs)</span>
-                <span className="control-desc">Smash Pots/Rocks &amp; Blast Caves</span>
+                <span className="control-desc">Smash Pots/Rocks &amp; Blast Secret Caves</span>
               </div>
               <div className="control-box">
-                <span className="control-key">R (Flame Rod) • G (Shovel)</span>
-                <span className="control-desc">Light Torches &amp; Dig Dirt Patches</span>
-              </div>
-              <div className="control-box">
-                <span className="control-key">C (Gear &amp; Bottles) • RMB (Block)</span>
-                <span className="control-desc">Equip Tunics, Boots &amp; Potions</span>
+                <span className="control-key">R (Flame Rod) • G (Shovel) • C (Gear)</span>
+                <span className="control-desc">Light Torches, Melt Armor &amp; Dig Treasure</span>
               </div>
             </div>
 

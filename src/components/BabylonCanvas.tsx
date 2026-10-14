@@ -60,6 +60,7 @@ interface EnemyMeshRig {
   archerAimLine?: Mesh;
   woodShieldNode?: TransformNode;
   iceArmorNode?: TransformNode;
+  shockAuraNode?: TransformNode;
 }
 
 /**
@@ -123,6 +124,8 @@ interface PropVisualRig {
   crystalHaloRing?: Mesh;
   crystalBarrierBody?: TransformNode;
   pushTargetSocket?: Mesh;
+  eyeIrisMat?: StandardMaterial;
+  eyeArrowMesh?: Mesh;
 }
 
 interface BushLeafParticle {
@@ -1014,6 +1017,14 @@ export default function BabylonCanvas() {
       0.62,
       92
     );
+    const shockSpikeMat = makeMat(
+      "shockSpikeMat",
+      new Color3(0.32, 0.95, 1.0),
+      new Color3(0.25, 0.85, 1.0),
+      new Color3(1.0, 1.0, 1.0),
+      0.88,
+      96
+    );
 
     const buildPropRig = (
       prop: MapPropInstance,
@@ -1033,6 +1044,8 @@ export default function BabylonCanvas() {
       let crystalHaloRing: Mesh | undefined;
       let crystalBarrierBody: TransformNode | undefined;
       let pushTargetSocket: Mesh | undefined;
+      let eyeIrisMat: StandardMaterial | undefined;
+      let eyeArrowMesh: Mesh | undefined;
 
       if (prop.prefab === "pine_tree") {
         const trunk = MeshBuilder.CreateCylinder(
@@ -1867,6 +1880,146 @@ export default function BabylonCanvas() {
         silkParts.push(centerCocoon);
 
         mergeGroupWithMaterial(`webSilkMerged-${prop.id}`, silkParts, spiderwebSilkMat, root, meta);
+      } else if (prop.prefab === "eye_statue") {
+        // Carved Dungeon Wall Eye Relief Statue (Only activates when pierced with a Bow Arrow!)
+        const stoneParts: Mesh[] = [];
+        const goldParts: Mesh[] = [];
+
+        const pedestalBase = MeshBuilder.CreateBox(
+          `eyePedestal-${prop.id}`,
+          { width: 2.35, height: 0.65, depth: 1.35 },
+          scene
+        );
+        pedestalBase.position.set(0, 0.325, 0);
+        stoneParts.push(pedestalBase);
+
+        const wallSlab = MeshBuilder.CreateBox(
+          `eyeSlab-${prop.id}`,
+          { width: 2.1, height: 2.55, depth: 0.95 },
+          scene
+        );
+        wallSlab.position.set(0, 1.85, 0);
+        stoneParts.push(wallSlab);
+
+        const topCornice = MeshBuilder.CreateBox(
+          `eyeCornice-${prop.id}`,
+          { width: 2.42, height: 0.32, depth: 1.25 },
+          scene
+        );
+        topCornice.position.set(0, 3.18, 0);
+        stoneParts.push(topCornice);
+
+        for (const px of [-0.88, 0.88]) {
+          const sidePilaster = MeshBuilder.CreateCylinder(
+            `eyePilaster-${prop.id}-${px}`,
+            { diameter: 0.36, height: 2.5, tessellation: 10 },
+            scene
+          );
+          sidePilaster.position.set(px, 1.85, 0.42);
+          stoneParts.push(sidePilaster);
+        }
+
+        // Golden Eyelid Arches & Brow Crest framing the Open Eye
+        const eyeSocketRing = MeshBuilder.CreateTorus(
+          `eyeSocketRing-${prop.id}`,
+          { diameter: 1.32, thickness: 0.16, tessellation: 24 },
+          scene
+        );
+        eyeSocketRing.rotation.x = Math.PI / 2;
+        eyeSocketRing.scaling.set(1.22, 1.0, 0.78);
+        eyeSocketRing.position.set(0, 1.92, 0.48);
+        goldParts.push(eyeSocketRing);
+
+        const browCrest = MeshBuilder.CreatePolyhedron(
+          `eyeBrowCrest-${prop.id}`,
+          { type: 1, size: 0.24 },
+          scene
+        );
+        browCrest.scaling.set(1.2, 1.45, 0.65);
+        browCrest.position.set(0, 2.58, 0.54);
+        goldParts.push(browCrest);
+
+        mergeGroupWithMaterial(`eyeStoneMerged-${prop.id}`, stoneParts, dgPillarMat, root, meta);
+        mergeGroupWithMaterial(`eyeGoldMerged-${prop.id}`, goldParts, goldKeyMat, root, meta);
+
+        // Glowing White Sclera
+        const sclera = MeshBuilder.CreateSphere(
+          `eyeSclera-${prop.id}`,
+          { diameter: 1.18, segments: 18 },
+          scene
+        );
+        sclera.scaling.set(1.22, 0.78, 0.44);
+        sclera.position.set(0, 1.92, 0.44);
+        sclera.material = whiteEyeMat;
+        sclera.parent = root;
+
+        // Glowing Iris (shifts from Crimson/Amber to Solved Emerald/Cyan when hit by an Arrow!)
+        eyeIrisMat = makeMat(
+          `eyeIrisMat-${prop.id}`,
+          new Color3(1.0, 0.28, 0.22),
+          new Color3(0.92, 0.2, 0.14),
+          new Color3(1.0, 0.9, 0.85),
+          1.0,
+          72
+        );
+        const iris = MeshBuilder.CreateSphere(
+          `eyeIris-${prop.id}`,
+          { diameter: 0.68, segments: 16 },
+          scene
+        );
+        iris.scaling.set(1.05, 0.95, 0.36);
+        iris.position.set(0, 1.92, 0.61);
+        iris.material = eyeIrisMat;
+        iris.parent = root;
+
+        // Vertical Slit Pupil
+        const pupil = MeshBuilder.CreateBox(
+          `eyePupil-${prop.id}`,
+          { width: 0.14, height: 0.46, depth: 0.12 },
+          scene
+        );
+        pupil.position.set(0, 1.92, 0.7);
+        pupil.material = darkEyeMat;
+        pupil.parent = root;
+
+        // Embedded Arrow Mesh shown when pierced (`prop.eyeActivated === true`)
+        const arrowParts: Mesh[] = [];
+        const embeddedShaft = MeshBuilder.CreateCylinder(
+          `eyeArrowShaft-${prop.id}`,
+          { diameter: 0.08, height: 1.15, tessellation: 8 },
+          scene
+        );
+        embeddedShaft.rotation.x = Math.PI / 2;
+        embeddedShaft.position.set(0, 1.92, 1.15);
+        arrowParts.push(embeddedShaft);
+
+        const fletchA = MeshBuilder.CreateBox(
+          `eyeArrowFletchA-${prop.id}`,
+          { width: 0.28, height: 0.04, depth: 0.28 },
+          scene
+        );
+        fletchA.position.set(0, 1.92, 1.56);
+        arrowParts.push(fletchA);
+
+        const fletchB = MeshBuilder.CreateBox(
+          `eyeArrowFletchB-${prop.id}`,
+          { width: 0.04, height: 0.28, depth: 0.28 },
+          scene
+        );
+        fletchB.position.set(0, 1.92, 1.56);
+        arrowParts.push(fletchB);
+
+        eyeArrowMesh =
+          mergeGroupWithMaterial(
+            `eyeArrowMerged-${prop.id}`,
+            arrowParts,
+            goldKeyMat,
+            root,
+            meta
+          ) ?? undefined;
+        if (eyeArrowMesh) {
+          eyeArrowMesh.setEnabled(Boolean(prop.eyeActivated));
+        }
       } else if (prop.prefab === "custom_model") {
         const asset = customModels.find((m) => m.id === prop.customModelId);
         const customMesh = new Mesh(`customMesh-${prop.id}`, scene);
@@ -1915,6 +2068,8 @@ export default function BabylonCanvas() {
         crystalHaloRing,
         crystalBarrierBody,
         pushTargetSocket,
+        eyeIrisMat,
+        eyeArrowMesh,
       };
     };
 
@@ -2584,8 +2739,32 @@ export default function BabylonCanvas() {
       return mesh;
     };
 
-    const buildArrowRig = (id: string, fromHero: boolean): TransformNode => {
+    const buildArrowRig = (
+      id: string,
+      fromHero: boolean,
+      isRock = false
+    ): TransformNode => {
       const node = new TransformNode(`arrow-${id}`, scene);
+      if (isRock) {
+        const rockMesh = MeshBuilder.CreatePolyhedron(
+          `rockProj-${id}`,
+          { type: 2, size: 0.42 },
+          scene
+        );
+        rockMesh.scaling.set(1.18, 0.94, 1.12);
+        rockMesh.material = fromHero ? goldKeyMat : crackedRockMat;
+        rockMesh.parent = node;
+
+        const trailRing = MeshBuilder.CreateTorus(
+          `rockTrail-${id}`,
+          { diameter: 0.88, thickness: 0.07, tessellation: 16 },
+          scene
+        );
+        trailRing.material = fromHero ? slashMat : crackedFissureMat;
+        trailRing.parent = node;
+        return node;
+      }
+
       const shaft = MeshBuilder.CreateCylinder(
         `arrowShaft-${id}`,
         { diameter: 0.08, height: 1.35, tessellation: 8 },
@@ -3465,6 +3644,115 @@ export default function BabylonCanvas() {
           eyeParts.push(eye);
         }
         mergeGroupWithMaterial(`minionEyes-${id}`, eyeParts, glowingYellowEyeMat, body);
+      } else if (kind === "turret") {
+        // =====================================================
+        // CARVED STONE SPITTER TURRET (SHIELD BRIDGE PUZZLE OBSTACLE)
+        // Stationary stone gargoyle/totem turret on a mossy octagonal pedestal
+        // with a protruding stone cannon snout that spits rock boulders!
+        // =====================================================
+        const turretStoneMat = registerMat(
+          `turretStoneMat-${id}`,
+          new Color3(0.56, 0.54, 0.49),
+          new Color3(0.06, 0.06, 0.05),
+          new Color3(0.28, 0.28, 0.26)
+        );
+        const turretMossMat = registerMat(
+          `turretMossMat-${id}`,
+          new Color3(0.22, 0.58, 0.28),
+          new Color3(0.03, 0.08, 0.04)
+        );
+
+        const stoneParts: Mesh[] = [];
+        const mossParts: Mesh[] = [];
+        const goldParts: Mesh[] = [];
+        const eyeParts: Mesh[] = [];
+
+        const basePedestal = MeshBuilder.CreateCylinder(
+          `turretPedestal-${id}`,
+          { diameterTop: 1.48, diameterBottom: 1.82, height: 0.62, tessellation: 8 },
+          scene
+        );
+        basePedestal.position.set(0, 0.31, 0);
+        stoneParts.push(basePedestal);
+
+        const mossCap = MeshBuilder.CreateCylinder(
+          `turretMossCap-${id}`,
+          { diameterTop: 1.38, diameterBottom: 1.54, height: 0.16, tessellation: 10 },
+          scene
+        );
+        mossCap.position.set(0, 0.62, 0);
+        mossParts.push(mossCap);
+
+        const totemBody = MeshBuilder.CreateCylinder(
+          `turretBody-${id}`,
+          { diameterTop: 1.18, diameterBottom: 1.34, height: 1.15, tessellation: 10 },
+          scene
+        );
+        totemBody.position.set(0, 1.18, 0);
+        stoneParts.push(totemBody);
+
+        const totemCrown = MeshBuilder.CreatePolyhedron(
+          `turretCrown-${id}`,
+          { type: 2, size: 0.64 },
+          scene
+        );
+        totemCrown.scaling.set(1.16, 0.62, 1.12);
+        totemCrown.position.set(0, 1.82, 0);
+        stoneParts.push(totemCrown);
+
+        const crownMoss = MeshBuilder.CreateSphere(
+          `turretCrownMoss-${id}`,
+          { diameter: 0.92, segments: 10 },
+          scene
+        );
+        crownMoss.scaling.set(1.1, 0.32, 1.05);
+        crownMoss.position.set(0, 2.08, -0.05);
+        mossParts.push(crownMoss);
+
+        // Protruding Stone Cannon Snout Barrel (+Z forward)
+        const snoutBarrel = MeshBuilder.CreateCylinder(
+          `turretSnout-${id}`,
+          { diameterTop: 0.56, diameterBottom: 0.68, height: 0.86, tessellation: 12 },
+          scene
+        );
+        snoutBarrel.rotation.x = Math.PI / 2;
+        snoutBarrel.position.set(0, 1.16, 0.72);
+        stoneParts.push(snoutBarrel);
+
+        const muzzleRing = MeshBuilder.CreateTorus(
+          `turretMuzzleRing-${id}`,
+          { diameter: 0.62, thickness: 0.12, tessellation: 16 },
+          scene
+        );
+        muzzleRing.rotation.x = Math.PI / 2;
+        muzzleRing.position.set(0, 1.16, 1.14);
+        goldParts.push(muzzleRing);
+
+        const muzzleBore = MeshBuilder.CreateCylinder(
+          `turretMuzzleBore-${id}`,
+          { diameter: 0.42, height: 0.22, tessellation: 12 },
+          scene
+        );
+        muzzleBore.rotation.x = Math.PI / 2;
+        muzzleBore.position.set(0, 1.16, 1.08);
+        muzzleBore.material = darkObsidianMat;
+        muzzleBore.parent = body;
+
+        for (const ex of [-0.28, 0.28]) {
+          const eye = MeshBuilder.CreateSphere(
+            `turretEye-${id}-${ex}`,
+            { diameter: 0.22, segments: 10 },
+            scene
+          );
+          eye.scaling.set(1.1, 0.85, 0.7);
+          eye.position.set(ex, 1.54, 0.54);
+          eyeParts.push(eye);
+        }
+
+        mergeGroupWithMaterial(`turretStoneMerged-${id}`, stoneParts, turretStoneMat, body);
+        mergeGroupWithMaterial(`turretMossMerged-${id}`, mossParts, turretMossMat, body);
+        mergeGroupWithMaterial(`turretGoldMerged-${id}`, goldParts, goldKeyMat, body);
+        mergeGroupWithMaterial(`turretEyesMerged-${id}`, eyeParts, glowingYellowEyeMat, body);
       } else {
         // =====================================================
         // MARIO RPG-INSPIRED HIGH-DEFINITION LOW-POLY BOSS MALAKOR
@@ -3850,23 +4138,43 @@ export default function BabylonCanvas() {
           bossGoldParts.push(hornCollar);
         }
 
-        // 6. Recessed Eclipse Core Frame, Glowing Chest Crystal, Fierce Slanted Eyes & Spiked Eclipse Halo
+        // 6. Recessed Eclipse Core Frame, Glowing Open Eye Weak Point, Fierce Slanted Eyes & Spiked Eclipse Halo
         const coreBezel = MeshBuilder.CreateTorus(
           `bossCoreBezel-${id}`,
-          { diameter: 0.86, thickness: 0.14, tessellation: 18 },
+          { diameter: 1.08, thickness: 0.16, tessellation: 20 },
           scene
         );
         coreBezel.rotation.x = Math.PI / 2;
+        coreBezel.scaling.set(1.22, 1.0, 0.78);
         coreBezel.position.set(0, 2.38, 0.82);
         bossGoldParts.push(coreBezel);
 
-        const chestCore = MeshBuilder.CreatePolyhedron(
-          `bossChestCore-${id}`,
-          { type: 1, size: 0.39 },
+        const chestEyeSclera = MeshBuilder.CreateSphere(
+          `bossChestEyeSclera-${id}`,
+          { diameter: 0.96, segments: 16 },
           scene
         );
-        chestCore.position.set(0, 2.38, 0.88);
+        chestEyeSclera.scaling.set(1.22, 0.78, 0.42);
+        chestEyeSclera.position.set(0, 2.38, 0.84);
+        chestEyeSclera.material = whiteEyeMat;
+        chestEyeSclera.parent = body;
+
+        const chestCore = MeshBuilder.CreateSphere(
+          `bossChestCore-${id}`,
+          { diameter: 0.56, segments: 14 },
+          scene
+        );
+        chestCore.scaling.set(1.05, 0.95, 0.38);
+        chestCore.position.set(0, 2.38, 0.98);
         bossCrimsonParts.push(chestCore);
+
+        const chestEyePupil = MeshBuilder.CreateBox(
+          `bossChestEyePupil-${id}`,
+          { width: 0.12, height: 0.42, depth: 0.12 },
+          scene
+        );
+        chestEyePupil.position.set(0, 2.38, 1.06);
+        bossObsidianParts.push(chestEyePupil);
 
         for (const ex of [-0.23, 0.23]) {
           const eye = MeshBuilder.CreateBox(
@@ -4155,6 +4463,34 @@ export default function BabylonCanvas() {
       mergeGroupWithMaterial(`enemyIceArmorMerged-${id}`, iceParts, iceArmorMat, iceArmorNode);
       iceArmorNode.setEnabled(false);
 
+      // Electrified / Spiked Shock Aura Ring (shocks Hero on contact/melee unless stunned by Boomerang!)
+      const shockAuraNode = new TransformNode(`enemyShockAura-${id}`, scene);
+      shockAuraNode.position.set(0, kind === "knight" ? 1.15 : kind === "slime" ? 0.66 : 0.92, 0);
+      shockAuraNode.parent = body;
+      const shockParts: Mesh[] = [];
+      const shockRing = MeshBuilder.CreateTorus(
+        `shockAuraRing-${id}`,
+        { diameter: kind === "knight" ? 1.95 : 1.56, thickness: 0.085, tessellation: 20 },
+        scene
+      );
+      shockParts.push(shockRing);
+
+      for (let s = 0; s < 8; s++) {
+        const ang = (s / 8) * Math.PI * 2;
+        const spike = MeshBuilder.CreateCylinder(
+          `shockSpike-${id}-${s}`,
+          { diameterTop: 0.02, diameterBottom: 0.22, height: 0.56, tessellation: 6 },
+          scene
+        );
+        const rad = kind === "knight" ? 0.98 : 0.78;
+        spike.position.set(Math.cos(ang) * rad, (s % 2 === 0 ? 0.14 : -0.06), Math.sin(ang) * rad);
+        spike.rotation.z = -Math.cos(ang) * 1.15;
+        spike.rotation.x = Math.sin(ang) * 1.15;
+        shockParts.push(spike);
+      }
+      mergeGroupWithMaterial(`enemyShockAuraMerged-${id}`, shockParts, shockSpikeMat, shockAuraNode);
+      shockAuraNode.setEnabled(false);
+
       tagHierarchyMetadata(root, "enemy", id);
 
       return {
@@ -4178,6 +4514,7 @@ export default function BabylonCanvas() {
         archerAimLine,
         woodShieldNode,
         iceArmorNode,
+        shockAuraNode,
       };
     };
 
@@ -5281,6 +5618,21 @@ export default function BabylonCanvas() {
               pRig.crystalHaloRing.rotation.y = -t * 2.4;
               pRig.crystalHaloRing.position.y = 1.32 + Math.sin(t * 3.5 + prop.x) * 0.08;
             }
+          } else if (prop.prefab === "eye_statue") {
+            const isActivated = Boolean(prop.eyeActivated);
+            if (pRig.eyeIrisMat) {
+              if (isActivated) {
+                pRig.eyeIrisMat.diffuseColor.set(0.22, 0.96, 0.65);
+                pRig.eyeIrisMat.emissiveColor.set(0.14, 0.82, 0.52);
+              } else {
+                const pulse = 0.85 + Math.sin(t * 4.5 + prop.x) * 0.15;
+                pRig.eyeIrisMat.diffuseColor.set(1.0, 0.28 * pulse, 0.22);
+                pRig.eyeIrisMat.emissiveColor.set(0.92 * pulse, 0.2 * pulse, 0.14);
+              }
+            }
+            if (pRig.eyeArrowMesh) {
+              pRig.eyeArrowMesh.setEnabled(isActivated);
+            }
           }
         }
       }
@@ -5514,7 +5866,15 @@ export default function BabylonCanvas() {
       keyBeaconRing.setEnabled(isOverworld && !snap.flags.keyPickedUp);
       if (!snap.flags.keyPickedUp) {
         keyNode.rotation.y = t * 2.2;
-        keyNode.position.y = 1.6 + Math.sin(t * 3.2) * 0.2;
+        if (snap.boomerang?.carryingKey && snap.boomerang.zone === "overworld") {
+          keyNode.position.set(snap.boomerang.x, 1.35, snap.boomerang.z);
+        } else {
+          keyNode.position.set(
+            DUNGEON_KEY_POS.x,
+            1.6 + Math.sin(t * 3.2) * 0.2,
+            DUNGEON_KEY_POS.z
+          );
+        }
       }
 
       const isGateOpen =
@@ -5562,6 +5922,7 @@ export default function BabylonCanvas() {
           if (rig.chargeCorridorRoot) rig.chargeCorridorRoot.setEnabled(false);
           if (rig.archerAimLine) rig.archerAimLine.setEnabled(false);
           if (rig.stunStarsRoot) rig.stunStarsRoot.setEnabled(false);
+          if (rig.shockAuraNode) rig.shockAuraNode.setEnabled(false);
           continue;
         }
 
@@ -5602,6 +5963,15 @@ export default function BabylonCanvas() {
           rig.iceArmorNode.setEnabled(hasIce);
           if (hasIce) {
             rig.iceArmorNode.rotation.y = t * 1.1;
+          }
+        }
+        if (rig.shockAuraNode) {
+          const shockActive = Boolean(enemy.shockArmor) && enemy.stunTimer <= 0;
+          rig.shockAuraNode.setEnabled(shockActive);
+          if (shockActive) {
+            rig.shockAuraNode.rotation.y = -t * 7.2;
+            const shockPulse = 1.0 + Math.sin(t * 28 + eIdx) * 0.12;
+            rig.shockAuraNode.scaling.setAll(shockPulse);
           }
         }
 
@@ -5676,9 +6046,9 @@ export default function BabylonCanvas() {
           }
         }
 
-        // Sync spinning overhead stun stars & dizzy forward tilt for ANY monster stunned by crashing into a wall!
+        // Sync spinning overhead stun stars & dizzy forward tilt for ANY monster stunned by crashing into a wall or Boomerang!
         if (rig.stunStarsRoot) {
-          const isStunned = enemy.state === "stunned";
+          const isStunned = enemy.state === "stunned" || enemy.stunTimer > 0;
           rig.stunStarsRoot.setEnabled(isStunned);
           if (isStunned) {
             rig.stunStarsRoot.rotation.y = t * 5.8;
@@ -5733,12 +6103,12 @@ export default function BabylonCanvas() {
         }
       });
 
-      // 7b. Sync 3D Arrows (Hero & Goblin Archer — including arrows stuck into walls, enemies & the Hero's Shield!)
+      // 7b. Sync 3D Arrows & Turret Rock Boulders (Hero, Goblin Archer & Stone Spitter Turret!)
       const activeArrowIds = new Set<string>();
       for (const arrow of snap.arrows) {
         let aRig = arrowRigs.get(arrow.id);
         if (!aRig) {
-          aRig = buildArrowRig(arrow.id, arrow.fromHero);
+          aRig = buildArrowRig(arrow.id, arrow.fromHero, Boolean(arrow.isRock));
           arrowRigs.set(arrow.id, aRig);
         }
 
@@ -5819,7 +6189,11 @@ export default function BabylonCanvas() {
         const aGroundY = sampleTerrainHeight(activeCells, arrow.x, arrow.z);
         aRig.position.set(arrow.x, aGroundY + 1.0, arrow.z);
         aRig.rotation.y = arrow.angle;
-        if (arrow.stuck) {
+        if (arrow.isRock) {
+          aRig.rotation.x = t * 11.5;
+          aRig.rotation.z = t * 8.2;
+          aRig.scaling.setAll(1.0);
+        } else if (arrow.stuck) {
           const st = arrow.stuckTimer ?? 0;
           // Subtle impact vibration right after sticking into a wall
           const vib = st > 2.12 ? Math.sin(t * 72) * 0.085 * ((st - 2.12) / 0.28) : 0;

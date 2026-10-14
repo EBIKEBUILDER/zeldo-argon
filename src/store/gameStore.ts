@@ -208,6 +208,8 @@ export interface EnemyState {
   rupeeDrop: RupeeTier | "boss";
   shieldArmor?: EnemyShieldArmor;
   initialShieldArmor?: EnemyShieldArmor;
+  shockArmor?: boolean;
+  initialShockArmor?: boolean;
   provoked?: boolean;
   // Boss & Goblin Lunge combat state
   chargeAngle: number;
@@ -227,6 +229,8 @@ export interface BoomerangState {
   returning: boolean;
   spinAngle: number;
   hitEnemyIds: string[];
+  carriedRupeeIds?: string[];
+  carryingKey?: boolean;
 }
 
 export interface ArrowProjectileState {
@@ -239,6 +243,8 @@ export interface ArrowProjectileState {
   speed: number;
   damage: number;
   lifeTimer: number;
+  isRock?: boolean;
+  deflectedRock?: boolean;
   stuck?: boolean;
   stuckTimer?: number;
   stuckEnemyId?: string;
@@ -347,6 +353,7 @@ export interface GameFlags {
   overworldCrystalPuzzleSolved?: boolean;
   dungeonCrystalPuzzleSolved?: boolean;
   frontierCrystalPuzzleSolved?: boolean;
+  dungeonEyeStatuesSolved?: boolean;
 }
 
 export interface GameStats {
@@ -676,6 +683,8 @@ function createInitialEnemies(): EnemyState[] {
     rupeeDrop: spawn.rupeeDrop,
     shieldArmor: spawn.shieldArmor ?? "none",
     initialShieldArmor: spawn.shieldArmor ?? "none",
+    shockArmor: spawn.shockArmor ?? false,
+    initialShockArmor: spawn.shockArmor ?? false,
     chargeAngle: Math.PI,
     chargePathLength: BOSS_MAX_LUNGE_RANGE,
     chargeDistanceTraveled: 0,
@@ -716,11 +725,11 @@ function createInitialState(
       damageFractionAcc: 0,
       rupees: 0,
       hasDungeonKey: false,
-      hasBoomerang: false,
-      hasBow: false,
+      hasBoomerang: true,
+      hasBow: true,
       hasFireRod: true,
       hasShovel: true,
-      arrows: 0,
+      arrows: 25,
       bombs: 10,
       maxBombs: 30,
       heldObject: null,
@@ -821,6 +830,7 @@ function createInitialState(
       overworldCrystalPuzzleSolved: false,
       dungeonCrystalPuzzleSolved: false,
       frontierCrystalPuzzleSolved: false,
+      dungeonEyeStatuesSolved: false,
     },
     stats: {
       enemiesDefeated: 0,
@@ -833,8 +843,8 @@ function createInitialState(
             id: 1,
             text: "Whispering Vale",
             subtext:
-              "Use Flame Rod [R] on Timed Lanterns, Dark Rooms, Briars/Spiderwebs, & Shielded Monsters!",
-            timer: 6.2,
+              "Shield [RMB] deflects Bridge Turret Rocks • Boomerang [Q] fetches over water & stuns Shock Slimes • Bow [E] pierces Eye Statues & Boss Eye!",
+            timer: 6.5,
           }
         : null,
     nearShop: false,
@@ -858,7 +868,7 @@ function createInitialState(
   };
 }
 
-const MAP_STORAGE_KEY = "zeldo-authored-map-v4";
+const MAP_STORAGE_KEY = "zeldo-authored-map-v5";
 
 function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   if (p.prefab === "dirt_patch") {
@@ -875,6 +885,9 @@ function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   }
   if (p.prefab === "crystal_barrier") {
     return { ...p, hasCollider: true, y: 0 };
+  }
+  if (p.prefab === "eye_statue") {
+    return { ...p, eyeActivated: false };
   }
   if (p.prefab === "push_block") {
     return { ...p, slideTimer: 0 };
@@ -909,6 +922,7 @@ function persistAuthoredMapToStorage(state: {
         z: e.spawnZ,
         hp: e.maxHp,
         shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
+        shockArmor: e.initialShockArmor ?? e.shockArmor ?? false,
         state: "idle" as EnemyAIState,
         stateTimer: 0,
         hitFlashTimer: 0,
@@ -925,7 +939,7 @@ function persistAuthoredMapToStorage(state: {
       .map((r) => ({ ...r, collected: false, spawnBounceTimer: 0 }));
 
     const payload = {
-      version: 4,
+      version: 5,
       mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: cleanEnemies,
       rupees: cleanRupees,
@@ -976,6 +990,7 @@ const DEFAULT_PROP_META: Record<
   cracked_rock: { label: "Explodable Cracked Rock", hasCollider: true, w: 2.3, d: 2.3, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
   briar_barrier: { label: "Dry Briar Barrier (Burnable)", hasCollider: true, w: 2.8, d: 1.6, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "tree" },
   spiderweb_barrier: { label: "Thick Spiderweb Barrier (Burnable)", hasCollider: true, w: 5.0, d: 1.6, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "wall" },
+  eye_statue: { label: "Sanctum Eye Statue (Bow Target)", hasCollider: true, w: 1.6, d: 1.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "wall" },
   boulder: { label: "Mossy Boulder", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
   ruin_pillar: { label: "Watchtower Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   dungeon_pillar: { label: "Sanctum Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
@@ -1008,6 +1023,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           z: e.spawnZ,
           hp: e.maxHp,
           shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
+          shockArmor: e.initialShockArmor ?? e.shockArmor ?? false,
           state: "idle",
           stateTimer: 0,
           hitFlashTimer: 0,
@@ -1043,6 +1059,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           z: e.spawnZ,
           hp: e.maxHp,
           shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
+          shockArmor: e.initialShockArmor ?? e.shockArmor ?? false,
           state: "idle",
           stateTimer: 0,
           hitFlashTimer: 0,
@@ -1436,6 +1453,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? 25
           : kind === "knight"
           ? 8
+          : kind === "turret"
+          ? 6
           : kind === "minion"
           ? 5
           : kind === "goblin"
@@ -1462,10 +1481,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
         lastHitSwingId: -1,
         knockbackVx: 0,
         knockbackVz: 0,
-        aggroRadius: kind === "archer" ? 11.5 : 8.5,
-        speed: kind === "boss" ? 3.9 : kind === "goblin" || kind === "minion" ? 5.5 : 5.0,
+        aggroRadius: kind === "turret" ? 15.5 : kind === "archer" ? 11.5 : 8.5,
+        speed:
+          kind === "turret"
+            ? 0
+            : kind === "boss"
+            ? 3.9
+            : kind === "goblin" || kind === "minion"
+            ? 5.5
+            : 5.0,
         damage: 1,
-        rupeeDrop: kind === "boss" ? "boss" : kind === "knight" ? "red" : "blue",
+        rupeeDrop:
+          kind === "boss" ? "boss" : kind === "knight" || kind === "turret" ? "red" : "blue",
         chargeAngle: Math.PI,
         chargePathLength: BOSS_MAX_LUNGE_RANGE,
         chargeDistanceTraveled: 0,
@@ -1586,6 +1613,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ...(pId === "clay_pot" || pId === "light_rock" ? { potReward: "random" as PotRewardKind } : {}),
       ...(pId === "crystal_switch" ? { switchState: "blue" as const, switchTarget: "orange" as const } : {}),
       ...(pId === "crystal_barrier" ? { switchTarget: "orange" as const } : {}),
+      ...(pId === "eye_statue" ? { eyeActivated: false } : {}),
       ...(pId === "push_block"
         ? {
             puzzleTargetX: Number((x + 2.5).toFixed(2)),
@@ -1650,6 +1678,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 patch.shieldArmor !== undefined
                   ? patch.shieldArmor
                   : e.initialShieldArmor,
+              initialShockArmor:
+                patch.shockArmor !== undefined
+                  ? patch.shockArmor
+                  : e.initialShockArmor,
             }
           : e
       );
@@ -1819,6 +1851,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           z: e.spawnZ,
           hp: e.maxHp,
           shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
+          shockArmor: e.initialShockArmor ?? e.shockArmor ?? false,
           state: "idle",
           stateTimer: 0,
           hitFlashTimer: 0,
@@ -1878,11 +1911,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
         overworldCrystalPuzzleSolved: false,
         dungeonCrystalPuzzleSolved: false,
         frontierCrystalPuzzleSolved: false,
+        dungeonEyeStatuesSolved: false,
       },
       hero: {
         ...state.hero,
         hp: state.hero.maxHp,
         mp: state.hero.maxMp,
+        hasBoomerang: true,
+        hasBow: true,
+        arrows: Math.max(state.hero.arrows, 25),
         heldObject: null,
         pushTimer: 0,
         pushTargetPropId: null,
@@ -2382,7 +2419,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     hero.isAttacking = hero.attackTimer > 0 || hero.spinAttackTimer > 0;
 
     let boomerang: BoomerangState | null = state.boomerang
-      ? { ...state.boomerang, hitEnemyIds: [...state.boomerang.hitEnemyIds] }
+      ? {
+          ...state.boomerang,
+          hitEnemyIds: [...state.boomerang.hitEnemyIds],
+          carriedRupeeIds: [...(state.boomerang.carriedRupeeIds ?? [])],
+          carryingKey: state.boomerang.carryingKey ?? false,
+        }
       : null;
     let arrows: ArrowProjectileState[] = state.arrows.map((a) => ({ ...a }));
     let fireballs: FireballProjectileState[] = (state.fireballs ?? []).map((f) => ({ ...f }));
@@ -2637,6 +2679,76 @@ export const useGameStore = create<GameStore>((set, get) => ({
             : "Crystal Switch Toggled → Blue!",
           "Align all Crystal Switches in the area to Orange to lower the Crystal Barriers!",
           2.8
+        );
+      }
+      return true;
+    };
+
+    // Helper: Pierce a Dungeon Wall Eye Statue (`eye_statue`) with an Arrow -> unlocks the Sanctum Gate when all are pierced!
+    const activateEyeStatue = (propId: string): boolean => {
+      ensureMutableMapProps();
+      const eyeProp = mapProps.find((p) => p.id === propId);
+      if (!eyeProp || eyeProp.prefab !== "eye_statue") return false;
+      const wasAlreadyActivated = Boolean(eyeProp.eyeActivated);
+      eyeProp.eyeActivated = true;
+      soundEngine.playEyeStatueHit();
+
+      const zoneEyeStatues = mapProps.filter(
+        (p) => p.zone === eyeProp.zone && p.prefab === "eye_statue"
+      );
+      const activeCount = zoneEyeStatues.filter((p) => p.eyeActivated).length;
+      const totalCount = zoneEyeStatues.length;
+
+      if (activeCount >= totalCount && totalCount > 0) {
+        if (eyeProp.zone === "dungeon" && !flags.dungeonEyeStatuesSolved) {
+          flags.dungeonEyeStatuesSolved = true;
+          if (!flags.gateUnlocked) {
+            flags.gateUnlocked = true;
+            soundEngine.playGateUnlock();
+          }
+          soundEngine.playSecretSolve();
+          rupees.push(
+            {
+              id: `eye-statue-dg-reward-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "dungeon",
+              x: -0.9,
+              z: 9.8,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `eye-statue-dg-reward-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "dungeon",
+              x: 0.9,
+              z: 9.8,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            }
+          );
+          pushBanner(
+            "All Sanctum Eye Statues Pierced! (Sanctum Gate Unlocked!)",
+            "Both wall eyes have been blinded by your Bow — the Sanctum Gate iron bars descend!",
+            5.8
+          );
+          return true;
+        } else if (!wasAlreadyActivated) {
+          soundEngine.playSecretSolve();
+          pushBanner(
+            `Eye Statue Pierced! (${activeCount}/${totalCount})`,
+            "The ancient wall eye turned emerald as your arrow struck true!",
+            3.5
+          );
+          return true;
+        }
+      } else {
+        pushBanner(
+          `Sanctum Eye Statue Pierced! (${activeCount}/${totalCount})`,
+          "Shoot the remaining Wall Eye Statue with your Bow [E / 2] to unlock the Sanctum Gate!",
+          4.2
         );
       }
       return true;
@@ -3248,6 +3360,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         returning: false,
         spinAngle: 0,
         hitEnemyIds: [],
+        carriedRupeeIds: [],
+        carryingKey: false,
       };
     } else if (canUseWeapon && input.bowPressed && hero.bowCooldown <= 0) {
       // Trigger Hero Bow & Arrow Shot (E or 2)
@@ -3258,17 +3372,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
           2.8
         );
         hero.bowCooldown = 0.4;
-      } else if (hero.arrows <= 0) {
-        soundEngine.playGateLocked();
-        pushBanner(
-          "Out of Arrows!",
-          "Buy a Bundle of Arrows at the Shop in the South Clearing.",
-          2.8
-        );
-        hero.bowCooldown = 0.4;
       } else {
+        if (hero.arrows <= 0) {
+          hero.arrows = 10;
+          pushBanner(
+            "Ranger's Quiver Replenished! (+10 Arrows)",
+            "Your quiver conjured 10 fresh arrows so you can always solve Bow puzzles!",
+            2.8
+          );
+        }
         hero.isBlocking = false;
-        hero.arrows -= 1;
+        hero.arrows = Math.max(0, hero.arrows - 1);
         hero.bowAnimTimer = 0.32;
         hero.weaponLockTimer = 0.38;
         hero.bowCooldown = 0.42;
@@ -3670,8 +3784,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           soundEngine.playGateLocked();
           pushBanner(
             "The Sanctum Gate is Locked",
-            "Find the golden Sanctum Key in the Western Watchtower Ruins of the Overworld.",
-            4.0
+            "Shoot both Wall Eye Statues with your Bow [E], light all 4 Timed Lanterns [R], or bring a Small Key!",
+            4.2
           );
         }
       }
@@ -3690,7 +3804,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         soundEngine.playGateLocked();
         pushBanner(
           "The Sanctum Gate is Sealed Shut!",
-          "You are locked in with Malakor — defeat him and his minions to reopen the gate!",
+          "You are locked in with Malakor — shoot his Open Eye with your Bow [E] and defeat his minions!",
           3.6
         );
       }
@@ -3704,8 +3818,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       soundEngine.playBossRoar();
       pushBanner(
         "Malakor, Warden of the Eclipse",
-        "The Sanctum Gate slams shut behind you! Bait his charge into a wall or pillar to stun him!",
-        5.0
+        "His Dread Plate deflects melee & fire — shoot his glowing Open Eye with your Bow [E / 2]!",
+        5.5
       );
     }
 
@@ -3789,58 +3903,116 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 8. Update Boomerang Flight
+    // 8. Update Boomerang Flight (flies over low `water_tile` moats & drags snagged Rupees/Hearts & the Sanctum Key back to the Hero!)
     if (boomerang) {
       if (boomerang.zone !== zone) {
         boomerang = null;
       } else {
         boomerang.spinAngle += dt * 22;
+        if (!boomerang.carriedRupeeIds) {
+          boomerang.carriedRupeeIds = [];
+        }
+
         if (!boomerang.returning) {
           const speed = 16.0;
           const step = speed * dt;
           boomerang.distanceTraveled += step;
           const nextBx = boomerang.x + boomerang.dirX * step;
           const nextBz = boomerang.z + boomerang.dirZ * step;
-          const resB = resolveWorldCollisions(
+          // Use `resolveArrowCollisions` so the Boomerang flies right over low `water_tile` gaps while bouncing off walls/pillars!
+          const resB = resolveArrowCollisions(
             nextBx,
             nextBz,
-            0.45,
+            0.42,
             zone,
             gatePassable,
             dynamicObstacles
           );
           boomerang.x = resB.x;
           boomerang.z = resB.z;
-          if (resB.hitObstacle || boomerang.distanceTraveled >= 10.5) {
+          if (resB.hitObstacle || boomerang.distanceTraveled >= 11.2) {
             boomerang.returning = true;
           }
         } else {
           const toHx = hero.x - boomerang.x;
           const toHz = hero.z - boomerang.z;
           const distH = Math.hypot(toHx, toHz);
-          if (distH < 1.1) {
+          if (distH < 1.2) {
+            // Deliver any snagged Sanctum Key or Rupees directly into the Hero's hands!
+            if (boomerang.carryingKey && !flags.keyPickedUp) {
+              flags.keyPickedUp = true;
+              hero.hasDungeonKey = true;
+              soundEngine.playKeyPickup();
+              pushBanner(
+                "Boomerang Fetched the Sanctum Key Across the Moat!",
+                "Journey to the Northern Temple Portal and unlock the Sanctum Gate.",
+                5.2
+              );
+            }
+            for (const cId of boomerang.carriedRupeeIds) {
+              const r = rupees.find((item) => item.id === cId);
+              if (r && !r.collected) {
+                r.collected = true;
+                if (r.tier === "heart") {
+                  hero.hp = Math.min(hero.maxHp, hero.hp + (r.value || 2));
+                } else {
+                  hero.rupees += r.value;
+                }
+                soundEngine.playRupeePickup(r.tier);
+                if (r.id === "rupee-ow-river-gap" || r.id === "rupee-dg-water-gap") {
+                  pushBanner(
+                    "Boomerang Snagged Treasure Across the Water! (+20 Rupees)",
+                    "Your Gale Boomerang pulled the distant Red Rupee right across the gap!",
+                    4.0
+                  );
+                }
+              }
+            }
             boomerang = null;
           } else {
-            const retSpeed = 18.0;
+            const retSpeed = 18.5;
             boomerang.x += (toHx / distH) * retSpeed * dt;
             boomerang.z += (toHz / distH) * retSpeed * dt;
           }
         }
 
-        // Boomerang collects rupees & recovery hearts in flight!
+        // Boomerang snags & drags the Overworld Sanctum Key and Rupees/Recovery Hearts in flight!
         if (boomerang) {
+          if (
+            zone === "overworld" &&
+            !flags.keyPickedUp &&
+            !boomerang.carryingKey &&
+            Math.hypot(DUNGEON_KEY_POS.x - boomerang.x, DUNGEON_KEY_POS.z - boomerang.z) < 1.65
+          ) {
+            boomerang.carryingKey = true;
+            boomerang.returning = true;
+            soundEngine.playLift();
+            pushBanner(
+              "Boomerang Snagged the Sanctum Key!",
+              "Pulling the golden key across the sunken water moat...",
+              3.2
+            );
+          }
+
           for (const rupee of rupees) {
             if (rupee.zone !== zone || rupee.collected) continue;
             if ((rupee.spawnBounceTimer ?? 0) > 0.12) continue;
-            if (Math.hypot(rupee.x - boomerang.x, rupee.z - boomerang.z) < 1.35) {
-              rupee.collected = true;
-              if (rupee.tier === "heart") {
-                hero.hp = Math.min(hero.maxHp, hero.hp + (rupee.value || 2));
-              } else {
-                hero.rupees += rupee.value;
-              }
-              soundEngine.playRupeePickup(rupee.tier);
+            if (
+              !boomerang.carriedRupeeIds!.includes(rupee.id) &&
+              Math.hypot(rupee.x - boomerang.x, rupee.z - boomerang.z) < 1.48
+            ) {
+              boomerang.carriedRupeeIds!.push(rupee.id);
+              boomerang.returning = true;
+              soundEngine.playLift();
             }
+          }
+
+          // Visibly pull all snagged rupees along with the returning Boomerang!
+          for (const cId of boomerang.carriedRupeeIds!) {
+            const r = rupees.find((item) => item.id === cId);
+            if (!r || r.collected) continue;
+            r.x = boomerang.x;
+            r.z = boomerang.z;
           }
         }
       }
@@ -3944,39 +4116,52 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 8c. Crystal Switch Orb Toggling via Sword Swing, 360° Spin Attack, or Boomerang
+    // 8c. Crystal Switch Orb Toggling & Wall Eye Statue Deflection (Sword Swing, Spin Attack, or Boomerang)
     for (const prop of mapProps) {
-      if (prop.prefab !== "crystal_switch" || prop.zone !== zone) continue;
-      if ((prop.hitCooldown ?? 0) > 0) continue;
+      if (prop.zone !== zone) continue;
+      if (prop.prefab !== "crystal_switch" && prop.prefab !== "eye_statue") continue;
+      if (prop.prefab === "crystal_switch" && (prop.hitCooldown ?? 0) > 0) continue;
 
-      let hitSwitch = false;
+      let hitProp = false;
       if (hero.isAttacking && hero.attackTimer > 0.04) {
         const dx = prop.x - hero.x;
         const dz = prop.z - hero.z;
         const dist = Math.hypot(dx, dz);
-        const reach = (hero.isSpinAttacking ? 3.35 : 2.95) + 0.65;
+        const reach = (hero.isSpinAttacking ? 3.35 : 2.95) + 0.75;
         if (dist <= reach) {
           if (hero.isSpinAttacking) {
-            hitSwitch = true;
+            hitProp = true;
           } else {
-            const angleToSwitch = Math.atan2(dx, dz);
-            const angleDiff = Math.abs(normalizeAngleDiff(angleToSwitch, hero.facing));
-            if (angleDiff <= 1.42 || dist <= 1.4) {
-              hitSwitch = true;
+            const angleToProp = Math.atan2(dx, dz);
+            const angleDiff = Math.abs(normalizeAngleDiff(angleToProp, hero.facing));
+            if (angleDiff <= 1.42 || dist <= 1.45) {
+              hitProp = true;
             }
           }
         }
       }
 
-      if (!hitSwitch && boomerang) {
-        if (Math.hypot(prop.x - boomerang.x, prop.z - boomerang.z) <= 1.25) {
-          hitSwitch = true;
+      if (!hitProp && boomerang) {
+        if (Math.hypot(prop.x - boomerang.x, prop.z - boomerang.z) <= 1.35) {
+          hitProp = true;
           boomerang.returning = true;
         }
       }
 
-      if (hitSwitch) {
-        toggleCrystalSwitch(prop.id);
+      if (hitProp) {
+        if (prop.prefab === "crystal_switch") {
+          toggleCrystalSwitch(prop.id);
+        } else if (prop.prefab === "eye_statue" && !prop.eyeActivated) {
+          soundEngine.playArmorDeflect();
+          if (armorNoticeCooldown <= 0) {
+            armorNoticeCooldown = 2.8;
+            pushBanner(
+              "Melee & Boomerang Bounce Off the Eye Statue!",
+              "Aim and shoot an Arrow with your Bow [E / 2] into its Open Eye!",
+              3.5
+            );
+          }
+        }
       }
     }
 
@@ -4045,7 +4230,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     };
 
-    // 9. Update Arrows (both Hero Arrows & Goblin Archer Arrows — stick into walls on impact!)
+    // 9. Update Arrows & Stone Spitter Turret Rock Projectiles
     const remainingArrows: ArrowProjectileState[] = [];
     for (const arrow of arrows) {
       if (arrow.zone !== zone) continue;
@@ -4064,12 +4249,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const nextAx = arrow.x + Math.sin(arrow.angle) * arrow.speed * dt;
       const nextAz = arrow.z + Math.cos(arrow.angle) * arrow.speed * dt;
 
-      // Check if a Hero arrow strikes a Crystal Switch Orb before obstacle collision!
-      if (arrow.fromHero) {
-        let hitSwitchWithArrow = false;
+      // Check if a Hero arrow strikes a Crystal Switch Orb or Wall Eye Statue before obstacle collision!
+      if (arrow.fromHero && !arrow.isRock) {
+        let hitPropWithArrow = false;
         for (const prop of mapProps) {
-          if (prop.prefab !== "crystal_switch" || prop.zone !== zone) continue;
-          if (Math.hypot(nextAx - prop.x, nextAz - prop.z) <= 0.95) {
+          if (prop.zone !== zone) continue;
+          if (prop.prefab === "crystal_switch" && Math.hypot(nextAx - prop.x, nextAz - prop.z) <= 0.95) {
             toggleCrystalSwitch(prop.id);
             arrow.stuck = true;
             arrow.stuckTimer = 1.8;
@@ -4077,11 +4262,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
             arrow.z = nextAz - Math.cos(arrow.angle) * 0.12;
             soundEngine.playArrowStick();
             remainingArrows.push(arrow);
-            hitSwitchWithArrow = true;
+            hitPropWithArrow = true;
+            break;
+          } else if (
+            prop.prefab === "eye_statue" &&
+            Math.hypot(nextAx - prop.x, nextAz - prop.z) <= 1.2
+          ) {
+            activateEyeStatue(prop.id);
+            arrow.stuck = true;
+            arrow.stuckTimer = 3.5;
+            arrow.x = prop.x;
+            arrow.z = prop.z - 0.32;
+            soundEngine.playArrowStick();
+            remainingArrows.push(arrow);
+            hitPropWithArrow = true;
             break;
           }
         }
-        if (hitSwitchWithArrow) continue;
+        if (hitPropWithArrow) continue;
       }
 
       const resA = resolveArrowCollisions(
@@ -4093,6 +4291,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
         dynamicObstacles
       );
       if (resA.hitObstacle) {
+        if (arrow.isRock) {
+          soundEngine.playPotSmash();
+          bushBursts.push({
+            id: `rock-shot-shatter-${arrow.id}`,
+            zone,
+            x: arrow.x,
+            z: arrow.z,
+            timer: 0.55,
+            maxTimer: 0.55,
+            seed: Math.floor(Math.abs(arrow.x * 37 + arrow.z * 73) + stats.elapsedSeconds * 110),
+            isRock: true,
+          });
+          continue;
+        }
         arrow.stuck = true;
         arrow.stuckTimer = 2.4;
         arrow.x = nextAx - Math.sin(arrow.angle) * 0.14;
@@ -4107,10 +4319,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       let arrowConsumed = false;
       if (arrow.fromHero) {
-        // Hero arrow hits enemies -> sticks into enemy & provokes/aggroes them to fight back!
+        // Hero arrow or Shield-deflected Turret Rock hits enemies!
         for (const enemy of enemies) {
           if (enemy.zone !== zone || enemy.state === "dead") continue;
-          const eRad = enemy.kind === "boss" ? 1.45 : 0.85;
+          const eRad = enemy.kind === "boss" ? 1.55 : enemy.kind === "turret" ? 1.05 : 0.85;
           if (Math.hypot(enemy.x - arrow.x, enemy.z - arrow.z) <= eRad) {
             arrowConsumed = true;
             const isSanctumFoe =
@@ -4128,11 +4340,72 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   3.2
                 );
               }
+            } else if (arrow.isRock) {
+              // Deflected Turret Rock smashes into the enemy!
+              enemy.provoked = true;
+              soundEngine.playPotSmash();
+              bushBursts.push({
+                id: `rock-hit-enemy-${arrow.id}`,
+                zone,
+                x: enemy.x,
+                z: enemy.z,
+                timer: 0.65,
+                maxTimer: 0.65,
+                seed: Math.floor(Math.abs(enemy.x * 41 + enemy.z * 83) + stats.elapsedSeconds * 120),
+                isRock: true,
+              });
+              if (enemy.kind === "boss") {
+                soundEngine.playArmorDeflect();
+              } else {
+                enemy.hp -= arrow.damage;
+                enemy.hitFlashTimer = 0.26;
+                enemy.stunTimer = Math.max(enemy.stunTimer, 1.2);
+                if (enemy.hp <= 0) {
+                  handleEnemyDeath(enemy);
+                  if (enemy.kind === "turret") {
+                    pushBanner(
+                      "Bridge Stone Turret Shattered! (+20 Rupees)",
+                      "Your deflected rock shots pulverized the Stone Spitter Turret!",
+                      4.5
+                    );
+                  }
+                } else {
+                  soundEngine.playEnemyHit(false);
+                  if (enemy.kind === "turret" && armorNoticeCooldown <= 0) {
+                    armorNoticeCooldown = 2.6;
+                    pushBanner(
+                      "Deflected Rock Struck the Stone Turret! (-2 HP)",
+                      "Keep walking forward with your Shield [RMB / Shift] raised!",
+                      3.0
+                    );
+                  }
+                }
+              }
+              break;
             } else {
               enemy.provoked = true;
-              if (enemy.kind === "boss" && enemy.state !== "stunned") {
-                soundEngine.playArmorDeflect();
-                soundEngine.playArrowStick();
+              if (enemy.kind === "boss") {
+                // Dungeon Boss Malakor's Open Eye Weakness: Arrows pierce his glowing Open Eye!
+                const eyeDamage = enemy.state === "stunned" ? 3 : 2;
+                enemy.hp -= eyeDamage;
+                enemy.hitFlashTimer = 0.28;
+                soundEngine.playEyeStatueHit();
+                if (enemy.hp <= 0) {
+                  handleEnemyDeath(enemy);
+                } else {
+                  soundEngine.playEnemyHit(true);
+                  soundEngine.playArrowStick();
+                  if (armorNoticeCooldown <= 0) {
+                    armorNoticeCooldown = 2.6;
+                    pushBanner(
+                      enemy.state === "stunned"
+                        ? "Critical Bow Shot in Malakor's Open Eye! (-3 HP)"
+                        : "Bullseye! Arrow Pierced Malakor's Open Eye! (-2 HP)",
+                      "Malakor's glowing Open Eye is his only weak spot — keep firing your Bow [E / 2]!",
+                      3.4
+                    );
+                  }
+                }
               } else if (enemy.shieldArmor === "wood" || enemy.shieldArmor === "ice") {
                 soundEngine.playShieldBlock();
                 soundEngine.playArrowStick();
@@ -4153,7 +4426,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               } else {
                 enemy.hp -= arrow.damage;
                 enemy.hitFlashTimer = 0.22;
-                if (enemy.kind !== "boss") {
+                if (enemy.kind !== "turret") {
                   if (enemy.state === "idle" || enemy.state === "recover") {
                     enemy.state = "aggro";
                   }
@@ -4162,14 +4435,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 if (enemy.hp <= 0) {
                   handleEnemyDeath(enemy);
                 } else {
-                  soundEngine.playEnemyHit(enemy.kind === "boss");
+                  soundEngine.playEnemyHit(false);
                   soundEngine.playArrowStick();
                 }
               }
             }
 
             // Embed arrow into the enemy's body in local enemy coordinates so it moves & rotates with them!
-            if (enemy.hp > 0) {
+            if (enemy.hp > 0 && !arrow.isRock) {
               const dirX = Math.sin(arrow.angle);
               const dirZ = Math.cos(arrow.angle);
               const perpX = dirZ;
@@ -4179,7 +4452,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               const rawLat = dx * perpX + dz * perpZ;
               const maxLat =
                 enemy.kind === "boss"
-                  ? 0.55
+                  ? 0.35
                   : enemy.kind === "knight"
                   ? 0.35
                   : enemy.kind === "slime"
@@ -4214,49 +4487,118 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
         }
       } else {
-        // Goblin Archer arrow hits Hero
+        // Enemy Arrow or Stone Spitter Turret Rock hits Hero!
         if (Math.hypot(hero.x - arrow.x, hero.z - arrow.z) <= 0.95) {
           arrowConsumed = true;
           const arrowFromAngle = arrow.angle + Math.PI;
           const canBlockArrow =
             hero.isBlocking && isFacingAttack(arrowFromAngle);
-          const hitRes = damageHero(
-            arrow.damage,
-            Math.sin(arrow.angle) * 9.5,
-            Math.cos(arrow.angle) * 9.5,
-            false,
-            false,
-            arrowFromAngle,
-            0.65
-          );
 
-          if (canBlockArrow) {
-            if (!hitRes.triggered) {
+          if (arrow.isRock) {
+            if (canBlockArrow) {
+              // SHIELD DEFLECTS TURRET ROCK SHOT BACK DOWN THE BRIDGE!
               soundEngine.playShieldBlock();
-            }
-            soundEngine.playArrowStick();
+              bushBursts.push({
+                id: `rock-deflect-burst-${arrow.id}`,
+                zone,
+                x: hero.x + Math.sin(hero.facing) * 0.65,
+                z: hero.z + Math.cos(hero.facing) * 0.65,
+                timer: 0.45,
+                maxTimer: 0.45,
+                seed: Math.floor(stats.elapsedSeconds * 190),
+                isRock: true,
+              });
+              hero.knockbackVx = Math.sin(arrow.angle) * 1.6;
+              hero.knockbackVz = Math.cos(arrow.angle) * 1.6;
+              hero.invulnerableTimer = Math.max(hero.invulnerableTimer, 0.2);
 
-            const rightX = Math.cos(hero.facing);
-            const rightZ = -Math.sin(hero.facing);
-            const dx = arrow.x - hero.x;
-            const dz = arrow.z - hero.z;
-            const rawLat = dx * rightX + dz * rightZ;
-            const clampedZ = Math.max(-0.22, Math.min(0.22, rawLat));
-            const randY = Math.sin(stats.elapsedSeconds * 37.3 + arrow.x * 13.7) * 0.16;
-            const relYaw = Math.max(
-              -0.38,
-              Math.min(0.38, normalizeAngleDiff(arrow.angle, hero.facing + Math.PI))
+              arrow.fromHero = true;
+              arrow.deflectedRock = true;
+              arrow.angle = hero.facing;
+              arrow.speed = 16.5;
+              arrow.damage = 2;
+              arrow.lifeTimer = 1.6;
+              arrow.x = hero.x + Math.sin(hero.facing) * 0.88;
+              arrow.z = hero.z + Math.cos(hero.facing) * 0.88;
+              remainingArrows.push(arrow);
+
+              if (armorNoticeCooldown <= 0) {
+                armorNoticeCooldown = 3.2;
+                pushBanner(
+                  "Shield Deflected the Turret Rock!",
+                  "Keep holding Shield [RMB / Shift] while walking forward to cross the bridge!",
+                  3.2
+                );
+              }
+            } else {
+              soundEngine.playPotSmash();
+              bushBursts.push({
+                id: `rock-hurt-burst-${arrow.id}`,
+                zone,
+                x: arrow.x,
+                z: arrow.z,
+                timer: 0.55,
+                maxTimer: 0.55,
+                seed: Math.floor(stats.elapsedSeconds * 170),
+                isRock: true,
+              });
+              damageHero(
+                arrow.damage,
+                Math.sin(arrow.angle) * 10.5,
+                Math.cos(arrow.angle) * 10.5,
+                false,
+                false,
+                arrowFromAngle,
+                1.2
+              );
+              if (armorNoticeCooldown <= 0) {
+                armorNoticeCooldown = 3.2;
+                pushBanner(
+                  "Pelted by the Bridge Stone Turret!",
+                  "Hold Shield [RMB / Shift] facing the Turret and walk slowly forward to deflect its rocks!",
+                  3.8
+                );
+              }
+            }
+          } else {
+            const hitRes = damageHero(
+              arrow.damage,
+              Math.sin(arrow.angle) * 9.5,
+              Math.cos(arrow.angle) * 9.5,
+              false,
+              false,
+              arrowFromAngle,
+              0.65
             );
 
-            arrow.stuck = true;
-            arrow.stuckTimer = 4.5;
-            arrow.stuckInShield = true;
-            arrow.stuckShieldY = randY;
-            arrow.stuckShieldZ = clampedZ;
-            arrow.stuckShieldYaw = relYaw;
-            arrow.x = hero.x + Math.sin(hero.facing) * 0.56;
-            arrow.z = hero.z + Math.cos(hero.facing) * 0.56;
-            remainingArrows.push(arrow);
+            if (canBlockArrow) {
+              if (!hitRes.triggered) {
+                soundEngine.playShieldBlock();
+              }
+              soundEngine.playArrowStick();
+
+              const rightX = Math.cos(hero.facing);
+              const rightZ = -Math.sin(hero.facing);
+              const dx = arrow.x - hero.x;
+              const dz = arrow.z - hero.z;
+              const rawLat = dx * rightX + dz * rightZ;
+              const clampedZ = Math.max(-0.22, Math.min(0.22, rawLat));
+              const randY = Math.sin(stats.elapsedSeconds * 37.3 + arrow.x * 13.7) * 0.16;
+              const relYaw = Math.max(
+                -0.38,
+                Math.min(0.38, normalizeAngleDiff(arrow.angle, hero.facing + Math.PI))
+              );
+
+              arrow.stuck = true;
+              arrow.stuckTimer = 4.5;
+              arrow.stuckInShield = true;
+              arrow.stuckShieldY = randY;
+              arrow.stuckShieldZ = clampedZ;
+              arrow.stuckShieldYaw = relYaw;
+              arrow.x = hero.x + Math.sin(hero.facing) * 0.56;
+              arrow.z = hero.z + Math.cos(hero.facing) * 0.56;
+              remainingArrows.push(arrow);
+            }
           }
         }
       }
@@ -4698,18 +5040,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
           if (isSanctumFoe && !flags.bossAwakened) continue;
           enemy.provoked = true;
           meltOrBurnEnemyShield(enemy);
-          if (enemy.kind === "boss" && enemy.state !== "stunned") {
+          if (enemy.kind === "boss") {
             soundEngine.playArmorDeflect();
+            if (armorNoticeCooldown <= 0) {
+              armorNoticeCooldown = 3.2;
+              pushBanner(
+                "Malakor's Dread Plate Deflects Fire!",
+                "Shoot his glowing Open Eye with your Bow & Arrow [E / 2]!",
+                3.4
+              );
+            }
           } else {
             enemy.hp -= 2;
             enemy.hitFlashTimer = 0.26;
-            if (enemy.kind !== "boss" && (enemy.state === "idle" || enemy.state === "recover")) {
+            if (enemy.kind !== "turret" && (enemy.state === "idle" || enemy.state === "recover")) {
               enemy.state = "aggro";
             }
             if (enemy.hp <= 0) {
               handleEnemyDeath(enemy);
             } else {
-              soundEngine.playEnemyHit(enemy.kind === "boss");
+              soundEngine.playEnemyHit(false);
             }
           }
         }
@@ -4754,6 +5104,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
         } else if (prop.prefab === "crystal_switch") {
           if (Math.hypot(nextFx - prop.x, nextFz - prop.z) <= fb.radius + 0.85) {
             toggleCrystalSwitch(prop.id);
+            hitSwitchOrBarrierWithFb = true;
+          }
+        } else if (prop.prefab === "eye_statue") {
+          if (Math.hypot(nextFx - prop.x, nextFz - prop.z) <= fb.radius + 1.05) {
+            soundEngine.playArmorDeflect();
+            if (!prop.eyeActivated && armorNoticeCooldown <= 0) {
+              armorNoticeCooldown = 2.8;
+              pushBanner(
+                "Magic Fire Bounces Off the Eye Statue!",
+                "Shoot its Open Eye with your Bow & Arrow [E / 2]!",
+                3.4
+              );
+            }
             hitSwitchOrBarrierWithFb = true;
           }
         }
@@ -4822,18 +5185,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
             } else {
               enemy.provoked = true;
               meltOrBurnEnemyShield(enemy);
-              if (enemy.kind === "boss" && enemy.state !== "stunned") {
+              if (enemy.kind === "boss") {
                 soundEngine.playArmorDeflect();
+                if (armorNoticeCooldown <= 0) {
+                  armorNoticeCooldown = 3.2;
+                  pushBanner(
+                    "Malakor's Dread Plate Deflects Fire!",
+                    "Shoot his glowing Open Eye with your Bow & Arrow [E / 2]!",
+                    3.4
+                  );
+                }
               } else {
                 enemy.hp -= fb.damage;
                 enemy.hitFlashTimer = 0.24;
-                if (enemy.kind !== "boss" && (enemy.state === "idle" || enemy.state === "recover")) {
+                if (enemy.kind !== "turret" && (enemy.state === "idle" || enemy.state === "recover")) {
                   enemy.state = "aggro";
                 }
                 if (enemy.hp <= 0) {
                   handleEnemyDeath(enemy);
                 } else {
-                  soundEngine.playEnemyHit(enemy.kind === "boss");
+                  soundEngine.playEnemyHit(false);
                 }
               }
             }
@@ -4884,18 +5255,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
             if (isSanctumFoe && !flags.bossAwakened) continue;
             enemy.provoked = true;
             meltOrBurnEnemyShield(enemy);
-            if (enemy.kind === "boss" && enemy.state !== "stunned") {
+            if (enemy.kind === "boss") {
               soundEngine.playArmorDeflect();
             } else {
               enemy.hp -= 1;
               enemy.hitFlashTimer = 0.2;
-              if (enemy.kind !== "boss" && enemy.state === "idle") {
+              if (enemy.kind !== "turret" && enemy.state === "idle") {
                 enemy.state = "aggro";
               }
               if (enemy.hp <= 0) {
                 handleEnemyDeath(enemy);
               } else {
-                soundEngine.playEnemyHit(enemy.kind === "boss");
+                soundEngine.playEnemyHit(false);
               }
             }
           }
@@ -4940,20 +5311,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
           bee.stingCooldown = 0.52;
           soundEngine.playBeeBuzz();
           nearestEnemy.provoked = true;
-          if (nearestEnemy.kind === "boss" && nearestEnemy.state !== "stunned") {
+          if (nearestEnemy.kind === "boss") {
             soundEngine.playArmorDeflect();
           } else if (nearestEnemy.shieldArmor === "wood" || nearestEnemy.shieldArmor === "ice") {
             soundEngine.playShieldBlock();
           } else {
             nearestEnemy.hp -= 1;
             nearestEnemy.hitFlashTimer = 0.18;
-            if (nearestEnemy.kind !== "boss" && nearestEnemy.state === "idle") {
+            if (nearestEnemy.kind !== "turret" && nearestEnemy.state === "idle") {
               nearestEnemy.state = "aggro";
             }
             if (nearestEnemy.hp <= 0) {
               handleEnemyDeath(nearestEnemy);
             } else {
-              soundEngine.playEnemyHit(nearestEnemy.kind === "boss");
+              soundEngine.playEnemyHit(false);
             }
           }
         }
@@ -5009,8 +5380,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
               enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
             if (!isSanctumFoe || flags.bossAwakened) {
               enemy.provoked = true;
-              if (enemy.kind === "boss" && enemy.state !== "stunned") {
+              if (enemy.kind === "boss") {
                 soundEngine.playArmorDeflect();
+                if (armorNoticeCooldown <= 0) {
+                  armorNoticeCooldown = 3.2;
+                  pushBanner(
+                    "Malakor's Dread Plate Deflects Thrown Vessels!",
+                    "Shoot his glowing Open Eye with your Bow & Arrow [E / 2]!",
+                    3.4
+                  );
+                }
               } else if (enemy.shieldArmor === "wood" || enemy.shieldArmor === "ice") {
                 soundEngine.playShieldBlock();
                 enemy.hitFlashTimer = 0.16;
@@ -5030,7 +5409,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 const dx = enemy.x - obj.startX;
                 const dz = enemy.z - obj.startZ;
                 const d = Math.hypot(dx, dz) || 1;
-                if (enemy.kind !== "boss") {
+                if (enemy.kind !== "turret") {
                   enemy.knockbackVx = (dx / d) * 6.5;
                   enemy.knockbackVz = (dz / d) * 6.5;
                   if (enemy.state === "idle" || enemy.state === "recover") {
@@ -5040,7 +5419,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 if (enemy.hp <= 0) {
                   handleEnemyDeath(enemy);
                 } else {
-                  soundEngine.playEnemyHit(enemy.kind === "boss");
+                  soundEngine.playEnemyHit(false);
                 }
               }
             }
@@ -5194,7 +5573,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           dynamicObstacles = buildObstaclesFromMapProps(mapProps);
         }
 
-        // 2. Deal 3 Heavy Blast Damage to Enemies in blast radius (and crack Malakor's armor!)
+        // 2. Deal 3 Heavy Blast Damage to Enemies in blast radius (and stun Malakor so his Open Eye is exposed!)
         for (const enemy of enemies) {
           if (enemy.zone !== zone || enemy.state === "dead") continue;
           const eRad = enemy.kind === "boss" ? 1.5 : 0.85;
@@ -5207,34 +5586,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
             if (isSanctumFoe && !flags.bossAwakened) continue;
             enemy.provoked = true;
             if (enemy.kind === "boss") {
-              if (enemy.state !== "stunned") {
-                soundEngine.playBossWallCrash();
-                enemy.state = "stunned";
-                enemy.stateTimer = 2.8;
-                enemy.hitFlashTimer = 0.28;
-                pushBanner(
-                  "Bomb Blast Cracked Malakor's Armor!",
-                  "Malakor is stunned by the explosion — strike him now!",
-                  3.2
-                );
-              } else {
-                enemy.hp -= 3;
-                enemy.hitFlashTimer = 0.28;
-                if (enemy.hp <= 0) {
-                  handleEnemyDeath(enemy);
-                } else {
-                  soundEngine.playEnemyHit(true);
-                }
-              }
+              soundEngine.playBossWallCrash();
+              enemy.state = "stunned";
+              enemy.stateTimer = 3.2;
+              enemy.hitFlashTimer = 0.28;
+              pushBanner(
+                "Bomb Blast Staggered Malakor!",
+                "Shoot his glowing Open Eye with your Bow [E / 2] for Critical 3x Damage!",
+                3.4
+              );
             } else {
               enemy.hp -= 3;
               enemy.hitFlashTimer = 0.28;
-              const pushX = dist > 0.01 ? dx / dist : 0;
-              const pushZ = dist > 0.01 ? dz / dist : 1;
-              enemy.knockbackVx = pushX * 11.5;
-              enemy.knockbackVz = pushZ * 11.5;
-              if (enemy.state === "idle" || enemy.state === "recover") {
-                enemy.state = "aggro";
+              if (enemy.kind !== "turret") {
+                const pushX = dist > 0.01 ? dx / dist : 0;
+                const pushZ = dist > 0.01 ? dz / dist : 1;
+                enemy.knockbackVx = pushX * 11.5;
+                enemy.knockbackVz = pushZ * 11.5;
+                if (enemy.state === "idle" || enemy.state === "recover") {
+                  enemy.state = "aggro";
+                }
               }
               if (enemy.hp <= 0) {
                 handleEnemyDeath(enemy);
@@ -5273,9 +5644,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       enemy.actionCooldown = Math.max(0, enemy.actionCooldown - dt);
 
       const enemyRadius =
-        enemy.kind === "boss" ? 1.35 : enemy.kind === "knight" ? 0.85 : 0.7;
+        enemy.kind === "boss" ? 1.35 : enemy.kind === "knight" || enemy.kind === "turret" ? 0.85 : 0.7;
 
-      // Check if Boomerang hits this enemy -> provokes & aggroes them to fight back!
+      // Check if Boomerang hits this enemy -> stuns Electrified (`shockArmor`) enemies for 2 full seconds!
       if (boomerang && !boomerang.hitEnemyIds.includes(enemy.id)) {
         if (Math.hypot(enemy.x - boomerang.x, enemy.z - boomerang.z) <= enemyRadius + 0.65) {
           boomerang.hitEnemyIds.push(enemy.id);
@@ -5288,6 +5659,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
             enemy.provoked = true;
             if (enemy.kind === "boss") {
               soundEngine.playArmorDeflect();
+              if (armorNoticeCooldown <= 0) {
+                armorNoticeCooldown = 3.2;
+                pushBanner(
+                  "Malakor's Dread Plate Deflects Your Boomerang!",
+                  "Shoot his glowing Open Eye with your Bow & Arrow [E / 2]!",
+                  3.2
+                );
+              }
             } else if (enemy.shieldArmor === "wood" || enemy.shieldArmor === "ice") {
               soundEngine.playShieldBlock();
               enemy.hitFlashTimer = 0.16;
@@ -5304,12 +5683,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   3.2
                 );
               }
+            } else if (enemy.shockArmor) {
+              // Boomerang Utility: Stun Electrified / Spiked Enemy for 2.0 full seconds so it is safe to slash with the Sword!
+              enemy.stunTimer = 2.0;
+              enemy.hitFlashTimer = 0.26;
+              if (enemy.state !== "stunned") {
+                enemy.state = "aggro";
+              }
+              enemy.actionCooldown = Math.min(enemy.actionCooldown, 0.2);
+              soundEngine.playEyeStatueHit();
+              soundEngine.playEnemyHit(false);
+              pushBanner(
+                "Electrified Enemy Stunned for 2 Seconds!",
+                "Its electric spike shell is disabled while dizzy — slash it with your Sword now!",
+                3.4
+              );
             } else {
               enemy.hp -= 1;
               enemy.hitFlashTimer = 0.22;
               // Short stagger on ranged/heavy enemies so Goblin Archers & Knights immediately fight back!
               enemy.stunTimer =
-                enemy.kind === "archer" ? 0.35 : enemy.kind === "knight" ? 0.2 : 0.75;
+                enemy.kind === "archer" || enemy.kind === "turret"
+                  ? 0.35
+                  : enemy.kind === "knight"
+                  ? 0.2
+                  : 0.75;
               if (enemy.state !== "stunned") {
                 enemy.state = "aggro";
               }
@@ -5346,29 +5744,42 @@ export const useGameStore = create<GameStore>((set, get) => ({
             const strikeDamage = (hero.swordDamage || 1) * (isSpin ? 2 : 1);
 
             if (enemy.kind === "boss") {
-              // Boss has weight 100 (immovable) — zero knockback ever!
+              // Boss Malakor only takes damage when shot in his Open Eye with the Bow [E / 2]!
               enemy.knockbackVx = 0;
               enemy.knockbackVz = 0;
-              if (enemy.state !== "stunned") {
-                soundEngine.playArmorDeflect();
-                if (enemy.state !== "charge_lunge" && armorNoticeCooldown <= 0) {
-                  armorNoticeCooldown = 4.0;
-                  pushBanner(
-                    "Malakor's Armor Deflects Your Blade!",
-                    "Bait his telegraphed charge into a wall or pillar to stun him!",
-                    3.6
-                  );
-                }
-              } else {
-                enemy.hp -= strikeDamage;
-                enemy.hitFlashTimer = 0.22;
-
-                if (enemy.hp <= 0) {
-                  handleEnemyDeath(enemy);
-                  continue;
-                } else {
-                  soundEngine.playEnemyHit(true);
-                }
+              soundEngine.playArmorDeflect();
+              if (armorNoticeCooldown <= 0) {
+                armorNoticeCooldown = 3.5;
+                pushBanner(
+                  "Malakor's Dread Plate Deflects Your Sword!",
+                  "Only an Arrow [E / 2] shot into his glowing Open Eye can wound him!",
+                  3.8
+                );
+              }
+            } else if (enemy.shockArmor && enemy.stunTimer <= 0) {
+              // Slashing an active Electrified / Spiked Enemy without stunning it with the Boomerang shocks the Hero!
+              soundEngine.playElectricShock();
+              enemy.hitFlashTimer = 0.18;
+              const kbDirX = dist > 0.01 ? dx / dist : Math.sin(hero.facing);
+              const kbDirZ = dist > 0.01 ? dz / dist : Math.cos(hero.facing);
+              const w = Math.max(0.25, enemy.weight ?? getDefaultEnemyWeight(enemy.kind));
+              damageHero(
+                1,
+                -kbDirX * 10.5,
+                -kbDirZ * 10.5,
+                false,
+                false,
+                angleToEnemy,
+                w,
+                true
+              );
+              if (armorNoticeCooldown <= 0) {
+                armorNoticeCooldown = 3.0;
+                pushBanner(
+                  "Shocked by Electrified Spikes!",
+                  "Throw your Boomerang [Q / 1] to stun this enemy for 2 seconds before slashing!",
+                  3.8
+                );
               }
             } else if (enemy.shieldArmor === "wood" || enemy.shieldArmor === "ice") {
               // Wooden Shield or Glacial Ice Armor blocks Sword & Spin Attack strikes!
@@ -5393,12 +5804,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
               }
             } else {
               // Weight-based knockback system!
-              // - Lightweight (weight <= 0.85: Purple/Pink Slimes 0.5 & Goblin Archers 0.6):
-              //   Knocked back strongly (~15-17 impulse), no poise immunity, and windup is interrupted so sword spam keeps knocking them back!
-              // - Medium weight (0.85 < weight < 4.0: Goblin Fighters 2.0 & Minions 2.2):
-              //   Moderate knockback (~4.2 impulse, reduced to ~1.5 during poise/windup).
-              // - Heavy weight (weight >= 4.0: Knights 12.0):
-              //   Armored juggernaut — virtually zero knockback, and hitting him while he is ready triggers his telegraphed lunge windup!
               enemy.hp -= strikeDamage;
               enemy.hitFlashTimer = 0.22;
 
@@ -5407,7 +5812,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               const w = Math.max(0.25, enemy.weight ?? getDefaultEnemyWeight(enemy.kind));
 
               let kbImpulse = 0;
-              if (w >= 50) {
+              if (w >= 50 || enemy.kind === "turret") {
                 kbImpulse = 0;
               } else if (w <= 0.85) {
                 // Lightweight (Slimes & Goblin Archers): easily knocked back repeatedly!
@@ -5758,8 +6163,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             enemy.actionCooldown = 1.1;
             pushBanner(
               "Malakor Crashed into the Wall!",
-              "His obsidian armor is shattered — strike him now!",
-              3.2
+              "His Open Eye is wide open — shoot him with your Bow [E / 2] for Critical 3x Damage!",
+              3.5
             );
           } else if (
             enemy.chargeDistanceTraveled >= BOSS_MAX_LUNGE_RANGE ||
@@ -5807,6 +6212,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // If stunned by Hero's Boomerang, hold position briefly then resume aggro
       if (enemy.stunTimer > 0) {
+        if (enemy.kind === "turret") {
+          enemy.x = enemy.spawnX;
+          enemy.z = enemy.spawnZ;
+          enemy.knockbackVx = 0;
+          enemy.knockbackVz = 0;
+          continue;
+        }
         const nextEx = enemy.x + enemy.knockbackVx * dt;
         const nextEz = enemy.z + enemy.knockbackVz * dt;
         enemy.knockbackVx *= Math.exp(-10 * dt);
@@ -5822,6 +6234,84 @@ export const useGameStore = create<GameStore>((set, get) => ({
         );
         enemy.x = resolvedStun.x;
         enemy.z = resolvedStun.z;
+        continue;
+      }
+
+      // =====================================================
+      // STONE SPITTER TURRET AI STATE MACHINE (Spits Rock Shots Down the Narrow Bridge!)
+      // =====================================================
+      if (enemy.kind === "turret") {
+        enemy.x = enemy.spawnX;
+        enemy.z = enemy.spawnZ;
+        enemy.knockbackVx = 0;
+        enemy.knockbackVz = 0;
+
+        const heroInBridgeLane =
+          Math.abs(hero.x - enemy.x) <= 5.5 &&
+          hero.z <= enemy.z + 2.0 &&
+          enemy.z - hero.z <= 17.5;
+        const canFire =
+          enemy.provoked || heroInBridgeLane || distToHero <= enemy.aggroRadius;
+
+        if (enemy.state === "idle") {
+          enemy.facing = Math.PI;
+          if (canFire) {
+            enemy.state = "aggro";
+            enemy.actionCooldown = 0.25;
+          }
+        } else if (enemy.state === "aggro") {
+          if (!canFire) {
+            enemy.state = "idle";
+            enemy.facing = Math.PI;
+          } else {
+            if (distToHero > 0.05) {
+              enemy.facing = Math.atan2(toHeroX, toHeroZ);
+            }
+            if (enemy.actionCooldown <= 0) {
+              enemy.state = "windup";
+              enemy.stateTimer = 0.32;
+              enemy.chargeAngle = enemy.facing;
+            }
+          }
+        } else if (enemy.state === "windup") {
+          if (distToHero > 0.05) {
+            enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+            enemy.facing = enemy.chargeAngle;
+          }
+          if (enemy.stateTimer <= 0) {
+            soundEngine.playRockSpit();
+            arrows.push({
+              id: `turret-rock-${enemy.id}-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              fromHero: false,
+              isRock: true,
+              x: enemy.x + Math.sin(enemy.facing) * 0.95,
+              z: enemy.z + Math.cos(enemy.facing) * 0.95,
+              angle: enemy.facing,
+              speed: 13.0,
+              damage: enemy.damage,
+              lifeTimer: 1.85,
+            });
+            enemy.state = "recover";
+            enemy.stateTimer = 0.25;
+            enemy.actionCooldown = 0.85;
+          }
+        } else if (enemy.state === "recover") {
+          if (enemy.stateTimer <= 0) {
+            enemy.state = "aggro";
+          }
+        }
+
+        // Prevent Hero from walking directly through the stone turret pedestal
+        const tDx = hero.x - enemy.x;
+        const tDz = hero.z - enemy.z;
+        const tDist = Math.hypot(tDx, tDz);
+        if (tDist < 1.35) {
+          const pushX = tDist > 0.01 ? tDx / tDist : 0;
+          const pushZ = tDist > 0.01 ? tDz / tDist : -1;
+          hero.x = enemy.x + pushX * 1.35;
+          hero.z = enemy.z + pushZ * 1.35;
+        }
         continue;
       }
 
@@ -5979,10 +6469,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
             }
           }
 
-          if (distToHero <= (enemy.kind === "knight" ? 1.65 : 1.38)) {
+          if (distToHero <= (enemy.kind === "knight" ? 1.65 : 1.44)) {
             const pushDirX = distToHero > 0.01 ? toHeroX / distToHero : Math.sin(enemy.facing);
             const pushDirZ = distToHero > 0.01 ? toHeroZ / distToHero : Math.cos(enemy.facing);
             const angleToEnemy = Math.atan2(enemy.x - hero.x, enemy.z - hero.z);
+            const isShockContact = Boolean(enemy.shockArmor && enemy.stunTimer <= 0);
+            if (isShockContact && hero.invulnerableTimer <= 0) {
+              soundEngine.playElectricShock();
+              if (armorNoticeCooldown <= 0) {
+                armorNoticeCooldown = 3.0;
+                pushBanner(
+                  "Shocked on Contact by Electrified Slime!",
+                  "Throw your Boomerang [Q / 1] to stun it for 2 seconds before approaching!",
+                  3.6
+                );
+              }
+            }
             const hitRes = damageHero(
               enemy.damage,
               pushDirX * 10,
@@ -5990,7 +6492,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
               false,
               false,
               angleToEnemy,
-              enemyWeight
+              enemyWeight,
+              isShockContact
             );
             if (hitRes.blocked) {
               enemy.knockbackVx = -pushDirX * (enemy.kind === "knight" ? 3.2 : 5.6);
@@ -6111,6 +6614,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const pushDirX = distToHero > 0.01 ? toHeroX / distToHero : Math.sin(lungeAngle);
           const pushDirZ = distToHero > 0.01 ? toHeroZ / distToHero : Math.cos(lungeAngle);
           const angleToEnemy = Math.atan2(enemy.x - hero.x, enemy.z - hero.z);
+          const isShockContact = Boolean(enemy.shockArmor && enemy.stunTimer <= 0);
+          if (isShockContact && hero.invulnerableTimer <= 0) {
+            soundEngine.playElectricShock();
+          }
           const hitRes = damageHero(
             enemy.damage,
             pushDirX * 11.5,
@@ -6118,7 +6625,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             false,
             false,
             angleToEnemy,
-            enemyWeight
+            enemyWeight,
+            isShockContact
           );
           if (hitRes.blocked) {
             // Blocking a lunge stops the monster's charge and forces them into recovery pause
@@ -6215,6 +6723,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (hDist < minHeroSep) {
         const pushOutX = hDist > 0.01 ? hDx / hDist : -Math.sin(hero.facing);
         const pushOutZ = hDist > 0.01 ? hDz / hDist : -Math.cos(hero.facing);
+        if (enemy.shockArmor && enemy.stunTimer <= 0 && hero.invulnerableTimer <= 0) {
+          soundEngine.playElectricShock();
+          const angleToEnemy = Math.atan2(enemy.x - hero.x, enemy.z - hero.z);
+          damageHero(
+            enemy.damage,
+            -pushOutX * 10,
+            -pushOutZ * 10,
+            false,
+            false,
+            angleToEnemy,
+            enemyWeight,
+            true
+          );
+          if (armorNoticeCooldown <= 0) {
+            armorNoticeCooldown = 3.0;
+            pushBanner(
+              "Shocked on Contact by Electrified Slime!",
+              "Throw your Boomerang [Q / 1] to stun it for 2 seconds before approaching!",
+              3.6
+            );
+          }
+        }
         const sepResolved = resolveWorldCollisions(
           hero.x + pushOutX * minHeroSep,
           hero.z + pushOutZ * minHeroSep,
@@ -6365,6 +6895,41 @@ export const useGameStore = create<GameStore>((set, get) => ({
           p.lit === false &&
           Math.hypot(p.x - hero.x, p.z - hero.z) <= 2.95
       );
+      const nearEyeStatue = mapProps.find(
+        (p) =>
+          p.zone === zone &&
+          p.prefab === "eye_statue" &&
+          !p.eyeActivated &&
+          Math.hypot(p.x - hero.x, p.z - hero.z) <= 6.5
+      );
+      const nearBridgeTurret = enemies.find(
+        (e) =>
+          e.zone === zone &&
+          e.kind === "turret" &&
+          e.state !== "dead" &&
+          Math.abs(hero.x - e.x) <= 5.0 &&
+          hero.z <= e.z + 1.5 &&
+          e.z - hero.z <= 13.5
+      );
+      const nearShockEnemy = enemies.find(
+        (e) =>
+          e.zone === zone &&
+          e.state !== "dead" &&
+          e.shockArmor &&
+          e.stunTimer <= 0 &&
+          Math.hypot(e.x - hero.x, e.z - hero.z) <= 4.2
+      );
+      const nearMoatKey =
+        zone === "overworld" &&
+        !flags.keyPickedUp &&
+        Math.hypot(DUNGEON_KEY_POS.x - hero.x, DUNGEON_KEY_POS.z - hero.z) <= 7.5;
+      const nearWaterGapRupee = rupees.find(
+        (r) =>
+          r.zone === zone &&
+          !r.collected &&
+          (r.id === "rupee-ow-river-gap" || r.id === "rupee-dg-water-gap") &&
+          Math.hypot(r.x - hero.x, r.z - hero.z) <= 7.5
+      );
 
       if (nearGroundBomb) {
         hero.interactPrompt = "Press [F] or [B] to Lift & Throw Bomb";
@@ -6373,6 +6938,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
           nearLiftable.prefab === "clay_pot"
             ? "Press [F] to Lift Clay Pot"
             : "Press [F] to Lift Light Rock";
+      } else if (nearBridgeTurret) {
+        hero.interactPrompt =
+          "Bridge Stone Turret — Hold Shield [RMB / Shift] and walk forward to deflect rocks!";
+      } else if (nearMoatKey) {
+        hero.interactPrompt =
+          "Sanctum Key Across Water Moat — Throw Boomerang [Q / 1] to Snag & Fetch It!";
+      } else if (nearWaterGapRupee) {
+        hero.interactPrompt =
+          "Red Rupee (+20) Across Water — Throw Boomerang [Q / 1] to Snag & Pull It Back!";
+      } else if (nearEyeStatue) {
+        hero.interactPrompt =
+          "Sanctum Eye Statue — Shoot its Open Eye with your Bow & Arrow [E / 2]!";
+      } else if (nearShockEnemy) {
+        hero.interactPrompt =
+          "Electrified Enemy — Throw Boomerang [Q / 1] to Stun for 2s Before Slashing!";
       } else if (nearCrackedRock) {
         hero.interactPrompt = "Cracked Boulder — Press [B] to Place Bomb!";
       } else if (nearBurnableBarrier) {

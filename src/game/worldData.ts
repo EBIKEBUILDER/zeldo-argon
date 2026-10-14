@@ -1,6 +1,13 @@
 export type ZoneId = "overworld" | "dungeon" | "frontier";
 export type DungeonRoomId = "entry" | "hall" | "sanctum";
-export type EnemyKind = "slime" | "goblin" | "archer" | "knight" | "minion" | "boss";
+export type EnemyKind =
+  | "slime"
+  | "goblin"
+  | "archer"
+  | "knight"
+  | "minion"
+  | "turret"
+  | "boss";
 export type RupeeTier = "green" | "blue" | "red" | "heart";
 
 export type PropPrefabId =
@@ -16,6 +23,7 @@ export type PropPrefabId =
   | "cracked_rock"
   | "briar_barrier"
   | "spiderweb_barrier"
+  | "eye_statue"
   | "boulder"
   | "ruin_pillar"
   | "dungeon_pillar"
@@ -89,6 +97,8 @@ export interface MapPropInstance {
   timedSolved?: boolean;
   // Burnable Overworld / Dungeon Exit Barriers (Dry Briars & Thick Spiderwebs)
   burningTimer?: number;
+  // Dungeon Wall Eye Statues (Only open doors when shot with Bow & Arrow — Sword & Flame Rod bounce off!)
+  eyeActivated?: boolean;
   dug?: boolean;
   buriedReward?: BuriedRewardKind;
   // Liftable Pots, Light Rocks & Explodable Cracked Rocks
@@ -148,6 +158,7 @@ export interface EnemySpawn {
   damage: number; // in half-hearts (1 = 0.5 heart, 2 = 1.0 heart)
   rupeeDrop: RupeeTier | "boss";
   shieldArmor?: EnemyShieldArmor; // "wood" (Wooden Shield) or "ice" (Ice Armor) — blocks Sword/Arrows until burned/melted with Flame Rod (R)!
+  shockArmor?: boolean; // Electrified/spiked shell that hurts on contact or melee unless stunned for 2s by the Boomerang (Q)!
 }
 
 export interface WorldRupeeSpawn {
@@ -171,6 +182,8 @@ export function getDefaultEnemyWeight(kind: EnemyKind): number {
       return 2.2; // Medium-heavy weight
     case "knight":
       return 12.0; // Heavy juggernaut armor: shrugs off sword spam
+    case "turret":
+      return 18.0; // Stationary stone spitter turret
     case "boss":
       return 100.0; // Immovable: zero knockback
   }
@@ -338,7 +351,22 @@ export const INITIAL_PORTALS: MapPortal[] = [
 ];
 
 export const INITIAL_ENEMIES: EnemySpawn[] = [
+  // Overworld — Narrow River Crossing Bridge Turret (shoots rocks down the bridge — hold Shield [RMB/Shift] to deflect!)
+  {
+    id: "ow-bridge-turret",
+    kind: "turret",
+    zone: "overworld",
+    x: 0,
+    z: -15.6,
+    hp: 3,
+    weight: 18.0,
+    aggroRadius: 15.5,
+    speed: 0,
+    damage: 1,
+    rupeeDrop: "red",
+  },
   // Overworld — Central Meadow (well outside hero spawn at z=-32)
+  // Includes Electrified Spiked Slimes (`shockArmor: true`) that hurt on contact/slash unless stunned for 2s by Boomerang [Q]!
   {
     id: "ow-slime-1",
     kind: "slime",
@@ -351,6 +379,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     speed: 4.9,
     damage: 1,
     rupeeDrop: "blue",
+    shockArmor: true,
   },
   {
     id: "ow-slime-2",
@@ -364,6 +393,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     speed: 4.9,
     damage: 1,
     rupeeDrop: "blue",
+    shockArmor: true,
   },
   {
     id: "ow-archer-central",
@@ -491,7 +521,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     kind: "knight",
     zone: "overworld",
     x: -27,
-    z: 7,
+    z: 5.5,
     hp: 8,
     weight: 12.0,
     aggroRadius: 8.8,
@@ -541,7 +571,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     rupeeDrop: "red",
   },
 
-  // Dungeon Room 1 — Torchlit Antechamber (5 Lightweight Purple Poring Blobs)
+  // Dungeon Room 1 — Torchlit Antechamber (Lightweight Purple Poring Blobs + Electrified Storm Slimes!)
   {
     id: "dg-slime-1",
     kind: "slime",
@@ -580,6 +610,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     speed: 5.0,
     damage: 1,
     rupeeDrop: "blue",
+    shockArmor: true,
   },
   {
     id: "dg-slime-4",
@@ -593,6 +624,7 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     speed: 5.0,
     damage: 1,
     rupeeDrop: "blue",
+    shockArmor: true,
   },
   {
     id: "dg-slime-5",
@@ -861,10 +893,14 @@ export const INITIAL_WORLD_RUPEES: WorldRupeeSpawn[] = [
   { id: "rupee-ow-start-2", zone: "overworld", x: -13, z: -27, tier: "red", value: 20 },
   { id: "rupee-ow-start-3", zone: "overworld", x: -6, z: -25, tier: "blue", value: 5 },
   { id: "rupee-ow-start-4", zone: "overworld", x: 18, z: -26, tier: "blue", value: 5 },
+  // Big Red Rupee (+20) perched in the middle of the River Stream — unreachable on foot, fetch with Boomerang [Q]!
+  { id: "rupee-ow-river-gap", zone: "overworld", x: 7.5, z: -20.5, tier: "red", value: 20 },
   // Overworld scenic pickups
   { id: "rupee-ow-3", zone: "overworld", x: 31, z: -12, tier: "red", value: 20 },
   { id: "rupee-ow-4", zone: "overworld", x: 29, z: 16, tier: "red", value: 20 },
   { id: "rupee-ow-5", zone: "overworld", x: -32, z: -10, tier: "blue", value: 5 },
+  // Dungeon Room 1 Big Red Rupee (+20) behind low water blocks — fetch with Boomerang [Q]!
+  { id: "rupee-dg-water-gap", zone: "dungeon", x: 12.4, z: -28.5, tier: "red", value: 20 },
   // Dungeon alcove pickups
   { id: "rupee-dg-1", zone: "dungeon", x: -15, z: -9, tier: "blue", value: 5 },
   { id: "rupee-dg-2", zone: "dungeon", x: 15, z: -9, tier: "blue", value: 5 },
@@ -2360,6 +2396,136 @@ export function buildInitialMapProps(): MapPropInstance[] {
       colliderDepth: 1.6,
       colliderKind: "tree",
       smashed: false,
+    },
+    // =========================================================
+    // 15. LOW WATER BLOCKS FOR BOOMERANG FETCH-OVER-GAP PUZZLES
+    // =========================================================
+    // Sunken Water Moat surrounding the Sanctum Key Pedestal (-28, 11) in the Western Ruins
+    // Blocks the Hero from walking onto the pedestal — throw the Boomerang [Q] across the water to snag the Key!
+    {
+      id: "prop-ow-key-moat-s",
+      prefab: "water_tile",
+      name: "Sanctum Key Moat South (Throw Boomerang [Q] Across!)",
+      zone: "overworld",
+      x: -28.0,
+      y: 0,
+      z: 8.1,
+      rotY: 0,
+      scaleX: 6.2,
+      scaleY: 1,
+      scaleZ: 1.8,
+      hasCollider: true,
+      colliderWidth: 6.2,
+      colliderDepth: 1.8,
+      colliderKind: "water",
+    },
+    {
+      id: "prop-ow-key-moat-n",
+      prefab: "water_tile",
+      name: "Sanctum Key Moat North",
+      zone: "overworld",
+      x: -28.0,
+      y: 0,
+      z: 13.7,
+      rotY: 0,
+      scaleX: 6.2,
+      scaleY: 1,
+      scaleZ: 1.5,
+      hasCollider: true,
+      colliderWidth: 6.2,
+      colliderDepth: 1.5,
+      colliderKind: "water",
+    },
+    {
+      id: "prop-ow-key-moat-e",
+      prefab: "water_tile",
+      name: "Sanctum Key Moat East (Throw Boomerang [Q] Across!)",
+      zone: "overworld",
+      x: -25.1,
+      y: 0,
+      z: 11.0,
+      rotY: 0,
+      scaleX: 1.8,
+      scaleY: 1,
+      scaleZ: 5.8,
+      hasCollider: true,
+      colliderWidth: 1.8,
+      colliderDepth: 5.8,
+      colliderKind: "water",
+    },
+    {
+      id: "prop-ow-key-moat-w",
+      prefab: "water_tile",
+      name: "Sanctum Key Moat West",
+      zone: "overworld",
+      x: -30.9,
+      y: 0,
+      z: 11.0,
+      rotY: 0,
+      scaleX: 1.8,
+      scaleY: 1,
+      scaleZ: 5.8,
+      hasCollider: true,
+      colliderWidth: 1.8,
+      colliderDepth: 5.8,
+      colliderKind: "water",
+    },
+    // Dungeon Room 1 Sunken Water Channel blocking the East Alcove Big Red Rupee (+20)
+    {
+      id: "prop-dg-water-gap",
+      prefab: "water_tile",
+      name: "Antechamber Water Trench (Fetch Rupee with Boomerang [Q]!)",
+      zone: "dungeon",
+      x: 9.8,
+      y: 0,
+      z: -28.5,
+      rotY: 0,
+      scaleX: 2.0,
+      scaleY: 1,
+      scaleZ: 6.4,
+      hasCollider: true,
+      colliderWidth: 2.0,
+      colliderDepth: 6.4,
+      colliderKind: "water",
+    },
+    // =========================================================
+    // 16. DUNGEON WALL EYE STATUES (BOW & ARROW [E] PUZZLE — SWORD & FIRE BOUNCE OFF!)
+    // =========================================================
+    {
+      id: "prop-dg-eye-statue-w",
+      prefab: "eye_statue",
+      name: "Sanctum West Wall Eye Statue (Shoot with Bow [E]!)",
+      zone: "dungeon",
+      x: -6.4,
+      y: 0,
+      z: 10.65,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.6,
+      colliderDepth: 1.2,
+      colliderKind: "wall",
+      eyeActivated: false,
+    },
+    {
+      id: "prop-dg-eye-statue-e",
+      prefab: "eye_statue",
+      name: "Sanctum East Wall Eye Statue (Shoot with Bow [E]!)",
+      zone: "dungeon",
+      x: 6.4,
+      y: 0,
+      z: 10.65,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.6,
+      colliderDepth: 1.2,
+      colliderKind: "wall",
+      eyeActivated: false,
     }
   );
 
