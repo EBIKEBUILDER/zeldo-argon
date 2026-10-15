@@ -553,159 +553,161 @@ export default function GameOverlay() {
           <div className="zone-badge">{zoneLabel}</div>
 
           {/* Equipment / Action Bar */}
-          <div className="gear-slots-row">
-            <div
-              className={`gear-slot ${
-                (hero.swordChargeTimer ?? 0) >= 0.62
-                  ? "gear-slot-active"
-                  : "gear-slot-owned"
-              }`}
-              title="Tap Space/LMB to slash, or HOLD Space/LMB to charge a 360° Spin Attack (2x Damage)!"
-            >
-              <span className="gear-key">SPC</span>
-              <span className="gear-name">
-                {(hero.swordChargeTimer ?? 0) >= 0.62
-                  ? "SPIN READY!"
-                  : `Sword (${hero.swordDamage ?? 1} DMG)`}
-              </span>
-            </div>
-
-            <div
-              className={`gear-slot ${hero.isBlocking ? "gear-slot-blocking" : "gear-slot-owned"}`}
-              title={`Hold Right-Click or Shift to Block (-${hero.shieldBlock ?? 1} Damage)`}
-            >
-              <span className="gear-key">RMB</span>
-              <span className="gear-name">
-                {hero.isBlocking ? "GUARDING" : `Shield (-${hero.shieldBlock ?? 1})`}
-              </span>
-            </div>
-
-            <div
-              className={`gear-slot ${
-                !hero.hasFireRod
-                  ? "gear-slot-locked"
-                  : (hero.fireRodChargeTimer ?? 0) >= 0.55
-                  ? "gear-slot-active"
-                  : (hero.mp ?? 100) >= 12
-                  ? "gear-slot-owned"
-                  : "gear-slot-warn"
-              }`}
-              title="Found in Dungeon Room 3 (The Ember Sanctum). Tap R or 3 for a fireball (lights lanterns, burns spiderwebs/vines, melts ice armor, burns Ignis's shell)."
-            >
-              <span className="gear-key">R</span>
-              <span className="gear-name">
-                {!hero.hasFireRod
-                  ? "Flame Rod (Rm 3)"
-                  : (hero.fireRodChargeTimer ?? 0) >= 0.55
-                  ? "FLAME MAX!"
-                  : (hero.fireRodChargeTimer ?? 0) > 0.1
-                  ? "Charging..."
-                  : "Flame Rod"}
-              </span>
-            </div>
-
-            <div
-              className="gear-slot gear-slot-owned"
-              title="Press G or 4 on soft dirt patches to dig up buried Rupees, Hearts, Bottles & Gear!"
-            >
-              <span className="gear-key">G</span>
-              <span className="gear-name">Shovel</span>
-            </div>
-
-            <div
-              className={`gear-slot ${
-                hero.hasBoomerang
-                  ? boomerang !== null
+          {!editorMode && (
+            <div className="gear-slots-row">
+              <div
+                className={`gear-slot ${
+                  (hero.swordChargeTimer ?? 0) >= 0.62
                     ? "gear-slot-active"
-                    : hero.boomerangCooldown > 0
-                    ? "gear-slot-warn"
                     : "gear-slot-owned"
-                  : "gear-slot-locked"
-              }`}
-              title="Press Q or 1 to throw the Gale Boomerang (2s Cooldown)"
-            >
-              <span className="gear-key">Q</span>
-              <span className="gear-name">
-                {hero.hasBoomerang
-                  ? boomerang !== null
-                    ? "Flying..."
-                    : hero.boomerangCooldown > 0
-                    ? `Boomerang (${hero.boomerangCooldown.toFixed(1)}s)`
-                    : "Boomerang"
-                  : "Boomerang"}
-              </span>
-            </div>
+                }`}
+                title="Tap Space/LMB to slash, or HOLD Space/LMB to charge a 360° Spin Attack (2x Damage)!"
+              >
+                <span className="gear-key">SPC</span>
+                <span className="gear-name">
+                  {(hero.swordChargeTimer ?? 0) >= 0.62
+                    ? "SPIN READY!"
+                    : `Sword (${hero.swordDamage ?? 1} DMG)`}
+                </span>
+              </div>
 
-            <div
-              className={`gear-slot ${
-                hero.heldObject
-                  ? "gear-slot-active"
-                  : hero.interactPrompt
-                  ? "gear-slot-owned"
-                  : "gear-slot-owned"
-              }`}
-              title="Stand next to a Clay Pot, Light Rock, or placed Bomb and press F (or K / X) to Lift overhead, then press F or Attack to Throw!"
-            >
-              <span className="gear-key">F</span>
-              <span className="gear-name">
-                {hero.heldObject
-                  ? `Throw ${
-                      hero.heldObject.kind === "clay_pot"
-                        ? "Pot"
-                        : hero.heldObject.kind === "light_rock"
-                        ? "Rock"
-                        : "Bomb"
-                    }!`
-                  : "Lift / Throw"}
-              </span>
-            </div>
+              <div
+                className={`gear-slot ${hero.isBlocking ? "gear-slot-blocking" : "gear-slot-owned"}`}
+                title={`Hold Right-Click or Shift to Block (-${hero.shieldBlock ?? 1} Damage)`}
+              >
+                <span className="gear-key">RMB</span>
+                <span className="gear-name">
+                  {hero.isBlocking ? "GUARDING" : `Shield (-${hero.shieldBlock ?? 1})`}
+                </span>
+              </div>
 
-            <div
-              className={`gear-slot ${
-                hero.heldObject?.kind === "bomb"
-                  ? "gear-slot-active"
-                  : (hero.bombs ?? 0) > 0
-                  ? "gear-slot-owned"
-                  : "gear-slot-warn"
-              }`}
-              title="Press B or 6 to place a Bomb at your feet (or lift/throw a Bomb!). Blows up Cracked Boulders blocking secret caves!"
-            >
-              <span className="gear-key">B</span>
-              <span className="gear-name">
-                Bombs ({hero.bombs ?? 0}/{hero.maxBombs ?? 20})
-              </span>
-            </div>
+              <div
+                className={`gear-slot ${
+                  !hero.hasFireRod
+                    ? "gear-slot-locked"
+                    : (hero.fireRodChargeTimer ?? 0) >= 0.55
+                    ? "gear-slot-active"
+                    : (hero.mp ?? 100) >= 12
+                    ? "gear-slot-owned"
+                    : "gear-slot-warn"
+                }`}
+                title="Found in Dungeon Room 3 (The Ember Sanctum). Tap R or 3 for a fireball (lights lanterns, burns spiderwebs/vines, melts ice armor, burns Ignis's shell)."
+              >
+                <span className="gear-key">R</span>
+                <span className="gear-name">
+                  {!hero.hasFireRod
+                    ? "Flame Rod (Rm 3)"
+                    : (hero.fireRodChargeTimer ?? 0) >= 0.55
+                    ? "FLAME MAX!"
+                    : (hero.fireRodChargeTimer ?? 0) > 0.1
+                    ? "Charging..."
+                    : "Flame Rod"}
+                </span>
+              </div>
 
-            <div
-              className={`gear-slot ${
-                hero.hasBow && hero.arrows > 0
-                  ? "gear-slot-owned"
-                  : hero.hasBow
-                  ? "gear-slot-warn"
-                  : "gear-slot-locked"
-              }`}
-              title="Press E or 2 to fire an Arrow (requires Bow + Arrows)"
-            >
-              <span className="gear-key">E</span>
-              <span className="gear-name">
-                {hero.hasBow ? `Bow (${hero.arrows})` : `Arrows: ${hero.arrows}`}
-              </span>
-            </div>
+              <div
+                className="gear-slot gear-slot-owned"
+                title="Press G or 4 on soft dirt patches to dig up buried Rupees, Hearts, Bottles & Gear!"
+              >
+                <span className="gear-key">G</span>
+                <span className="gear-name">Shovel</span>
+              </div>
 
-            <button
-              type="button"
-              onClick={() => useBottleSlot((hero.bottles ?? []).findIndex((b) => b !== "empty"))}
-              className={`gear-slot gear-slot-btn ${
-                filledBottlesCount > 0 ? "gear-slot-owned" : "gear-slot-warn"
-              }`}
-              title="Press V or 5 to use your first filled Glass Bottle (Potion, Fairy, or Golden Bee)"
-            >
-              <span className="gear-key">V</span>
-              <span className="gear-name">
-                Bottles ({filledBottlesCount}/{(hero.bottles ?? []).length})
-              </span>
-            </button>
-          </div>
+              <div
+                className={`gear-slot ${
+                  hero.hasBoomerang
+                    ? boomerang !== null
+                      ? "gear-slot-active"
+                      : hero.boomerangCooldown > 0
+                      ? "gear-slot-warn"
+                      : "gear-slot-owned"
+                    : "gear-slot-locked"
+                }`}
+                title="Press Q or 1 to throw the Gale Boomerang (2s Cooldown)"
+              >
+                <span className="gear-key">Q</span>
+                <span className="gear-name">
+                  {hero.hasBoomerang
+                    ? boomerang !== null
+                      ? "Flying..."
+                      : hero.boomerangCooldown > 0
+                      ? `Boomerang (${hero.boomerangCooldown.toFixed(1)}s)`
+                      : "Boomerang"
+                    : "Boomerang"}
+                </span>
+              </div>
+
+              <div
+                className={`gear-slot ${
+                  hero.heldObject
+                    ? "gear-slot-active"
+                    : hero.interactPrompt
+                    ? "gear-slot-owned"
+                    : "gear-slot-owned"
+                }`}
+                title="Stand next to a Clay Pot, Light Rock, or placed Bomb and press F (or K / X) to Lift overhead, then press F or Attack to Throw!"
+              >
+                <span className="gear-key">F</span>
+                <span className="gear-name">
+                  {hero.heldObject
+                    ? `Throw ${
+                        hero.heldObject.kind === "clay_pot"
+                          ? "Pot"
+                          : hero.heldObject.kind === "light_rock"
+                          ? "Rock"
+                          : "Bomb"
+                      }!`
+                    : "Lift / Throw"}
+                </span>
+              </div>
+
+              <div
+                className={`gear-slot ${
+                  hero.heldObject?.kind === "bomb"
+                    ? "gear-slot-active"
+                    : (hero.bombs ?? 0) > 0
+                    ? "gear-slot-owned"
+                    : "gear-slot-warn"
+                }`}
+                title="Press B or 6 to place a Bomb at your feet (or lift/throw a Bomb!). Blows up Cracked Boulders blocking secret caves!"
+              >
+                <span className="gear-key">B</span>
+                <span className="gear-name">
+                  Bombs ({hero.bombs ?? 0}/{hero.maxBombs ?? 20})
+                </span>
+              </div>
+
+              <div
+                className={`gear-slot ${
+                  hero.hasBow && hero.arrows > 0
+                    ? "gear-slot-owned"
+                    : hero.hasBow
+                    ? "gear-slot-warn"
+                    : "gear-slot-locked"
+                }`}
+                title="Press E or 2 to fire an Arrow (requires Bow + Arrows)"
+              >
+                <span className="gear-key">E</span>
+                <span className="gear-name">
+                  {hero.hasBow ? `Bow (${hero.arrows})` : `Arrows: ${hero.arrows}`}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => useBottleSlot((hero.bottles ?? []).findIndex((b) => b !== "empty"))}
+                className={`gear-slot gear-slot-btn ${
+                  filledBottlesCount > 0 ? "gear-slot-owned" : "gear-slot-warn"
+                }`}
+                title="Press V or 5 to use your first filled Glass Bottle (Potion, Fairy, or Golden Bee)"
+              >
+                <span className="gear-key">V</span>
+                <span className="gear-name">
+                  Bottles ({filledBottlesCount}/{(hero.bottles ?? []).length})
+                </span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Center: Unity-Style Play / Map Editor Toolbar + Contextual Prompt + Dark Room / Timed Torch Badges + Boss Health Bar */}

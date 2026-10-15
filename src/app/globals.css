@@ -59,15 +59,15 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 18px 22px;
+  padding: clamp(14px, 1.5vh, 26px) clamp(16px, 1.8vw, 32px);
   z-index: 10;
 }
 
 .hud-top-bar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(12px, 1.4vw, 24px);
   width: 100%;
 }
 
@@ -81,7 +81,9 @@ body {
 }
 
 .hud-left {
-  min-width: 220px;
+  justify-self: start;
+  width: clamp(340px, 24vw, 430px);
+  max-width: 100%;
 }
 
 .hud-section-label {
@@ -89,18 +91,20 @@ body {
   font-weight: 800;
   letter-spacing: 0.18em;
   color: #f0c869;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .hearts-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .heart-icon {
   transition: transform 0.18s ease, filter 0.18s ease;
+  flex-shrink: 0;
 }
 
 .heart-active {
@@ -116,12 +120,17 @@ body {
   border: 1px solid rgba(218, 179, 84, 0.28);
   border-radius: 8px;
   padding: 4px 10px;
+  margin-top: 7px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* BOSS HEALTH BAR */
 .boss-bar-panel {
-  flex: 1;
-  max-width: 460px;
+  width: clamp(340px, 30vw, 540px);
+  max-width: 100%;
   border-color: rgba(255, 77, 94, 0.7);
   background: linear-gradient(160deg, rgba(36, 12, 18, 0.92), rgba(20, 8, 13, 0.95));
 }
@@ -130,6 +139,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-bottom: 7px;
 }
 
@@ -168,27 +179,34 @@ body {
 
 /* RIGHT HUD PANEL */
 .hud-right {
+  justify-self: end;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-  max-width: 460px;
+  width: fit-content;
+  max-width: clamp(400px, 32vw, 580px);
 }
 
 .hud-counters {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .counter-chip {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 7px;
+  min-height: 34px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(218, 179, 84, 0.35);
   border-radius: 10px;
   padding: 5px 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .rupee-number {
@@ -197,6 +215,7 @@ body {
   font-weight: 800;
   color: #6bff9c;
   letter-spacing: 0.05em;
+  line-height: 1;
 }
 
 .key-chip-active {
@@ -214,16 +233,20 @@ body {
   font-size: 12px;
   font-weight: 700;
   color: #f3ead3;
+  white-space: nowrap;
 }
 
 .fps-chip {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
   background: rgba(16, 28, 22, 0.78);
   border: 1px solid rgba(107, 255, 156, 0.4);
   border-radius: 9px;
-  padding: 5px 9px;
+  padding: 5px 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .fps-value {
@@ -231,6 +254,7 @@ body {
   font-size: 14px;
   font-weight: 800;
   color: #7affaa;
+  line-height: 1;
 }
 
 .fps-label {
@@ -238,18 +262,25 @@ body {
   font-weight: 800;
   letter-spacing: 0.08em;
   color: #a8d5ba;
+  line-height: 1;
 }
 
 .mute-btn {
   pointer-events: auto;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(218, 179, 84, 0.45);
   color: #f0c869;
   font-size: 11px;
   font-weight: 700;
-  padding: 7px 10px;
+  padding: 6px 11px;
   border-radius: 9px;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: background 0.15s ease, transform 0.1s ease;
 }
 
@@ -259,9 +290,11 @@ body {
 
 .objective-line {
   font-size: 12px;
+  line-height: 1.4;
   font-weight: 600;
   color: #f5d98e;
   text-align: right;
+  max-width: 54ch;
 }
 
 /* FLOATING DISCOVERY BANNER (FIXED AT BOTTOM — DOES NOT SHIFT FLEX SIBLINGS) */
@@ -321,13 +354,18 @@ body {
   align-self: center;
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: rgba(11, 16, 24, 0.82);
-  border: 1px solid rgba(218, 179, 84, 0.35);
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  max-width: 96vw;
+  background: rgba(11, 16, 24, 0.86);
+  border: 1px solid rgba(218, 179, 84, 0.38);
   border-radius: 999px;
-  padding: 7px 18px;
+  padding: 8px 20px;
   font-size: 12px;
   color: #d6deeb;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
 }
 
 .hud-bottom-bar strong {
@@ -539,18 +577,17 @@ body {
    EQUIPMENT SLOTS (SHIELD, BOOMERANG, BOW & ARROWS)
    ========================================================= */
 .gear-slots-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 9px;
 }
 
 .gear-slot {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 9px;
+  padding: 5px 8px;
   border-radius: 8px;
   font-size: 11px;
   font-weight: 700;
@@ -558,6 +595,15 @@ body {
   background: rgba(255, 255, 255, 0.05);
   color: #cfd8e3;
   transition: all 0.15s ease;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.gear-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gear-key {
@@ -569,6 +615,7 @@ body {
   background: rgba(255, 217, 120, 0.18);
   color: #ffd978;
   border: 1px solid rgba(255, 217, 120, 0.4);
+  flex-shrink: 0;
 }
 
 .gear-slot-owned {
@@ -604,6 +651,10 @@ body {
 .shop-toggle-btn {
   pointer-events: auto;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
   background: linear-gradient(180deg, #ffe074 0%, #e09f1f 100%);
   border: 1px solid #fff5c0;
   color: #1c1304;
@@ -611,6 +662,8 @@ body {
   font-weight: 800;
   padding: 6px 12px;
   border-radius: 9px;
+  white-space: nowrap;
+  flex-shrink: 0;
   box-shadow: 0 0 14px rgba(255, 208, 76, 0.45);
   transition: transform 0.12s ease;
 }
@@ -628,8 +681,9 @@ body {
   left: 50%;
   transform: translate(-50%, -50%);
   pointer-events: auto;
-  width: 92vw;
-  max-width: 640px;
+  width: 94vw;
+  max-width: 920px;
+  max-height: 88vh;
   z-index: 28;
   animation: shopCenterPop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -639,6 +693,8 @@ body {
   border: 2px solid #e5b94e;
   border-radius: 20px;
   padding: 22px 24px;
+  max-height: 88vh;
+  overflow-y: auto;
   box-shadow: 0 22px 55px rgba(0, 0, 0, 0.8), 0 0 32px rgba(229, 185, 78, 0.25);
 }
 
@@ -646,6 +702,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 8px;
 }
@@ -703,7 +760,7 @@ body {
 
 .shop-items-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -745,6 +802,7 @@ body {
   border: 1px solid rgba(157, 232, 181, 0.32);
   padding: 2px 7px;
   border-radius: 999px;
+  white-space: nowrap;
 }
 
 .shop-item-desc {
@@ -784,6 +842,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   padding-top: 8px;
   border-top: 1px solid rgba(229, 185, 78, 0.22);
@@ -813,12 +872,13 @@ body {
    UNITY-STYLE TOP PLAY / EDITOR TOOLBAR & DOCKS
    ========================================================= */
 .hud-center-stack {
+  justify-self: center;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  flex: 1;
-  max-width: 480px;
+  width: max-content;
+  max-width: min(640px, 42vw);
 }
 
 .unity-mode-bar {
@@ -831,6 +891,7 @@ body {
   padding: 5px 8px;
   border-radius: 12px;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
+  white-space: nowrap;
 }
 
 .unity-mode-btn {
@@ -842,6 +903,7 @@ body {
   font-weight: 800;
   padding: 6px 14px;
   border-radius: 8px;
+  white-space: nowrap;
   transition: all 0.15s ease;
 }
 
@@ -872,6 +934,7 @@ body {
   font-weight: 800;
   padding: 6px 11px;
   border-radius: 8px;
+  white-space: nowrap;
 }
 
 .unity-sim-reset-btn:hover {
@@ -879,11 +942,11 @@ body {
 }
 
 .editor-workspace {
-  position: fixed;
-  top: 155px;
-  bottom: 58px;
-  left: 22px;
-  right: 22px;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin: 12px 0;
   pointer-events: none;
   display: flex;
   justify-content: space-between;
@@ -893,7 +956,7 @@ body {
 
 .editor-dock {
   pointer-events: auto;
-  width: 310px;
+  width: clamp(300px, 21vw, 370px);
   max-height: 100%;
   background: linear-gradient(165deg, rgba(16, 21, 31, 0.94), rgba(10, 13, 20, 0.96));
   border: 1.5px solid rgba(114, 178, 245, 0.55);
@@ -1373,6 +1436,10 @@ body {
 .char-toggle-btn {
   pointer-events: auto;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
   background: linear-gradient(180deg, #5ec2ff 0%, #2478d6 100%);
   border: 1px solid #bce4ff;
   color: #06182c;
@@ -1380,6 +1447,8 @@ body {
   font-weight: 800;
   padding: 6px 12px;
   border-radius: 9px;
+  white-space: nowrap;
+  flex-shrink: 0;
   box-shadow: 0 0 14px rgba(94, 194, 255, 0.4);
   transition: transform 0.12s ease;
 }
@@ -1391,13 +1460,13 @@ body {
 }
 
 .char-sheet-card {
-  max-width: 860px;
-  max-height: 86vh;
+  max-width: 920px;
+  max-height: 88vh;
   overflow-y: auto;
 }
 
 .shop-panel-wrapper:has(.char-sheet-card) {
-  max-width: 860px;
+  max-width: 920px;
 }
 
 .char-summary-badges {
@@ -1506,6 +1575,7 @@ body {
   border: 1px solid rgba(255, 226, 138, 0.35);
   padding: 2px 7px;
   border-radius: 999px;
+  white-space: nowrap;
 }
 
 .char-option-desc {
@@ -1645,5 +1715,215 @@ body {
   background: rgba(255, 217, 120, 0.22);
   border-color: #ffd978;
   color: #ffffff;
+}
+
+/* =========================================================
+   RESPONSIVE & LARGE MONITOR (1440P / 4K / ULTRAWIDE) SCALING
+   ========================================================= */
+@media (min-width: 1800px) {
+  .hud-panel {
+    padding: 15px 20px;
+    border-radius: 16px;
+  }
+
+  .hud-left {
+    width: clamp(410px, 23vw, 480px);
+  }
+
+  .hud-right {
+    max-width: clamp(480px, 30vw, 640px);
+  }
+
+  .hud-section-label {
+    font-size: 12px;
+  }
+
+  .tunic-armor-pill {
+    font-size: 11px;
+    padding: 3px 10px;
+  }
+
+  .heart-icon {
+    width: 34px;
+    height: 32px;
+  }
+
+  .mp-label,
+  .mp-val {
+    font-size: 12px;
+  }
+
+  .mp-track {
+    height: 11px;
+  }
+
+  .zone-badge {
+    font-size: 13px;
+    padding: 5px 12px;
+  }
+
+  .gear-slots-row {
+    gap: 8px;
+    margin-top: 11px;
+  }
+
+  .gear-slot {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+
+  .gear-key {
+    font-size: 11px;
+    padding: 2px 6px;
+  }
+
+  .unity-mode-bar {
+    padding: 6px 10px;
+    gap: 8px;
+  }
+
+  .unity-mode-btn {
+    font-size: 13px;
+    padding: 8px 16px;
+  }
+
+  .unity-sim-reset-btn {
+    font-size: 12px;
+    padding: 8px 13px;
+  }
+
+  .counter-chip,
+  .fps-chip,
+  .mute-btn,
+  .char-toggle-btn,
+  .shop-toggle-btn {
+    min-height: 38px;
+    padding: 7px 14px;
+    font-size: 13px;
+  }
+
+  .rupee-number {
+    font-size: 20px;
+  }
+
+  .key-status-text {
+    font-size: 13px;
+  }
+
+  .fps-value {
+    font-size: 16px;
+  }
+
+  .fps-label {
+    font-size: 11px;
+  }
+
+  .objective-line {
+    font-size: 13.5px;
+  }
+
+  .hud-bottom-bar {
+    font-size: 13.5px;
+    padding: 10px 24px;
+    gap: 10px 14px;
+  }
+
+  .modal-card {
+    max-width: 600px;
+    padding: 40px 38px;
+  }
+
+  .shop-panel-wrapper,
+  .shop-panel-wrapper:has(.char-sheet-card),
+  .char-sheet-card {
+    max-width: 1020px;
+  }
+}
+
+@media (min-width: 2400px) {
+  .hud-left {
+    width: clamp(460px, 21vw, 540px);
+  }
+
+  .hud-right {
+    max-width: clamp(540px, 28vw, 720px);
+  }
+
+  .heart-icon {
+    width: 38px;
+    height: 36px;
+  }
+
+  .gear-slot {
+    font-size: 13px;
+    padding: 7px 11px;
+  }
+
+  .unity-mode-btn {
+    font-size: 14px;
+    padding: 9px 18px;
+  }
+
+  .counter-chip,
+  .fps-chip,
+  .mute-btn,
+  .char-toggle-btn,
+  .shop-toggle-btn {
+    min-height: 42px;
+    font-size: 14px;
+  }
+
+  .objective-line {
+    font-size: 14.5px;
+  }
+
+  .hud-bottom-bar {
+    font-size: 14.5px;
+    padding: 11px 28px;
+  }
+}
+
+@media (max-width: 1120px) {
+  .hud-left {
+    width: clamp(300px, 36vw, 380px);
+  }
+
+  .hud-right {
+    max-width: 40vw;
+  }
+}
+
+@media (max-width: 860px) {
+  .hud-top-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hud-center-stack {
+    grid-column: 1 / -1;
+    order: -1;
+    max-width: 100%;
+  }
+
+  .hud-left,
+  .hud-right {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .shop-items-grid,
+  .char-equip-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 580px) {
+  .gear-slots-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .shop-items-grid,
+  .char-equip-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
