@@ -252,7 +252,6 @@ export default function GameOverlay() {
   const equipHeroItem = useGameStore((s) => s.equipHeroItem);
   const useBottleSlot = useGameStore((s) => s.useBottleSlot);
   const fillBottleSlot = useGameStore((s) => s.fillBottleSlot);
-  const addEmptyBottle = useGameStore((s) => s.addEmptyBottle);
   const buyShopItem = useGameStore((s) => s.buyShopItem);
 
   const setEditorMode = useGameStore((s) => s.setEditorMode);
@@ -606,11 +605,13 @@ export default function GameOverlay() {
               </div>
 
               <div
-                className="gear-slot gear-slot-owned"
-                title="Press G or 4 on soft dirt patches to dig up buried Rupees, Hearts, Bottles & Gear!"
+                className={`gear-slot ${hero.hasShovel ? "gear-slot-owned" : "gear-slot-locked"}`}
+                title="Unlock at Bramble's Curio Shop (250 Rupees), then press G or 4 on soft dirt patches to dig up buried Rupees, Hearts, Bottles & Gear!"
               >
                 <span className="gear-key">G</span>
-                <span className="gear-name">Shovel</span>
+                <span className="gear-name">
+                  {hero.hasShovel ? "Shovel" : "Shovel (Shop)"}
+                </span>
               </div>
 
               <div
@@ -665,15 +666,19 @@ export default function GameOverlay() {
                 className={`gear-slot ${
                   hero.heldObject?.kind === "bomb"
                     ? "gear-slot-active"
+                    : (hero.maxBombs ?? 0) <= 0
+                    ? "gear-slot-locked"
                     : (hero.bombs ?? 0) > 0
                     ? "gear-slot-owned"
                     : "gear-slot-warn"
                 }`}
-                title="Press B or 6 to place a Bomb at your feet (or lift/throw a Bomb!). Blows up Cracked Boulders blocking secret caves!"
+                title="Unlock Bomb Bag at Bramble's Curio Shop (150 Rupees), then press B or 6 to place or throw a Bomb and blow up Cracked Boulders!"
               >
                 <span className="gear-key">B</span>
                 <span className="gear-name">
-                  Bombs ({hero.bombs ?? 0}/{hero.maxBombs ?? 20})
+                  {(hero.maxBombs ?? 0) <= 0
+                    ? "Bombs (Shop)"
+                    : `Bombs (${hero.bombs ?? 0}/${hero.maxBombs})`}
                 </span>
               </div>
 
@@ -697,13 +702,19 @@ export default function GameOverlay() {
                 type="button"
                 onClick={() => useBottleSlot((hero.bottles ?? []).findIndex((b) => b !== "empty"))}
                 className={`gear-slot gear-slot-btn ${
-                  filledBottlesCount > 0 ? "gear-slot-owned" : "gear-slot-warn"
+                  (hero.bottles ?? []).length === 0
+                    ? "gear-slot-locked"
+                    : filledBottlesCount > 0
+                    ? "gear-slot-owned"
+                    : "gear-slot-warn"
                 }`}
-                title="Press V or 5 to use your first filled Glass Bottle (Potion, Fairy, or Golden Bee)"
+                title="Press V or 5 to use your first filled Glass Bottle (Potion, Fairy, or Golden Bee). Purchase Empty Bottles at Bramble's Shop (120 Rupees)!"
               >
                 <span className="gear-key">V</span>
                 <span className="gear-name">
-                  Bottles ({filledBottlesCount}/{(hero.bottles ?? []).length})
+                  {(hero.bottles ?? []).length === 0
+                    ? "Bottles (0)"
+                    : `Bottles (${filledBottlesCount}/${(hero.bottles ?? []).length})`}
                 </span>
               </button>
             </div>
@@ -1188,6 +1199,11 @@ export default function GameOverlay() {
                           { id: "rupee:green", label: "Green Rupee (+1)", tag: "Value: 1" },
                           { id: "rupee:blue", label: "Blue Rupee (+5)", tag: "Value: 5" },
                           { id: "rupee:red", label: "Red Rupee (+20)", tag: "Value: 20" },
+                          {
+                            id: "rupee:gold_admin",
+                            label: "★ Admin Gold Rupee (+500)",
+                            tag: "Admin Cheat: +500",
+                          },
                         ] as const
                       ).map((r) => (
                         <button
@@ -1951,7 +1967,9 @@ export default function GameOverlay() {
             {selectedRupee && (
               <div className="inspector-form">
                 <div className="inspector-type-pill">
-                  {selectedRupee.tier === "heart" ? "HEART PICKUP" : "RUPEE PICKUP"}
+                  {selectedRupee.tier === "heart"
+                    ? "HEART PICKUP"
+                    : `RUPEE PICKUP (+${selectedRupee.value})`}
                 </div>
                 <label className="inspector-field">
                   <span>Pickup Type</span>
@@ -1972,12 +1990,27 @@ export default function GameOverlay() {
                   >
                     <option value="green">Green Rupee (+1)</option>
                     <option value="blue">Blue Rupee (+5)</option>
-                    <option value="red">Red Rupee (+20)</option>
+                    <option value="red">Red / Gold Rupee (+20 or Custom)</option>
                     <option value="heart">Recovery Heart (+1 Heart)</option>
                   </select>
                 </label>
 
                 <div className="inspector-xyz-grid">
+                  <label className="inspector-field">
+                    <span>Rupee / Heal Value</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={9999}
+                      step={10}
+                      value={selectedRupee.value}
+                      onChange={(e) =>
+                        updateRupeeInstance(selectedRupee.id, {
+                          value: Math.max(1, parseInt(e.target.value, 10) || 1),
+                        })
+                      }
+                    />
+                  </label>
                   <label className="inspector-field">
                     <span>Pos X</span>
                     <input
@@ -2253,16 +2286,21 @@ export default function GameOverlay() {
                         id: "traveler_blade" as PrimaryHandId,
                         name: "Traveler's Broadsword",
                         stats: "1 Base DMG • 2 Spin DMG",
+                        unlockHint: "Starter Weapon",
                         desc: "Balanced steel blade forged for swift slashes and 360° spin attacks.",
                       },
                       {
                         id: "tempered_blade" as PrimaryHandId,
                         name: "Tempered Sun-Blade",
                         stats: "2 Base DMG • 4 Spin DMG",
-                        desc: "Masterwork golden blade unearthed with the Shovel or equipped here.",
+                        unlockHint: "🔒 500 Rupees at Shop (or Dig in Dungeon Rm 3)",
+                        desc: "Masterwork golden blade that doubles your Sword & Spin Attack damage!",
                       },
                     ] as const
                   ).map((item) => {
+                    const unlocked = (hero.unlockedPrimaries ?? ["traveler_blade"]).includes(
+                      item.id
+                    );
                     const active = hero.equippedPrimary === item.id;
                     return (
                       <button
@@ -2270,10 +2308,15 @@ export default function GameOverlay() {
                         type="button"
                         onClick={() => equipHeroItem("primary", item.id)}
                         className={`char-option-btn ${active ? "active" : ""}`}
+                        style={!unlocked ? { opacity: 0.62 } : undefined}
                       >
                         <div className="char-option-top">
-                          <span className="char-option-name">{item.name}</span>
-                          <span className="char-option-stat">{item.stats}</span>
+                          <span className="char-option-name">
+                            {unlocked ? item.name : `🔒 ${item.name}`}
+                          </span>
+                          <span className="char-option-stat">
+                            {unlocked ? item.stats : item.unlockHint}
+                          </span>
                         </div>
                         <div className="char-option-desc">{item.desc}</div>
                       </button>
@@ -2295,16 +2338,21 @@ export default function GameOverlay() {
                         id: "wooden_buckler" as OffhandId,
                         name: "Traveler's Kite Shield",
                         stats: "Blocks 1 Physical DMG",
+                        unlockHint: "Starter Shield",
                         desc: "Sturdy iron-rimmed shield that catches arrows and absorbs melee strikes.",
                       },
                       {
                         id: "mirror_shield" as OffhandId,
                         name: "Aegis Mirror Shield",
                         stats: "Blocks 2 Physical & Magic DMG",
-                        desc: "Polished silver-gold ward that halves heavy impacts and arcane bolts.",
+                        unlockHint: "🔒 400 Rupees at Shop",
+                        desc: "Polished silver-gold ward that blocks heavy impacts and magical bolts.",
                       },
                     ] as const
                   ).map((item) => {
+                    const unlocked = (hero.unlockedOffhands ?? ["wooden_buckler"]).includes(
+                      item.id
+                    );
                     const active = hero.equippedOffhand === item.id;
                     return (
                       <button
@@ -2312,10 +2360,15 @@ export default function GameOverlay() {
                         type="button"
                         onClick={() => equipHeroItem("offhand", item.id)}
                         className={`char-option-btn ${active ? "active" : ""}`}
+                        style={!unlocked ? { opacity: 0.62 } : undefined}
                       >
                         <div className="char-option-top">
-                          <span className="char-option-name">{item.name}</span>
-                          <span className="char-option-stat">{item.stats}</span>
+                          <span className="char-option-name">
+                            {unlocked ? item.name : `🔒 ${item.name}`}
+                          </span>
+                          <span className="char-option-stat">
+                            {unlocked ? item.stats : item.unlockHint}
+                          </span>
                         </div>
                         <div className="char-option-desc">{item.desc}</div>
                       </button>
@@ -2337,22 +2390,28 @@ export default function GameOverlay() {
                         id: "green_tunic" as TunicId,
                         name: "Forest Green Tunic (Default)",
                         stats: "0% Damage Reduction",
+                        unlockHint: "Starter Tunic",
                         desc: "Classic emerald adventurer's tunic. Takes standard baseline 1.0x damage.",
                       },
                       {
                         id: "blue_mail" as TunicId,
                         name: "Sapphire Mail",
                         stats: "-50% Physical & Magic DMG",
-                        desc: "Enchanted cerulean chainmail (also unlocked by the Sun Shrine Torch Puzzle!).",
+                        unlockHint: "🔒 450 Rupees at Shop (or Sun Shrine Torch Quest)",
+                        desc: "Enchanted cerulean chainmail that halves all incoming damage!",
                       },
                       {
                         id: "red_mail" as TunicId,
                         name: "Crimson Dragon Mail",
                         stats: "-75% Physical & Magic DMG",
+                        unlockHint: "🔒 750 Rupees at Shop (or Dig in Map 3)",
                         desc: "Legendary ruby-woven mail that reduces all incoming damage by 75%!",
                       },
                     ] as const
                   ).map((item) => {
+                    const unlocked = (hero.unlockedTunics ?? ["green_tunic"]).includes(
+                      item.id
+                    );
                     const active = hero.equippedTunic === item.id;
                     return (
                       <button
@@ -2360,10 +2419,15 @@ export default function GameOverlay() {
                         type="button"
                         onClick={() => equipHeroItem("tunic", item.id)}
                         className={`char-option-btn ${active ? "active" : ""}`}
+                        style={!unlocked ? { opacity: 0.62 } : undefined}
                       >
                         <div className="char-option-top">
-                          <span className="char-option-name">{item.name}</span>
-                          <span className="char-option-stat">{item.stats}</span>
+                          <span className="char-option-name">
+                            {unlocked ? item.name : `🔒 ${item.name}`}
+                          </span>
+                          <span className="char-option-stat">
+                            {unlocked ? item.stats : item.unlockHint}
+                          </span>
                         </div>
                         <div className="char-option-desc">{item.desc}</div>
                       </button>
@@ -2385,22 +2449,28 @@ export default function GameOverlay() {
                         id: "leather_boots" as BootsId,
                         name: "Traveler's Leather Boots",
                         stats: "1.0x Base Speed",
+                        unlockHint: "Starter Boots",
                         desc: "Supple calfskin boots for everyday overland trekking.",
                       },
                       {
                         id: "swift_boots" as BootsId,
                         name: "Swiftwind Pegasus Boots",
                         stats: "+25% Run Speed",
+                        unlockHint: "🔒 300 Rupees at Shop (or Dig w/ Shovel)",
                         desc: "Wing-stitched boots that boost your movement speed by 25% to dodge charges!",
                       },
                       {
                         id: "titan_greaves" as BootsId,
                         name: "Titan Iron Greaves",
                         stats: "+12% Speed • -50% Knockback",
+                        unlockHint: "🔒 350 Rupees at Shop",
                         desc: "Heavy steel greaves that anchor your footing when blocking heavy attacks.",
                       },
                     ] as const
                   ).map((item) => {
+                    const unlocked = (hero.unlockedBoots ?? ["leather_boots"]).includes(
+                      item.id
+                    );
                     const active = hero.equippedBoots === item.id;
                     return (
                       <button
@@ -2408,10 +2478,15 @@ export default function GameOverlay() {
                         type="button"
                         onClick={() => equipHeroItem("boots", item.id)}
                         className={`char-option-btn ${active ? "active" : ""}`}
+                        style={!unlocked ? { opacity: 0.62 } : undefined}
                       >
                         <div className="char-option-top">
-                          <span className="char-option-name">{item.name}</span>
-                          <span className="char-option-stat">{item.stats}</span>
+                          <span className="char-option-name">
+                            {unlocked ? item.name : `🔒 ${item.name}`}
+                          </span>
+                          <span className="char-option-stat">
+                            {unlocked ? item.stats : item.unlockHint}
+                          </span>
                         </div>
                         <div className="char-option-desc">{item.desc}</div>
                       </button>
@@ -2433,117 +2508,96 @@ export default function GameOverlay() {
                     filled bottle, or click any bottle below!
                   </span>
                 </div>
-                {(hero.bottles ?? []).length < 6 && (
-                  <button
-                    type="button"
-                    onClick={addEmptyBottle}
-                    className="bottle-add-btn"
-                  >
-                    ＋ Add Empty Bottle
-                  </button>
-                )}
               </div>
 
-              <div className="bottles-grid">
-                {(hero.bottles ?? []).map((content, idx) => {
-                  const meta = BOTTLE_META[content] ?? BOTTLE_META.empty;
-                  const isEmpty = content === "empty";
-                  return (
-                    <div
-                      key={idx}
-                      className={`bottle-card ${isEmpty ? "bottle-card-empty" : "bottle-card-filled"}`}
-                    >
-                      <div className="bottle-card-top">
-                        <span className="bottle-slot-num">BOTTLE #{idx + 1}</span>
-                        <span
-                          className="bottle-badge"
-                          style={{
-                            borderColor: meta.color,
-                            color: meta.color,
-                          }}
-                        >
-                          {meta.badge}
-                        </span>
+              {(hero.bottles ?? []).length === 0 ? (
+                <div
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: "10px",
+                    background: "rgba(255, 255, 255, 0.04)",
+                    border: "1px dashed rgba(201, 164, 73, 0.45)",
+                    color: "#d8d5e8",
+                    fontSize: "0.82rem",
+                  }}
+                >
+                  <strong>🔒 No Glass Bottles Owned Yet:</strong> Purchase Empty Glass Bottles at{" "}
+                  <strong>Merchant Bramble&apos;s Curio Shop (120 Rupees)</strong> or unearth buried
+                  bottles from soft dirt patches with the <strong>Explorer&apos;s Shovel [G]</strong>!
+                </div>
+              ) : (
+                <div className="bottles-grid">
+                  {(hero.bottles ?? []).map((content, idx) => {
+                    const meta = BOTTLE_META[content] ?? BOTTLE_META.empty;
+                    const isEmpty = content === "empty";
+                    return (
+                      <div
+                        key={idx}
+                        className={`bottle-card ${isEmpty ? "bottle-card-empty" : "bottle-card-filled"}`}
+                      >
+                        <div className="bottle-card-top">
+                          <span className="bottle-slot-num">BOTTLE #{idx + 1}</span>
+                          <span
+                            className="bottle-badge"
+                            style={{
+                              borderColor: meta.color,
+                              color: meta.color,
+                            }}
+                          >
+                            {meta.badge}
+                          </span>
+                        </div>
+                        <div className="bottle-name">{meta.name}</div>
+                        <p className="bottle-desc">{meta.desc}</p>
+
+                        {!isEmpty ? (
+                          <div className="bottle-actions-row">
+                            <button
+                              type="button"
+                              onClick={() => useBottleSlot(idx)}
+                              className="shop-buy-btn bottle-use-btn"
+                            >
+                              {content === "bee"
+                                ? "Unleash Golden Bee!"
+                                : content === "fairy"
+                                ? "Release Fairy (+7 Hearts)"
+                                : "Drink Potion Now"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => fillBottleSlot(idx, "empty")}
+                              className="bottle-empty-btn"
+                              title="Pour out bottle contents"
+                            >
+                              Empty
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              fontSize: "0.73rem",
+                              color: "#b9b4d4",
+                              marginTop: "6px",
+                              padding: "6px 8px",
+                              borderRadius: "6px",
+                              background: "rgba(255,255,255,0.04)",
+                            }}
+                          >
+                            Visit <strong>Bramble&apos;s Curio Shop</strong> to fill with Red/Green/Blue
+                            Potions, a Spring Fairy, or a Golden Bee!
+                          </div>
+                        )}
                       </div>
-                      <div className="bottle-name">{meta.name}</div>
-                      <p className="bottle-desc">{meta.desc}</p>
-
-                      {!isEmpty ? (
-                        <div className="bottle-actions-row">
-                          <button
-                            type="button"
-                            onClick={() => useBottleSlot(idx)}
-                            className="shop-buy-btn bottle-use-btn"
-                          >
-                            {content === "bee"
-                              ? "Unleash Golden Bee!"
-                              : content === "fairy"
-                              ? "Release Fairy (+7 Hearts)"
-                              : "Drink Potion Now"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => fillBottleSlot(idx, "empty")}
-                            className="bottle-empty-btn"
-                            title="Pour out bottle contents"
-                          >
-                            Empty
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="bottle-fill-grid">
-                          <button
-                            type="button"
-                            onClick={() => fillBottleSlot(idx, "red_potion")}
-                            className="bottle-fill-chip"
-                            title="Fill with Crimson Life Potion (Restores All Hearts)"
-                          >
-                            + Red Potion
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => fillBottleSlot(idx, "green_potion")}
-                            className="bottle-fill-chip"
-                            title="Fill with Emerald Magic Potion (Restores All Magic)"
-                          >
-                            + Green Potion
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => fillBottleSlot(idx, "blue_potion")}
-                            className="bottle-fill-chip"
-                            title="Fill with Sapphire Elixir (Restores All Hearts & Magic)"
-                          >
-                            + Blue Potion
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => fillBottleSlot(idx, "fairy")}
-                            className="bottle-fill-chip"
-                            title="Capture a Spring Fairy (Heals 7 Hearts or Auto-Revives on Death)"
-                          >
-                            + Fairy
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => fillBottleSlot(idx, "bee")}
-                            className="bottle-fill-chip"
-                            title="Capture a Golden Bee (Unleash to Sting Enemies)"
-                          >
-                            + Golden Bee
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="shop-footer">
               <span className="shop-footer-hint">
-                Tip: Hold <strong>Space/LMB</strong> to charge Spin Attack (2x DMG) • Tap/Hold{" "}
-                <strong>R</strong> for Flame Rod • Press <strong>G</strong> to Dig Soft Dirt Patches
+                Tip: Earn Rupees via quests/bounties or place{" "}
+                <strong>★ Admin Gold Rupees (+500)</strong> in Map Editor (<strong>Tab</strong>)!
               </span>
               <button
                 type="button"
@@ -2565,7 +2619,7 @@ export default function GameOverlay() {
           <div className="shop-card">
             <div className="shop-header">
               <div>
-                <div className="shop-pill">SOUTH CLEARING BAZAAR • MAP 1 ECONOMY HUB</div>
+                <div className="shop-pill">SOUTH CLEARING BAZAAR • PROGRESSIVE ADVENTURE SHOP</div>
                 <h2 className="shop-title">BRAMBLE&apos;S CURIO SHOP</h2>
               </div>
               <div className="shop-wallet">
@@ -2574,10 +2628,11 @@ export default function GameOverlay() {
               </div>
             </div>
             <p className="shop-greeting">
-              &ldquo;Welcome, traveler! Check out the <strong>3 Featured Counter Specials</strong>{" "}
-              right on my table—including the <strong>100-Rupee Champion&apos;s Progression Upgrade</strong>!
-              Explore the Vale&apos;s secret caves, help Elder Rowan in the SE, or hunt Gold Bounty
-              Monsters to earn your fortune!&rdquo;
+              &ldquo;Welcome, traveler! Everyday arrow &amp; potion refills are cheap, while{" "}
+              <strong>masterwork tools, weapons, shields, and armor</strong> require a true
+              adventurer&apos;s fortune! Complete quests across the Vale, or (for Admin Testing)
+              open the <strong>Map Editor [Tab] &rarr; Pickups &rarr; ★ Admin Gold Rupee (+500)</strong>{" "}
+              to drop Rupees on the ground!&rdquo;
             </p>
 
             {/* MAP 1 RUPEE ECONOMY TRACKER BANNER */}
@@ -2618,10 +2673,11 @@ export default function GameOverlay() {
               </div>
               <div>
                 <div style={{ color: "#ffd24c", fontWeight: 800 }}>
-                  3. Gold Bounty Monsters (5x)
+                  3. Gold Bounty Monsters &amp; Admin Testing
                 </div>
                 <div style={{ color: "#d8d5e8" }}>
-                  Slay Gold/Crimson Crowned Monsters in Map 1 for a 5x Rupee Fountain!
+                  Slay Crowned Foes for 5x Rupees — or drop <strong>+500 Gold Rupees</strong> via{" "}
+                  <strong>Tab</strong>!
                 </div>
               </div>
             </div>
@@ -2703,7 +2759,7 @@ export default function GameOverlay() {
                 </button>
               </div>
 
-              {/* COUNTER ITEM 3: EXPENSIVE PROGRESSION ITEM / UPGRADE (100 RUPEES) */}
+              {/* COUNTER ITEM 3: EXPENSIVE PROGRESSION ITEM / UPGRADE (600 RUPEES) */}
               <div
                 className={`shop-item-card ${
                   flags.shopProgressionBought ? "shop-item-owned" : ""
@@ -2718,18 +2774,22 @@ export default function GameOverlay() {
                   <span className="shop-item-name" style={{ color: "#ffe270" }}>
                     3. Champion&apos;s Progression Set
                   </span>
-                  <span className="shop-item-hotkey">Key Goal: 100 Rupees</span>
+                  <span className="shop-item-hotkey">
+                    {flags.shopProgressionBought ? "300 Rupees" : "Grand Bundle: 600 Rupees"}
+                  </span>
                 </div>
                 <p className="shop-item-desc">
                   <strong>Right Counter Grand Prize:</strong> Grants{" "}
-                  <strong>+1 Heart Container (+1 Max HP &amp; Full Heal)</strong>, equips the{" "}
+                  <strong>+1 Heart Container (+1 Max HP &amp; Full Heal)</strong>, unlocks &amp; equips{" "}
                   <strong>Aegis Mirror Shield</strong> &amp;{" "}
                   <strong>Tempered Blade (2x DMG)</strong>, and upgrades{" "}
                   <strong>Bomb Bag to 30 Bombs</strong>!
                 </p>
                 <button
                   type="button"
-                  disabled={hero.rupees < 100}
+                  disabled={
+                    flags.shopProgressionBought ? hero.rupees < 300 : hero.rupees < 600
+                  }
                   onClick={() =>
                     buyShopItem(
                       flags.shopProgressionBought
@@ -2740,12 +2800,12 @@ export default function GameOverlay() {
                   className="shop-buy-btn"
                 >
                   {flags.shopProgressionBought
-                    ? hero.rupees >= 100
-                      ? "Buy +1 Heart Container — 100 Rupees"
-                      : "Owned ✓ (+1 Heart Container: 100 Rupees)"
-                    : hero.rupees >= 100
-                    ? "★ Unlock Progression Set — 100 Rupees"
-                    : `Need 100 Rupees (${hero.rupees}/100)`}
+                    ? hero.rupees >= 300
+                      ? "Buy +1 Heart Container — 300 Rupees"
+                      : `Owned ✓ (+1 Heart Container: ${hero.rupees}/300)`
+                    : hero.rupees >= 600
+                    ? "★ Unlock Champion's Set — 600 Rupees"
+                    : `Need 600 Rupees (${hero.rupees}/600)`}
                 </button>
               </div>
             </div>
@@ -2760,112 +2820,365 @@ export default function GameOverlay() {
                 textTransform: "uppercase",
               }}
             >
-              Additional Curio Stock &amp; Alchemical Bottles
+              Progressive Adventure Tools, Weapons, Armor &amp; Alchemical Bottles
             </div>
 
             <div className="shop-items-grid">
-              <div className={`shop-item-card ${hero.hasBoomerang ? "shop-item-owned" : ""}`}>
+              {/* BOMB BAG UNLOCK (150 RUPEES) */}
+              <div
+                className={`shop-item-card ${
+                  (hero.maxBombs ?? 0) > 0 ? "shop-item-owned" : ""
+                }`}
+              >
                 <div className="shop-item-top">
-                  <span className="shop-item-name">Gale Boomerang</span>
-                  <span className="shop-item-hotkey">Key: Q / 1</span>
+                  <span className="shop-item-name">Canvas Bomb Bag (20 Cap)</span>
+                  <span className="shop-item-hotkey">150 Rupees • Key: B / 6</span>
                 </div>
                 <p className="shop-item-desc">
-                  Throws a returning wind-blade that damages &amp; stuns foes in its path
-                  and snatches distant Rupees.
+                  Unlocks the <strong>Bomb Bag (20 Capacity + 10 Bombs)</strong> so you can
+                  blast Cracked Boulders and open hidden caves!
                 </p>
                 <button
                   type="button"
-                  disabled={hero.hasBoomerang || hero.rupees < 15}
-                  onClick={() => buyShopItem("boomerang")}
+                  disabled={(hero.maxBombs ?? 0) > 0 || hero.rupees < 150}
+                  onClick={() => buyShopItem("bomb_bag")}
                   className="shop-buy-btn"
                 >
-                  {hero.hasBoomerang
+                  {(hero.maxBombs ?? 0) > 0
                     ? "Owned ✓"
-                    : hero.rupees >= 15
-                    ? "Buy — 15 Rupees"
-                    : "Need 15 Rupees"}
+                    : hero.rupees >= 150
+                    ? "Unlock Bomb Bag — 150 Rupees"
+                    : `Need 150 Rupees (${hero.rupees}/150)`}
                 </button>
               </div>
 
-              <div className={`shop-item-card ${hero.hasBow ? "shop-item-owned" : ""}`}>
-                <div className="shop-item-top">
-                  <span className="shop-item-name">Ranger&apos;s Ash Bow</span>
-                  <span className="shop-item-hotkey">Key: E / 2</span>
-                </div>
-                <p className="shop-item-desc">
-                  Crafted hunting bow for long-range attacks. Requires Arrows (purchased
-                  separately) to fire!
-                </p>
-                <button
-                  type="button"
-                  disabled={hero.hasBow || hero.rupees < 20}
-                  onClick={() => buyShopItem("bow")}
-                  className="shop-buy-btn"
-                >
-                  {hero.hasBow
-                    ? "Owned ✓"
-                    : hero.rupees >= 20
-                    ? "Buy — 20 Rupees"
-                    : "Need 20 Rupees"}
-                </button>
-              </div>
-
+              {/* 5 BOMBS REFILL (25 RUPEES) */}
               <div className="shop-item-card">
                 <div className="shop-item-top">
                   <span className="shop-item-name">Bundle of 5 Bombs</span>
                   <span className="shop-item-hotkey">
-                    Bag: {hero.bombs ?? 0}/{hero.maxBombs ?? 20} (Key: B)
+                    {(hero.maxBombs ?? 0) > 0
+                      ? `Bag: ${hero.bombs ?? 0}/${hero.maxBombs}`
+                      : "Requires Bomb Bag"}
                   </span>
                 </div>
                 <p className="shop-item-desc">
-                  Restocks 5 heavy iron Bombs. Place or throw (B / F) to blast enemies,
-                  toggle Crystal Switches, and blow open Cracked Boulders!
+                  Restocks 5 heavy iron Bombs once you own a Bomb Bag. Place or throw (B / F)
+                  to blast foes and Cracked Boulders!
                 </p>
                 <button
                   type="button"
                   disabled={
-                    (hero.bombs ?? 0) >= (hero.maxBombs ?? 20) || hero.rupees < 10
+                    (hero.maxBombs ?? 0) <= 0 ||
+                    (hero.bombs ?? 0) >= (hero.maxBombs ?? 20) ||
+                    hero.rupees < 25
                   }
                   onClick={() => buyShopItem("bombs")}
                   className="shop-buy-btn"
                 >
-                  {(hero.bombs ?? 0) >= (hero.maxBombs ?? 20)
+                  {(hero.maxBombs ?? 0) <= 0
+                    ? "Buy Bomb Bag First (150)"
+                    : (hero.bombs ?? 0) >= (hero.maxBombs ?? 20)
                     ? "Bomb Bag Full"
-                    : hero.rupees >= 10
-                    ? "Buy +5 — 10 Rupees"
-                    : "Need 10 Rupees"}
+                    : hero.rupees >= 25
+                    ? "Buy +5 Bombs — 25 Rupees"
+                    : "Need 25 Rupees"}
                 </button>
               </div>
 
+              {/* EXPLORER'S SHOVEL (250 RUPEES) */}
+              <div className={`shop-item-card ${hero.hasShovel ? "shop-item-owned" : ""}`}>
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Explorer&apos;s Iron Shovel</span>
+                  <span className="shop-item-hotkey">250 Rupees • Key: G / 4</span>
+                </div>
+                <p className="shop-item-desc">
+                  Unlocks the <strong>Shovel [G]</strong> to dig soft dirt patches across all
+                  maps for buried Rupees, Hearts, Bottles, and legendary gear!
+                </p>
+                <button
+                  type="button"
+                  disabled={hero.hasShovel || hero.rupees < 250}
+                  onClick={() => buyShopItem("shovel")}
+                  className="shop-buy-btn"
+                >
+                  {hero.hasShovel
+                    ? "Owned ✓"
+                    : hero.rupees >= 250
+                    ? "Unlock Shovel — 250 Rupees"
+                    : `Need 250 Rupees (${hero.rupees}/250)`}
+                </button>
+              </div>
+
+              {/* FLAME ROD (300 RUPEES — OR FREE IN DUNGEON ROOM 3) */}
+              <div className={`shop-item-card ${hero.hasFireRod ? "shop-item-owned" : ""}`}>
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Sanctum Flame Rod</span>
+                  <span className="shop-item-hotkey">300 Rupees • Key: R / 3</span>
+                </div>
+                <p className="shop-item-desc">
+                  Shoots blazing fireballs that light lanterns, burn spiderwebs/briars, and
+                  melt ice armor. <em>(Or find for FREE in Dungeon Room 3!)</em>
+                </p>
+                <button
+                  type="button"
+                  disabled={hero.hasFireRod || hero.rupees < 300}
+                  onClick={() => buyShopItem("fire_rod")}
+                  className="shop-buy-btn"
+                >
+                  {hero.hasFireRod
+                    ? "Owned ✓"
+                    : hero.rupees >= 300
+                    ? "Unlock Flame Rod — 300 Rupees"
+                    : `Need 300 Rupees (Or Dungeon Rm 3)`}
+                </button>
+              </div>
+
+              {/* SWIFTWIND BOOTS (300 RUPEES) */}
+              <div
+                className={`shop-item-card ${
+                  (hero.unlockedBoots ?? []).includes("swift_boots") ? "shop-item-owned" : ""
+                }`}
+              >
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Swiftwind Pegasus Boots</span>
+                  <span className="shop-item-hotkey">300 Rupees • +25% Speed</span>
+                </div>
+                <p className="shop-item-desc">
+                  Wing-stitched boots that permanently unlock <strong>+25% Run Speed</strong>{" "}
+                  in your Character Sheet [C]!
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    (hero.unlockedBoots ?? []).includes("swift_boots") || hero.rupees < 300
+                  }
+                  onClick={() => buyShopItem("swift_boots")}
+                  className="shop-buy-btn"
+                >
+                  {(hero.unlockedBoots ?? []).includes("swift_boots")
+                    ? "Owned ✓ (Equip in C)"
+                    : hero.rupees >= 300
+                    ? "Unlock Swift Boots — 300 Rupees"
+                    : `Need 300 Rupees (${hero.rupees}/300)`}
+                </button>
+              </div>
+
+              {/* TITAN IRON GREAVES (350 RUPEES) */}
+              <div
+                className={`shop-item-card ${
+                  (hero.unlockedBoots ?? []).includes("titan_greaves")
+                    ? "shop-item-owned"
+                    : ""
+                }`}
+              >
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Titan Iron Greaves</span>
+                  <span className="shop-item-hotkey">350 Rupees • -50% Knockback</span>
+                </div>
+                <p className="shop-item-desc">
+                  Heavy steel greaves that grant <strong>+12% Speed</strong> and halve all
+                  knockback when blocking heavy attacks!
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    (hero.unlockedBoots ?? []).includes("titan_greaves") || hero.rupees < 350
+                  }
+                  onClick={() => buyShopItem("titan_greaves")}
+                  className="shop-buy-btn"
+                >
+                  {(hero.unlockedBoots ?? []).includes("titan_greaves")
+                    ? "Owned ✓ (Equip in C)"
+                    : hero.rupees >= 350
+                    ? "Unlock Titan Greaves — 350 Rupees"
+                    : `Need 350 Rupees (${hero.rupees}/350)`}
+                </button>
+              </div>
+
+              {/* AEGIS MIRROR SHIELD (400 RUPEES) */}
+              <div
+                className={`shop-item-card ${
+                  (hero.unlockedOffhands ?? []).includes("mirror_shield")
+                    ? "shop-item-owned"
+                    : ""
+                }`}
+              >
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Aegis Mirror Shield</span>
+                  <span className="shop-item-hotkey">400 Rupees • 2x Block + Magic</span>
+                </div>
+                <p className="shop-item-desc">
+                  Polished silver-gold shield that blocks <strong>2 Damage</strong> and
+                  deflects magical fireballs &amp; arcane bolts!
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    (hero.unlockedOffhands ?? []).includes("mirror_shield") ||
+                    hero.rupees < 400
+                  }
+                  onClick={() => buyShopItem("mirror_shield")}
+                  className="shop-buy-btn"
+                >
+                  {(hero.unlockedOffhands ?? []).includes("mirror_shield")
+                    ? "Owned ✓ (Equip in C)"
+                    : hero.rupees >= 400
+                    ? "Unlock Mirror Shield — 400 Rupees"
+                    : `Need 400 Rupees (${hero.rupees}/400)`}
+                </button>
+              </div>
+
+              {/* SAPPHIRE MAIL (450 RUPEES) */}
+              <div
+                className={`shop-item-card ${
+                  (hero.unlockedTunics ?? []).includes("blue_mail") ? "shop-item-owned" : ""
+                }`}
+              >
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Sapphire Mail (Tunic)</span>
+                  <span className="shop-item-hotkey">450 Rupees • -50% DMG</span>
+                </div>
+                <p className="shop-item-desc">
+                  Cerulean chainmail that reduces all physical &amp; magical damage by{" "}
+                  <strong>50%</strong>! <em>(Or solve the Sun Shrine Torch Puzzle!)</em>
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    (hero.unlockedTunics ?? []).includes("blue_mail") || hero.rupees < 450
+                  }
+                  onClick={() => buyShopItem("blue_mail")}
+                  className="shop-buy-btn"
+                >
+                  {(hero.unlockedTunics ?? []).includes("blue_mail")
+                    ? "Owned ✓ (Equip in C)"
+                    : hero.rupees >= 450
+                    ? "Unlock Sapphire Mail — 450 Rupees"
+                    : `Need 450 Rupees (${hero.rupees}/450)`}
+                </button>
+              </div>
+
+              {/* TEMPERED SUN-BLADE (500 RUPEES) */}
+              <div
+                className={`shop-item-card ${
+                  (hero.unlockedPrimaries ?? []).includes("tempered_blade")
+                    ? "shop-item-owned"
+                    : ""
+                }`}
+              >
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Tempered Sun-Blade</span>
+                  <span className="shop-item-hotkey">500 Rupees • 2x Sword DMG</span>
+                </div>
+                <p className="shop-item-desc">
+                  Masterwork golden broadsword that doubles your slash damage (2 DMG) and
+                  Spin Attack damage (4 DMG)!
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    (hero.unlockedPrimaries ?? []).includes("tempered_blade") ||
+                    hero.rupees < 500
+                  }
+                  onClick={() => buyShopItem("tempered_blade")}
+                  className="shop-buy-btn"
+                >
+                  {(hero.unlockedPrimaries ?? []).includes("tempered_blade")
+                    ? "Owned ✓ (Equip in C)"
+                    : hero.rupees >= 500
+                    ? "Unlock Tempered Blade — 500 Rupees"
+                    : `Need 500 Rupees (${hero.rupees}/500)`}
+                </button>
+              </div>
+
+              {/* CRIMSON DRAGON MAIL (750 RUPEES) */}
+              <div
+                className={`shop-item-card ${
+                  (hero.unlockedTunics ?? []).includes("red_mail") ? "shop-item-owned" : ""
+                }`}
+              >
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Crimson Dragon Mail</span>
+                  <span className="shop-item-hotkey">750 Rupees • -75% DMG</span>
+                </div>
+                <p className="shop-item-desc">
+                  Ultimate ruby-woven armor that reduces all incoming physical &amp; magical
+                  damage by <strong>75%</strong>!
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    (hero.unlockedTunics ?? []).includes("red_mail") || hero.rupees < 750
+                  }
+                  onClick={() => buyShopItem("red_mail")}
+                  className="shop-buy-btn"
+                >
+                  {(hero.unlockedTunics ?? []).includes("red_mail")
+                    ? "Owned ✓ (Equip in C)"
+                    : hero.rupees >= 750
+                    ? "Unlock Crimson Mail — 750 Rupees"
+                    : `Need 750 Rupees (${hero.rupees}/750)`}
+                </button>
+              </div>
+
+              {/* EMPTY GLASS BOTTLE (120 RUPEES) */}
               <div className="shop-item-card">
                 <div className="shop-item-top">
                   <span className="shop-item-name">Empty Glass Bottle</span>
                   <span className="shop-item-hotkey">
-                    Belt: {(hero.bottles ?? []).length}/6
+                    120 Rupees • Belt: {(hero.bottles ?? []).length}/6
                   </span>
                 </div>
                 <p className="shop-item-desc">
-                  Adds an extra Glass Bottle to your belt for storing Potions, Fairies, or
-                  Golden Attack Bees.
+                  Adds an Empty Glass Bottle to your belt (up to 6) for storing Potions,
+                  Fairies, or Golden Attack Bees.
                 </p>
                 <button
                   type="button"
-                  disabled={(hero.bottles ?? []).length >= 6 || hero.rupees < 20}
+                  disabled={(hero.bottles ?? []).length >= 6 || hero.rupees < 120}
                   onClick={() => buyShopItem("bottle")}
                   className="shop-buy-btn"
                 >
                   {(hero.bottles ?? []).length >= 6
                     ? "Max 6 Bottles"
-                    : hero.rupees >= 20
-                    ? "Buy — 20 Rupees"
-                    : "Need 20 Rupees"}
+                    : hero.rupees >= 120
+                    ? "Buy Empty Bottle — 120 Rupees"
+                    : `Need 120 Rupees (${hero.rupees}/120)`}
                 </button>
               </div>
 
+              {/* BOTTLED GREEN MAGIC POTION (25 RUPEES) */}
+              <div className="shop-item-card">
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Bottled Green Potion</span>
+                  <span className="shop-item-hotkey">25 Rupees • Empty Bottle</span>
+                </div>
+                <p className="shop-item-desc">
+                  Fills an Empty Bottle with Emerald Magic Potion. Drink (V) to restore 100%
+                  Magic Power (MP)!
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    !(hero.bottles ?? []).includes("empty") || hero.rupees < 25
+                  }
+                  onClick={() => buyShopItem("green_potion")}
+                  className="shop-buy-btn"
+                >
+                  {!(hero.bottles ?? []).includes("empty")
+                    ? "Need Empty Bottle (120)"
+                    : hero.rupees >= 25
+                    ? "Fill Green Potion — 25 Rupees"
+                    : "Need 25 Rupees"}
+                </button>
+              </div>
+
+              {/* BOTTLED RED LIFE POTION (30 RUPEES) */}
               <div className="shop-item-card">
                 <div className="shop-item-top">
                   <span className="shop-item-name">Bottled Red Potion</span>
-                  <span className="shop-item-hotkey">Requires Empty Bottle</span>
+                  <span className="shop-item-hotkey">30 Rupees • Empty Bottle</span>
                 </div>
                 <p className="shop-item-desc">
                   Fills an Empty Bottle with Crimson Life Potion. Drink anytime (V) to
@@ -2874,23 +3187,24 @@ export default function GameOverlay() {
                 <button
                   type="button"
                   disabled={
-                    !(hero.bottles ?? []).includes("empty") || hero.rupees < 15
+                    !(hero.bottles ?? []).includes("empty") || hero.rupees < 30
                   }
                   onClick={() => buyShopItem("red_potion")}
                   className="shop-buy-btn"
                 >
                   {!(hero.bottles ?? []).includes("empty")
-                    ? "No Empty Bottle"
-                    : hero.rupees >= 15
-                    ? "Fill — 15 Rupees"
-                    : "Need 15 Rupees"}
+                    ? "Need Empty Bottle (120)"
+                    : hero.rupees >= 30
+                    ? "Fill Red Potion — 30 Rupees"
+                    : "Need 30 Rupees"}
                 </button>
               </div>
 
+              {/* BOTTLED BLUE ELIXIR (60 RUPEES) */}
               <div className="shop-item-card">
                 <div className="shop-item-top">
                   <span className="shop-item-name">Bottled Blue Elixir</span>
-                  <span className="shop-item-hotkey">Requires Empty Bottle</span>
+                  <span className="shop-item-hotkey">60 Rupees • Empty Bottle</span>
                 </div>
                 <p className="shop-item-desc">
                   Fills an Empty Bottle with Sapphire Elixir. Restores ALL Hearts and 100%
@@ -2899,16 +3213,68 @@ export default function GameOverlay() {
                 <button
                   type="button"
                   disabled={
-                    !(hero.bottles ?? []).includes("empty") || hero.rupees < 25
+                    !(hero.bottles ?? []).includes("empty") || hero.rupees < 60
                   }
                   onClick={() => buyShopItem("blue_potion")}
                   className="shop-buy-btn"
                 >
                   {!(hero.bottles ?? []).includes("empty")
-                    ? "No Empty Bottle"
-                    : hero.rupees >= 25
-                    ? "Fill — 25 Rupees"
-                    : "Need 25 Rupees"}
+                    ? "Need Empty Bottle (120)"
+                    : hero.rupees >= 60
+                    ? "Fill Blue Elixir — 60 Rupees"
+                    : "Need 60 Rupees"}
+                </button>
+              </div>
+
+              {/* BOTTLED SPRING FAIRY (80 RUPEES) */}
+              <div className="shop-item-card">
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Captured Spring Fairy</span>
+                  <span className="shop-item-hotkey">80 Rupees • Empty Bottle</span>
+                </div>
+                <p className="shop-item-desc">
+                  Captures a Spring Fairy in an Empty Bottle. Heals 7 Hearts or
+                  automatically revives you upon fatal damage!
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    !(hero.bottles ?? []).includes("empty") || hero.rupees < 80
+                  }
+                  onClick={() => buyShopItem("fairy")}
+                  className="shop-buy-btn"
+                >
+                  {!(hero.bottles ?? []).includes("empty")
+                    ? "Need Empty Bottle (120)"
+                    : hero.rupees >= 80
+                    ? "Bottle Fairy — 80 Rupees"
+                    : "Need 80 Rupees"}
+                </button>
+              </div>
+
+              {/* BOTTLED GOLDEN BEE (50 RUPEES) */}
+              <div className="shop-item-card">
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Golden Attack Bee</span>
+                  <span className="shop-item-hotkey">50 Rupees • Empty Bottle</span>
+                </div>
+                <p className="shop-item-desc">
+                  Captures a friendly Golden Bee in an Empty Bottle. Unleash (V) to chase and
+                  sting nearby monsters for 15s!
+                </p>
+                <button
+                  type="button"
+                  disabled={
+                    !(hero.bottles ?? []).includes("empty") || hero.rupees < 50
+                  }
+                  onClick={() => buyShopItem("bee")}
+                  className="shop-buy-btn"
+                >
+                  {!(hero.bottles ?? []).includes("empty")
+                    ? "Need Empty Bottle (120)"
+                    : hero.rupees >= 50
+                    ? "Bottle Golden Bee — 50 Rupees"
+                    : "Need 50 Rupees"}
                 </button>
               </div>
             </div>

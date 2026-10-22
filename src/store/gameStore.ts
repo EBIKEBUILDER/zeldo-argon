@@ -51,11 +51,22 @@ export type ShopItemId =
   | "boomerang"
   | "bow"
   | "arrows"
+  | "bomb_bag"
   | "bombs"
+  | "shovel"
+  | "fire_rod"
+  | "swift_boots"
+  | "titan_greaves"
+  | "mirror_shield"
+  | "tempered_blade"
+  | "blue_mail"
+  | "red_mail"
   | "heart"
   | "red_potion"
   | "green_potion"
   | "blue_potion"
+  | "fairy"
+  | "bee"
   | "bottle";
 export type EditorToolId = "select" | "place" | "terrain" | "delete";
 export type EditorEntityKind = "prop" | "enemy" | "rupee" | "portal";
@@ -770,11 +781,11 @@ function createInitialState(
       hasDungeonKey: false,
       hasBoomerang: true,
       hasBow: true,
-      hasFireRod: true,
-      hasShovel: true,
-      arrows: 25,
-      bombs: 10,
-      maxBombs: 30,
+      hasFireRod: false,
+      hasShovel: false,
+      arrows: 20,
+      bombs: 0,
+      maxBombs: 0,
       heldObject: null,
       pushTimer: 0,
       pushTargetPropId: null,
@@ -783,11 +794,11 @@ function createInitialState(
       equippedOffhand: "wooden_buckler",
       equippedTunic: "green_tunic",
       equippedBoots: "leather_boots",
-      unlockedPrimaries: ["traveler_blade", "tempered_blade"],
-      unlockedOffhands: ["wooden_buckler", "mirror_shield"],
-      unlockedTunics: ["green_tunic", "blue_mail", "red_mail"],
-      unlockedBoots: ["leather_boots", "swift_boots", "titan_greaves"],
-      bottles: ["red_potion", "fairy", "bee", "empty"],
+      unlockedPrimaries: ["traveler_blade"],
+      unlockedOffhands: ["wooden_buckler"],
+      unlockedTunics: ["green_tunic"],
+      unlockedBoots: ["leather_boots"],
+      bottles: [],
       shieldBlock: 1,
       swordDamage: 1,
       isAttacking: false,
@@ -890,7 +901,7 @@ function createInitialState(
       eastWingArenaLocked: false,
       eastWingCleared: false,
       fireRodChestOpened: false,
-      hasFireRod: true,
+      hasFireRod: false,
       webBarrierBurned: false,
       hasBigKey: false,
       bigKeyChestOpened: false,
@@ -1188,6 +1199,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       if (slot === "primary") {
         const pId = itemId as PrimaryHandId;
+        if (!hero.unlockedPrimaries.includes(pId)) {
+          soundEngine.playGateLocked();
+          return {
+            banner: {
+              id: Date.now() + Math.floor(Math.random() * 1000),
+              text: "Weapon Locked!",
+              subtext: "Purchase the Tempered Sun-Blade (500 Rupees) or Champion's Set (600 Rupees) at Bramble's Shop!",
+              timer: 3.6,
+            },
+          };
+        }
         hero.equippedPrimary = pId;
         hero.swordDamage = pId === "tempered_blade" ? 2 : 1;
         label = pId === "tempered_blade" ? "Equipped Tempered Sun-Blade" : "Equipped Traveler's Sword";
@@ -1197,6 +1219,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
             : "1 Base Damage • Charged Spin Attack deals 2 Damage!";
       } else if (slot === "offhand") {
         const oId = itemId as OffhandId;
+        if (!hero.unlockedOffhands.includes(oId)) {
+          soundEngine.playGateLocked();
+          return {
+            banner: {
+              id: Date.now() + Math.floor(Math.random() * 1000),
+              text: "Shield Locked!",
+              subtext: "Purchase the Aegis Mirror Shield (400 Rupees) or Champion's Set (600 Rupees) at Bramble's Shop!",
+              timer: 3.6,
+            },
+          };
+        }
         hero.equippedOffhand = oId;
         hero.shieldBlock = oId === "mirror_shield" ? 2 : 1;
         label = oId === "mirror_shield" ? "Equipped Aegis Mirror Shield" : "Equipped Wooden Buckler";
@@ -1206,6 +1239,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
             : "Blocks 1 Physical Damage when raised!";
       } else if (slot === "tunic") {
         const tId = itemId as TunicId;
+        if (!hero.unlockedTunics.includes(tId)) {
+          soundEngine.playGateLocked();
+          return {
+            banner: {
+              id: Date.now() + Math.floor(Math.random() * 1000),
+              text: "Tunic Locked!",
+              subtext:
+                tId === "blue_mail"
+                  ? "Solve the Sun Shrine Torch Puzzle or buy Sapphire Mail (450 Rupees) at Bramble's Shop!"
+                  : "Buy Crimson Dragon Mail (750 Rupees) at Bramble's Shop or dig up hidden treasure!",
+              timer: 3.8,
+            },
+          };
+        }
         hero.equippedTunic = tId;
         if (tId === "red_mail") {
           label = "Equipped Crimson Dragon Mail";
@@ -1219,6 +1266,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       } else if (slot === "boots") {
         const bId = itemId as BootsId;
+        if (!hero.unlockedBoots.includes(bId)) {
+          soundEngine.playGateLocked();
+          return {
+            banner: {
+              id: Date.now() + Math.floor(Math.random() * 1000),
+              text: "Footwear Locked!",
+              subtext:
+                bId === "swift_boots"
+                  ? "Buy Swiftwind Pegasus Boots (300 Rupees) at Bramble's Shop or unearth them with the Shovel!"
+                  : "Buy Titan Iron Greaves (350 Rupees) at Bramble's Shop!",
+              timer: 3.8,
+            },
+          };
+        }
         hero.equippedBoots = bId;
         if (bId === "swift_boots") {
           label = "Equipped Swiftwind Boots";
@@ -1583,10 +1644,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     if (prefabKey.startsWith("rupee:")) {
-      const tier = prefabKey.replace("rupee:", "") as RupeeTier;
-      const value = tier === "heart" ? 2 : tier === "red" ? 20 : tier === "blue" ? 5 : 1;
+      const rawTier = prefabKey.replace("rupee:", "");
+      const isGoldAdmin = rawTier === "gold_admin";
+      const tier: RupeeTier = isGoldAdmin ? "red" : (rawTier as RupeeTier);
+      const value = isGoldAdmin
+        ? 500
+        : tier === "heart"
+        ? 2
+        : tier === "red"
+        ? 20
+        : tier === "blue"
+        ? 5
+        : 1;
       const newRupee: RupeeItemState = {
-        id: `ed-rupee-${tier}-${uid}`,
+        id: `ed-rupee-${rawTier}-${uid}`,
         zone,
         x,
         z,
@@ -2004,7 +2075,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         eastWingArenaLocked: false,
         eastWingCleared: false,
         fireRodChestOpened: false,
-        hasFireRod: true,
+        hasFireRod: state.hero.hasFireRod,
         webBarrierBurned: false,
         hasBigKey: false,
         bigKeyChestOpened: false,
@@ -2017,7 +2088,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         mp: state.hero.maxMp,
         hasBoomerang: true,
         hasBow: true,
-        arrows: Math.max(state.hero.arrows, 25),
+        arrows: Math.max(state.hero.arrows, 20),
         heldObject: null,
         pushTimer: 0,
         pushTargetPropId: null,
@@ -2151,7 +2222,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   // =========================================================
-  // MERCHANT SHOP PURCHASE ACTION (INCLUDING THE 3 FEATURED COUNTER ITEMS!)
+  // MERCHANT SHOP PURCHASE ACTION (PROGRESSIVE UNLOCKS & HIGH-TIER RUPEE PRICING!)
   // =========================================================
   buyShopItem: (item: ShopItemId) => {
     const state = get();
@@ -2184,8 +2255,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (hero.hp >= hero.maxHp && emptyIdx === -1) {
         soundEngine.playGateLocked();
         pushNotice(
-          "Hearts & Bottles Already Full!",
-          "Your Life Hearts are at 100% and all Glass Bottles are filled."
+          "HeartsAlready Full!",
+          hero.bottles.length === 0
+            ? "Your Life Hearts are at 100% (buy an Empty Glass Bottle to store extra potions)."
+            : "Your Life Hearts are at 100% and all Glass Bottles are filled."
         );
         return;
       }
@@ -2237,71 +2310,67 @@ export const useGameStore = create<GameStore>((set, get) => ({
       soundEngine.playShopPurchase();
       pushNotice(
         `+10 Arrows (${hero.arrows}) & 100% Magic Restored!`,
-        "Your Bow quiver is restocked and your Flame Rod Magic meter is at 100%!"
+        "Your Bow quiver is restocked and your Magic meter is at 100%!"
       );
       return;
     }
 
-    // 3. COUNTER ITEM #3: Champion's Progression Upgrade (Expensive: 100 Rupees)
+    // 3. COUNTER ITEM #3: Champion's Grand Progression Set (High-Tier Goal: 600 Rupees)
     if (item === "counter_progression_upgrade") {
       if (flags.shopProgressionBought) {
         soundEngine.playGateLocked();
         pushNotice(
-          "Champion's Relic Already Claimed!",
-          "You can still purchase repeatable Heart Containers (+1 Max Heart) for 100 Rupees!"
+          "Champion's Relic Set Already Claimed!",
+          "You can still purchase repeatable Heart Containers (+1 Max Heart) for 300 Rupees!"
         );
         return;
       }
-      if (hero.rupees < 100) {
+      if (hero.rupees < 600) {
         soundEngine.playGateLocked();
         pushNotice(
-          `Need ${100 - hero.rupees} More Rupees! (100 Rupees Required)`,
-          "Earn 50 Rupees in the SW Secret Stash Cave, 50 Rupees from Elder Rowan's Quest, or hunt Gold 5x Bounty Monsters!"
+          `Need ${600 - hero.rupees} More Rupees! (600 Rupees Required)`,
+          "Save up across your quests, or drop Gold Admin Rupees (+500) in the Map Editor (Tab) to test!"
         );
         return;
       }
-      hero.rupees -= 100;
+      hero.rupees -= 600;
       flags.shopProgressionBought = true;
-      // Grant +1 Full Heart Container (+2 half-hearts) & full heal
       hero.maxHp += 2;
       hero.hp = hero.maxHp;
       hero.damageFractionAcc = 0;
-      // Unlock & equip Bigger Shield (Aegis Mirror Shield: blocks 2 physical & magical damage!)
       if (!hero.unlockedOffhands.includes("mirror_shield")) {
         hero.unlockedOffhands.push("mirror_shield");
       }
       hero.equippedOffhand = "mirror_shield";
       hero.shieldBlock = 2;
-      // Unlock & equip Tempered Master Blade (2x Sword Damage!)
       if (!hero.unlockedPrimaries.includes("tempered_blade")) {
         hero.unlockedPrimaries.push("tempered_blade");
       }
       hero.equippedPrimary = "tempered_blade";
       hero.swordDamage = 2;
-      // Upgrade Bomb Bag capacity & refill Bombs to 30
-      hero.maxBombs = Math.max(hero.maxBombs || 30, 30);
+      hero.maxBombs = Math.max(hero.maxBombs || 0, 30);
       hero.bombs = hero.maxBombs;
       hero.mp = hero.maxMp;
 
       soundEngine.playVictoryFanfare();
       pushNotice(
-        "Champion's Progression Upgrade Unlocked! (+1 Heart, Mirror Shield, Master Blade & 30 Bombs)",
-        "Your Max HP increased, Aegis Mirror Shield & Tempered Blade are equipped, and your Bomb Bag is full!"
+        "Champion's Progression Set Unlocked! (+1 Heart, Mirror Shield, Master Blade & 30 Bombs)",
+        "Your Max HP increased, Aegis Mirror Shield & Tempered Blade are equipped, and your Bomb Bag holds 30 Bombs!"
       );
       return;
     }
 
-    // Repeatable 100-Rupee Heart Container (+1 Max Heart)
+    // Repeatable 300-Rupee Heart Container (+1 Max Heart)
     if (item === "heart_container") {
-      if (hero.rupees < 100) {
+      if (hero.rupees < 300) {
         soundEngine.playGateLocked();
         pushNotice(
-          `Need ${100 - hero.rupees} More Rupees! (100 Rupees Required)`,
-          "A Heart Container (+1 Max Heart) costs 100 Rupees."
+          `Need ${300 - hero.rupees} More Rupees! (300 Rupees Required)`,
+          "A Heart Container (+1 Max Heart) costs 300 Rupees."
         );
         return;
       }
-      hero.rupees -= 100;
+      hero.rupees -= 300;
       hero.maxHp += 2;
       hero.hp = hero.maxHp;
       hero.damageFractionAcc = 0;
@@ -2309,6 +2378,175 @@ export const useGameStore = create<GameStore>((set, get) => ({
       pushNotice(
         `Purchased Heart Container! (${hero.maxHp / 2} Max Hearts)`,
         "Your maximum life capacity permanently increased by +1 Full Heart and all Hearts are restored!"
+      );
+      return;
+    }
+
+    // Progressive Adventure Tools
+    if (item === "bomb_bag") {
+      if ((hero.maxBombs ?? 0) >= 20) return;
+      if (hero.rupees < 150) {
+        soundEngine.playGateLocked();
+        pushNotice("Not Enough Rupees!", "The Heavy Canvas Bomb Bag (20 Capacity + 10 Bombs) costs 150 Rupees.");
+        return;
+      }
+      hero.rupees -= 150;
+      hero.maxBombs = 20;
+      hero.bombs = 10;
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        "Unlocked the Bomb Bag! (+10 Bombs, Capacity: 20)",
+        "Press B or 6 to place or throw Bombs and blast open Cracked Boulders blocking secret caves!"
+      );
+      return;
+    }
+
+    if (item === "shovel") {
+      if (hero.hasShovel) return;
+      if (hero.rupees < 250) {
+        soundEngine.playGateLocked();
+        pushNotice("Not Enough Rupees!", "The Explorer's Iron Shovel costs 250 Rupees.");
+        return;
+      }
+      hero.rupees -= 250;
+      hero.hasShovel = true;
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        "Unlocked the Explorer's Shovel! (Key: G / 4)",
+        "Stand on soft dirt patches across all maps and press G to dig up buried treasure, tunics, boots, & bottles!"
+      );
+      return;
+    }
+
+    if (item === "fire_rod") {
+      if (hero.hasFireRod) return;
+      if (hero.rupees < 300) {
+        soundEngine.playGateLocked();
+        pushNotice(
+          "Not Enough Rupees!",
+          "The Flame Rod costs 300 Rupees in the Shop (or claim it free inside Dungeon Room 3: The Ember Sanctum!)."
+        );
+        return;
+      }
+      hero.rupees -= 300;
+      hero.hasFireRod = true;
+      flags.hasFireRod = true;
+      hero.mp = hero.maxMp;
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        "Unlocked the Flame Rod! (Key: R / 3)",
+        "Tap R for a fast fireball (lights lanterns, burns vines/webs, melts ice) or HOLD R for an explosive blast!"
+      );
+      return;
+    }
+
+    // High-Tier Weapons, Shields, Tunics & Boots
+    if (item === "swift_boots") {
+      if (hero.unlockedBoots.includes("swift_boots")) return;
+      if (hero.rupees < 300) {
+        soundEngine.playGateLocked();
+        pushNotice("Not Enough Rupees!", "Swiftwind Pegasus Boots (+25% Speed) cost 300 Rupees.");
+        return;
+      }
+      hero.rupees -= 300;
+      hero.unlockedBoots.push("swift_boots");
+      hero.equippedBoots = "swift_boots";
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        "Unlocked & Equipped Swiftwind Pegasus Boots! (+25% Speed)",
+        "Your movement speed increased by 25%! Switch footwear anytime in Character Sheet (C)."
+      );
+      return;
+    }
+
+    if (item === "titan_greaves") {
+      if (hero.unlockedBoots.includes("titan_greaves")) return;
+      if (hero.rupees < 350) {
+        soundEngine.playGateLocked();
+        pushNotice("Not Enough Rupees!", "Titan Iron Greaves (+12% Speed & -50% Knockback) cost 350 Rupees.");
+        return;
+      }
+      hero.rupees -= 350;
+      hero.unlockedBoots.push("titan_greaves");
+      hero.equippedBoots = "titan_greaves";
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        "Unlocked & Equipped Titan Iron Greaves!",
+        "+12% Movement Speed & 50% reduced Shield Block knockback! Switch footwear anytime in Character Sheet (C)."
+      );
+      return;
+    }
+
+    if (item === "mirror_shield") {
+      if (hero.unlockedOffhands.includes("mirror_shield")) return;
+      if (hero.rupees < 400) {
+        soundEngine.playGateLocked();
+        pushNotice("Not Enough Rupees!", "The Aegis Mirror Shield (Blocks 2 Physical & Magic DMG) costs 400 Rupees.");
+        return;
+      }
+      hero.rupees -= 400;
+      hero.unlockedOffhands.push("mirror_shield");
+      hero.equippedOffhand = "mirror_shield";
+      hero.shieldBlock = 2;
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        "Unlocked & Equipped Aegis Mirror Shield!",
+        "Blocks 2 Physical & Magical Damage when raised! Switch shields anytime in Character Sheet (C)."
+      );
+      return;
+    }
+
+    if (item === "blue_mail") {
+      if (hero.unlockedTunics.includes("blue_mail")) return;
+      if (hero.rupees < 450) {
+        soundEngine.playGateLocked();
+        pushNotice("Not Enough Rupees!", "Sapphire Mail (-50% All Damage) costs 450 Rupees (or solve the Sun Shrine Torch Puzzle!).");
+        return;
+      }
+      hero.rupees -= 450;
+      hero.unlockedTunics.push("blue_mail");
+      hero.equippedTunic = "blue_mail";
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        "Unlocked & Equipped Sapphire Mail! (-50% Damage)",
+        "All incoming physical & magical damage is reduced by 50%! Switch tunics anytime in Character Sheet (C)."
+      );
+      return;
+    }
+
+    if (item === "tempered_blade") {
+      if (hero.unlockedPrimaries.includes("tempered_blade")) return;
+      if (hero.rupees < 500) {
+        soundEngine.playGateLocked();
+        pushNotice("Not Enough Rupees!", "The Tempered Sun-Blade (2x Sword Damage) costs 500 Rupees.");
+        return;
+      }
+      hero.rupees -= 500;
+      hero.unlockedPrimaries.push("tempered_blade");
+      hero.equippedPrimary = "tempered_blade";
+      hero.swordDamage = 2;
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        "Unlocked & Equipped Tempered Sun-Blade! (2x Sword Damage)",
+        "Slashes deal 2 Damage and Charged Spin Attacks deal 4 Damage! Switch blades anytime in Character Sheet (C)."
+      );
+      return;
+    }
+
+    if (item === "red_mail") {
+      if (hero.unlockedTunics.includes("red_mail")) return;
+      if (hero.rupees < 750) {
+        soundEngine.playGateLocked();
+        pushNotice("Not Enough Rupees!", "Crimson Dragon Mail (-75% All Damage) costs 750 Rupees.");
+        return;
+      }
+      hero.rupees -= 750;
+      hero.unlockedTunics.push("red_mail");
+      hero.equippedTunic = "red_mail";
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        "Unlocked & Equipped Crimson Dragon Mail! (-75% Damage)",
+        "Legendary ruby-woven armor — reduces all incoming damage by 75%! Switch tunics anytime in Character Sheet (C)."
       );
       return;
     }
@@ -2357,22 +2595,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
           : "Remember to purchase the Ranger's Bow to shoot these arrows!"
       );
     } else if (item === "bombs") {
-      const maxBombs = hero.maxBombs || 30;
+      if ((hero.maxBombs ?? 0) <= 0) {
+        soundEngine.playGateLocked();
+        pushNotice(
+          "No Bomb Bag Owned!",
+          "Unlock the Bomb Bag (150 Rupees) first before buying Bomb refills!"
+        );
+        return;
+      }
+      const maxBombs = hero.maxBombs || 20;
       if ((hero.bombs ?? 0) >= maxBombs) {
         soundEngine.playGateLocked();
         pushNotice("Bomb Bag Full!", `Your Bomb Bag already holds ${maxBombs} Bombs.`);
         return;
       }
-      if (hero.rupees < 10) {
+      if (hero.rupees < 25) {
         soundEngine.playGateLocked();
-        pushNotice("Not Enough Rupees!", "A Bundle of 5 Bombs costs 10 Rupees.");
+        pushNotice("Not Enough Rupees!", "A Bundle of 5 Bombs costs 25 Rupees.");
         return;
       }
-      hero.rupees -= 10;
+      hero.rupees -= 25;
       hero.bombs = Math.min(maxBombs, (hero.bombs ?? 0) + 5);
       soundEngine.playShopPurchase();
       pushNotice(
-        `Purchased 5 Bombs! (Total: ${hero.bombs})`,
+        `Purchased 5 Bombs! (Total: ${hero.bombs}/${maxBombs})`,
         "Press B or 6 to place or throw a Bomb and blow up cracked boulders!"
       );
     } else if (item === "heart") {
@@ -2396,12 +2642,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
         pushNotice("Max Bottles Reached!", "Your belt already holds 6 Glass Bottles.");
         return;
       }
-      if (hero.rupees < 20) {
+      if (hero.rupees < 120) {
         soundEngine.playGateLocked();
-        pushNotice("Not Enough Rupees!", "An Empty Glass Bottle costs 20 Rupees.");
+        pushNotice("Not Enough Rupees!", "An Empty Glass Bottle costs 120 Rupees.");
         return;
       }
-      hero.rupees -= 20;
+      hero.rupees -= 120;
       hero.bottles.push("empty");
       soundEngine.playShopPurchase();
       pushNotice(
@@ -2411,33 +2657,48 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } else if (
       item === "red_potion" ||
       item === "green_potion" ||
-      item === "blue_potion"
+      item === "blue_potion" ||
+      item === "fairy" ||
+      item === "bee"
     ) {
       const emptyIdx = hero.bottles.findIndex((b) => b === "empty");
       if (emptyIdx === -1) {
         soundEngine.playGateLocked();
         pushNotice(
           "No Empty Bottle Available!",
-          "Use an existing bottle or acquire an Empty Glass Bottle first."
+          "Purchase an Empty Glass Bottle (120 Rupees) or drink an existing bottle first."
         );
         return;
       }
-      const cost = item === "blue_potion" ? 25 : item === "red_potion" ? 15 : 12;
+      const cost =
+        item === "fairy"
+          ? 80
+          : item === "blue_potion"
+          ? 60
+          : item === "bee"
+          ? 50
+          : item === "red_potion"
+          ? 30
+          : 25;
       if (hero.rupees < cost) {
         soundEngine.playGateLocked();
-        pushNotice("Not Enough Rupees!", `This potion costs ${cost} Rupees.`);
+        pushNotice("Not Enough Rupees!", `This bottled item costs ${cost} Rupees.`);
         return;
       }
       hero.rupees -= cost;
       hero.bottles[emptyIdx] = item;
       soundEngine.playShopPurchase();
       pushNotice(
-        item === "blue_potion"
-          ? "Bottled Blue Potion!"
+        item === "fairy"
+          ? "Captured Spring Fairy in Bottle!"
+          : item === "bee"
+          ? "Captured Golden Attack Bee in Bottle!"
+          : item === "blue_potion"
+          ? "Bottled Blue Elixir!"
           : item === "red_potion"
           ? "Bottled Red Potion!"
           : "Bottled Green Potion!",
-        `Stored in Bottle #${emptyIdx + 1} — press V / 5 or open Character Sheet (C) to drink!`
+        `Stored in Bottle #${emptyIdx + 1} — press V / 5 or open Character Sheet (C) to use!`
       );
     }
   },
@@ -2760,13 +3021,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
           4.2
         );
       } else if (reward === "bombs_5") {
-        hero.bombs = Math.min(hero.maxBombs || 30, (hero.bombs ?? 0) + 5);
-        soundEngine.playKeyPickup();
-        pushBanner(
-          `Found 5 Bombs! (Total: ${hero.bombs})`,
-          "Press B or 6 to place or throw a Bomb and blow up cracked boulders!",
-          4.0
-        );
+        if ((hero.maxBombs ?? 0) > 0) {
+          hero.bombs = Math.min(hero.maxBombs, (hero.bombs ?? 0) + 5);
+          soundEngine.playKeyPickup();
+          pushBanner(
+            `Found 5 Bombs! (Total: ${hero.bombs}/${hero.maxBombs})`,
+            "Press B or 6 to place or throw a Bomb and blow up cracked boulders!",
+            4.0
+          );
+        } else {
+          rupees.push({
+            id: `pot-drop-${sourceId ?? stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+            zone,
+            x: sx,
+            z: sz,
+            tier: "red",
+            value: 20,
+            collected: false,
+            spawnBounceTimer: 0.45,
+          });
+        }
       } else if (reward === "red_rupee" || reward === "blue_rupee" || reward === "green_rupee" || reward === "heart") {
         const tier: RupeeTier =
           reward === "red_rupee"
@@ -2789,10 +3063,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
       } else if (reward === "random") {
         const roll = Math.random();
-        if (roll >= 0.92) {
-          hero.bombs = Math.min(hero.maxBombs || 30, (hero.bombs ?? 0) + 3);
+        if (roll >= 0.92 && (hero.maxBombs ?? 0) > 0) {
+          hero.bombs = Math.min(hero.maxBombs, (hero.bombs ?? 0) + 3);
           soundEngine.playKeyPickup();
-          pushBanner(`Found 3 Bombs! (Total: ${hero.bombs})`, "Hidden inside the shattered vessel!", 3.0);
+          pushBanner(`Found 3 Bombs! (Total: ${hero.bombs}/${hero.maxBombs})`, "Hidden inside the shattered vessel!", 3.0);
         } else if (roll >= 0.42) {
           const tier: RupeeTier = roll >= 0.80 ? "blue" : roll >= 0.62 ? "heart" : "green";
           const val = tier === "blue" ? 5 : tier === "heart" ? 2 : 1;
@@ -2864,7 +3138,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           );
           pushBanner(
             "Grove Crystal Switch Activated! (Shrine Barrier Lowered!)",
-            "The Forest Grove Shrine is unsealed — claim the Sanctum Entry Key & Flame Rod at the northern pedestal!",
+            "The Forest Grove Shrine is unsealed — claim the Sanctum Entry Key at the northern pedestal!",
             5.2
           );
           return true;
@@ -3302,11 +3576,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
         hero.isBlocking = false;
         hero.weaponLockTimer = 0.20;
         soundEngine.playLift();
+      } else if ((hero.maxBombs ?? 0) <= 0) {
+        soundEngine.playGateLocked();
+        pushBanner(
+          "Bomb Bag Locked!",
+          "Purchase the Heavy Bomb Bag (150 Rupees) at Merchant Bramble's Shop to carry and place Bombs!",
+          3.4
+        );
       } else if ((hero.bombs ?? 0) <= 0) {
         soundEngine.playGateLocked();
         pushBanner(
           "Out of Bombs!",
-          "Smash clay pots or buy a Bomb Bundle (+5) at Merchant Bramble's Shop!",
+          "Smash clay pots or buy a Bomb Bundle (+5 for 25 Rupees) at Merchant Bramble's Shop!",
           3.0
         );
       } else {
@@ -3383,6 +3664,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // - Charged Hold (>= 0.55s): Shoots a Big Slow Fireball (2 Damage, explodes on impact & leaves burning fire on the ground!)
     const FIRE_CHARGE_THRESHOLD = 0.55;
     if (
+      input.fireRodPressed &&
+      !hero.hasFireRod &&
+      hero.fireRodCooldown <= 0 &&
+      !state.shopOpen &&
+      !state.characterOpen
+    ) {
+      soundEngine.playGateLocked();
+      hero.fireRodCooldown = 0.4;
+      pushBanner(
+        "Flame Rod Locked!",
+        "Claim the Flame Rod inside Dungeon Room 3 (The Ember Sanctum Chest) or unlock it at Bramble's Shop (300 Rupees)!",
+        3.6
+      );
+    } else if (
       input.fireRodHeld &&
       !hero.heldObject &&
       hero.hasFireRod &&
@@ -3451,7 +3746,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.digAnimTimer <= 0;
 
     // Shovel Digging Action (Press G or 4)
-    if (canUseWeapon && input.shovelPressed && hero.hasShovel) {
+    if (canUseWeapon && input.shovelPressed && !hero.hasShovel) {
+      soundEngine.playGateLocked();
+      hero.weaponLockTimer = 0.25;
+      pushBanner(
+        "Shovel Locked!",
+        "Purchase the Explorer's Shovel (250 Rupees) at Merchant Bramble's Shop to dig up soft dirt patches!",
+        3.5
+      );
+    } else if (canUseWeapon && input.shovelPressed && hero.hasShovel) {
       hero.isBlocking = false;
       hero.digAnimTimer = 0.36;
       hero.weaponLockTimer = 0.34;
@@ -3490,6 +3793,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
         const reward: BuriedRewardKind = targetPatch.buriedReward ?? "random";
         if (reward === "swift_boots") {
+          if (!hero.unlockedBoots.includes("swift_boots")) {
+            hero.unlockedBoots = [...hero.unlockedBoots, "swift_boots"];
+          }
           hero.equippedBoots = "swift_boots";
           rupees.push({
             id: `dig-drop-${targetPatch.id}`,
@@ -3503,17 +3809,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
           });
           pushBanner(
             "Dug Up the Swiftwind Boots! (+25% Speed)",
-            "Automatically equipped in your Boots slot! Open Character Sheet (C) anytime.",
+            "Unlocked & equipped in your Boots slot! Open Character Sheet (C) anytime.",
             4.5
           );
         } else if (reward === "blue_mail") {
+          if (!hero.unlockedTunics.includes("blue_mail")) {
+            hero.unlockedTunics = [...hero.unlockedTunics, "blue_mail"];
+          }
           hero.equippedTunic = "blue_mail";
           pushBanner(
             "Dug Up the Sapphire Mail! (-50% Damage)",
-            "Reduces all incoming physical & magical damage by 50%!",
+            "Unlocked & equipped — reduces all incoming physical & magical damage by 50%!",
             4.5
           );
         } else if (reward === "red_mail") {
+          if (!hero.unlockedTunics.includes("red_mail")) {
+            hero.unlockedTunics = [...hero.unlockedTunics, "red_mail"];
+          }
           hero.equippedTunic = "red_mail";
           rupees.push({
             id: `dig-drop-${targetPatch.id}`,
@@ -3527,7 +3839,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           });
           pushBanner(
             "Dug Up the Crimson Dragon Mail! (-75% Damage)",
-            "Legendary tunic equipped — reduces all physical & magical damage by 75%!",
+            "Legendary tunic unlocked & equipped — reduces all physical & magical damage by 75%!",
             4.8
           );
         } else if (reward === "bottle") {
@@ -4085,7 +4397,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // 4b. Check Sanctum Entry Key & Flame Rod Pedestal Pickup in Map 1B (`grove`)
+    // 4b. Check Sanctum Entry Key Pedestal Pickup in Map 1B (`grove`)
     if (zone === "grove" && !flags.keyPickedUp) {
       const distToKey = Math.hypot(
         hero.x - DUNGEON_KEY_POS.x,
@@ -4094,11 +4406,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (distToKey < 1.95) {
         flags.keyPickedUp = true;
         hero.hasDungeonKey = true;
-        hero.hasFireRod = true;
-        hero.mp = hero.maxMp;
         soundEngine.playKeyPickup();
         pushBanner(
-          "Acquired the Sanctum Entry Key & Flame Rod!",
+          "Acquired the Sanctum Entry Key!",
           "Return East to Map 1 Crossroads and take the North Exit to unlock Map 2 (Sunken Sanctum)!",
           5.8
         );
@@ -4462,11 +4772,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
             if (boomerang.carryingKey && !flags.keyPickedUp) {
               flags.keyPickedUp = true;
               hero.hasDungeonKey = true;
-              hero.hasFireRod = true;
-              hero.mp = hero.maxMp;
               soundEngine.playKeyPickup();
               pushBanner(
-                "Boomerang Fetched the Sanctum Key & Flame Rod!",
+                "Boomerang Fetched the Sanctum Entry Key!",
                 "Return East to Map 1 Crossroads and take the North Exit to unlock Map 2 (Sunken Sanctum)!",
                 5.5
               );
