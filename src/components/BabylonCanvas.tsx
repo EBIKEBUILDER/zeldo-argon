@@ -28,6 +28,12 @@ import {
   BIG_KEY_CHEST_POS,
   BOSS_CHEST_POS,
   BOSS_EXIT_GATE_POS,
+  CAVERN_CREST_KEY_POS,
+  CAVERN_SHOVEL_CHEST_POS,
+  CITADEL_ARMORY_CHEST_POS,
+  CITADEL_BOSS_GATE_POS,
+  CITADEL_EXIT_GATE_POS,
+  CITADEL_VICTORY_CHEST_POS,
   CRYPT_SHORTCUT_DOOR_POS,
   CustomModelAsset,
   DG_SMALL_KEY_POS,
@@ -36,6 +42,9 @@ import {
   EAST_WING_DOOR_POS,
   EnemyKind,
   FIRE_ROD_CHEST_POS,
+  FRONTIER_BOMB_CHEST_POS,
+  FRONTIER_CITADEL_GATE_POS,
+  FRONTIER_SAPPER_NPC_POS,
   GUIDE_NPC_POS,
   HEIRLOOM_NPC_POS,
   LOCKED_GATE_POS,
@@ -459,18 +468,22 @@ export default function BabylonCanvas() {
       64
     );
 
-     // =========================================================
+    // =========================================================
     // ZONE CONTAINERS & UPDATABLE TERRAIN MESHES
     // =========================================================
     const overworldRoot = new TransformNode("overworldRoot", scene);
     const groveRoot = new TransformNode("groveRoot", scene);
     const dungeonRoot = new TransformNode("dungeonRoot", scene);
     const frontierRoot = new TransformNode("frontierRoot", scene);
+    const cavernsRoot = new TransformNode("cavernsRoot", scene);
+    const citadelRoot = new TransformNode("citadelRoot", scene);
 
     const owBaseColor = new Color3(0.24, 0.55, 0.28);
     const grBaseColor = new Color3(0.19, 0.48, 0.27);
     const dgBaseColor = new Color3(0.18, 0.19, 0.25);
     const frBaseColor = new Color3(0.18, 0.46, 0.32);
+    const cvBaseColor = new Color3(0.22, 0.34, 0.46);
+    const ctBaseColor = new Color3(0.16, 0.14, 0.22);
 
     const owGroundMat = makeMat(
       "owGroundMat",
@@ -495,6 +508,18 @@ export default function BabylonCanvas() {
       new Color3(1, 1, 1),
       undefined,
       new Color3(0.06, 0.09, 0.07)
+    );
+    const cvGroundMat = makeMat(
+      "cvGroundMat",
+      new Color3(1, 1, 1),
+      undefined,
+      new Color3(0.14, 0.18, 0.24)
+    );
+    const ctGroundMat = makeMat(
+      "ctGroundMat",
+      new Color3(1, 1, 1),
+      undefined,
+      new Color3(0.12, 0.08, 0.16)
     );
 
     // Subdivided updatable ground meshes for real-time Terrain Brush sculpting & painting!
@@ -537,6 +562,26 @@ export default function BabylonCanvas() {
     frGround.parent = frontierRoot;
     frGround.isPickable = true;
     applyTerrainCellsToGroundMesh(frGround, frBaseColor, {});
+
+    const cvGround = MeshBuilder.CreateGround(
+      "cvGround",
+      { width: 84, height: 84, subdivisions: 42, updatable: true },
+      scene
+    );
+    cvGround.material = cvGroundMat;
+    cvGround.parent = cavernsRoot;
+    cvGround.isPickable = true;
+    applyTerrainCellsToGroundMesh(cvGround, cvBaseColor, {});
+
+    const ctGround = MeshBuilder.CreateGround(
+      "ctGround",
+      { width: 84, height: 84, subdivisions: 42, updatable: true },
+      scene
+    );
+    ctGround.material = ctGroundMat;
+    ctGround.parent = citadelRoot;
+    ctGround.isPickable = true;
+    applyTerrainCellsToGroundMesh(ctGround, ctBaseColor, {});
 
     // Shared Prop Materials
     const pathMat = makeMat("owPathMat", new Color3(0.75, 0.65, 0.46), undefined, new Color3(0.08, 0.08, 0.06));
@@ -1603,6 +1648,620 @@ export default function BabylonCanvas() {
       crestParts.push(shard);
     });
     mergeGroupWithMaterial("mergedZeldoCrest", crestParts, goldKeyMat, zeldoCrestNode);
+
+    // =========================================================
+    // MAP 3 (FRONTIER): SAPPER CAPTAIN VANE NPC, BOMB BAG CHEST & NORTH GLACIAL SEAL GATE
+    // =========================================================
+    const glacialIceMat = makeMat(
+      "glacialIceMat",
+      new Color3(0.32, 0.85, 1.0),
+      new Color3(0.14, 0.55, 0.88),
+      new Color3(0.9, 0.98, 1.0),
+      1.0,
+      96
+    );
+
+    const sapperNpcRoot = new TransformNode("sapperNpcRoot", scene);
+    sapperNpcRoot.parent = frontierRoot;
+    sapperNpcRoot.position.set(FRONTIER_SAPPER_NPC_POS.x, 0, FRONTIER_SAPPER_NPC_POS.z);
+    sapperNpcRoot.rotation.y = Math.PI * 0.25;
+
+    const sapperRug = MeshBuilder.CreateCylinder(
+      "sapperRug",
+      { diameter: 2.2, height: 0.05, tessellation: 20 },
+      scene
+    );
+    sapperRug.position.set(0, 0.025, 0);
+    sapperRug.material = pathMat;
+    sapperRug.parent = sapperNpcRoot;
+
+    const sapperArmorMat = makeMat(
+      "sapperArmorMat",
+      new Color3(0.85, 0.42, 0.16),
+      new Color3(0.18, 0.08, 0.03)
+    );
+    const sapperBody = MeshBuilder.CreateCylinder(
+      "sapperBody",
+      { diameterTop: 0.64, diameterBottom: 0.98, height: 1.28, tessellation: 14 },
+      scene
+    );
+    sapperBody.position.set(0, 0.68, 0);
+    sapperBody.material = sapperArmorMat;
+    sapperBody.parent = sapperNpcRoot;
+
+    const sapperHead = MeshBuilder.CreateSphere(
+      "sapperHead",
+      { diameter: 0.72, segments: 14 },
+      scene
+    );
+    sapperHead.position.set(0, 1.54, 0);
+    sapperHead.material = whiteEyeMat;
+    sapperHead.parent = sapperNpcRoot;
+
+    const sapperHelm = MeshBuilder.CreateCylinder(
+      "sapperHelm",
+      { diameterTop: 0.52, diameterBottom: 0.88, height: 0.55, tessellation: 12 },
+      scene
+    );
+    sapperHelm.position.set(0, 1.88, 0);
+    sapperHelm.material = ironGateMat;
+    sapperHelm.parent = sapperNpcRoot;
+
+    const sapperQuestMarker = new TransformNode("sapperQuestMarker", scene);
+    sapperQuestMarker.position.set(0, 2.75, 0);
+    sapperQuestMarker.parent = sapperNpcRoot;
+    {
+      const qShaft = MeshBuilder.CreateCylinder(
+        "sapperQuestShaft",
+        { diameterTop: 0.22, diameterBottom: 0.12, height: 0.52, tessellation: 10 },
+        scene
+      );
+      qShaft.position.set(0, 0.2, 0);
+      qShaft.material = goldKeyMat;
+      qShaft.parent = sapperQuestMarker;
+
+      const qDot = MeshBuilder.CreateSphere(
+        "sapperQuestDot",
+        { diameter: 0.2, segments: 10 },
+        scene
+      );
+      qDot.position.set(0, -0.18, 0);
+      qDot.material = glowingCrimsonMat;
+      qDot.parent = sapperQuestMarker;
+    }
+
+    // SE Sapper Outpost Bomb Bag Chest (`FRONTIER_BOMB_CHEST_POS = 24.5, -18.5`)
+    const frontierBombChestRoot = new TransformNode("frontierBombChestRoot", scene);
+    frontierBombChestRoot.parent = frontierRoot;
+    frontierBombChestRoot.position.set(FRONTIER_BOMB_CHEST_POS.x, 0, FRONTIER_BOMB_CHEST_POS.z);
+
+    const frBombDais = MeshBuilder.CreateBox(
+      "frBombDais",
+      { width: 3.4, height: 0.34, depth: 2.6 },
+      scene
+    );
+    frBombDais.position.set(0, 0.17, 0);
+    frBombDais.material = ruinMat;
+    frBombDais.parent = frontierBombChestRoot;
+
+    const frBombBase = MeshBuilder.CreateBox(
+      "frBombBase",
+      { width: 1.85, height: 0.92, depth: 1.25 },
+      scene
+    );
+    frBombBase.position.set(0, 0.8, 0);
+    frBombBase.material = woodMat;
+    frBombBase.parent = frontierBombChestRoot;
+
+    const frBombTrim = MeshBuilder.CreateBox(
+      "frBombTrim",
+      { width: 1.94, height: 0.22, depth: 1.32 },
+      scene
+    );
+    frBombTrim.position.set(0, 1.18, 0);
+    frBombTrim.material = goldKeyMat;
+    frBombTrim.parent = frontierBombChestRoot;
+
+    const frontierBombChestLid = MeshBuilder.CreateCylinder(
+      "frontierBombChestLid",
+      { diameter: 1.25, height: 1.88, tessellation: 16 },
+      scene
+    );
+    frontierBombChestLid.rotation.z = Math.PI / 2;
+    frontierBombChestLid.position.set(0, 1.3, 0);
+    frontierBombChestLid.material = goldKeyMat;
+    frontierBombChestLid.parent = frontierBombChestRoot;
+
+    const frontierBombChestRing = MeshBuilder.CreateTorus(
+      "frontierBombChestRing",
+      { diameter: 3.0, thickness: 0.13, tessellation: 24 },
+      scene
+    );
+    frontierBombChestRing.position.set(0, 0.42, 0);
+    frontierBombChestRing.material = glowingCrimsonMat;
+    frontierBombChestRing.parent = frontierBombChestRoot;
+
+    const frontierBombRelicNode = new TransformNode("frontierBombRelicNode", scene);
+    frontierBombRelicNode.parent = frontierBombChestRoot;
+    frontierBombRelicNode.position.set(0, 2.2, 0);
+    {
+      const bSphere = MeshBuilder.CreateSphere(
+        "frBombRelicSphere",
+        { diameter: 0.72, segments: 14 },
+        scene
+      );
+      bSphere.material = darkObsidianMat;
+      bSphere.parent = frontierBombRelicNode;
+
+      const bCap = MeshBuilder.CreateCylinder(
+        "frBombRelicCap",
+        { diameter: 0.28, height: 0.2, tessellation: 10 },
+        scene
+      );
+      bCap.position.set(0, 0.36, 0);
+      bCap.material = goldKeyMat;
+      bCap.parent = frontierBombRelicNode;
+
+      const bSpark = MeshBuilder.CreatePolyhedron(
+        "frBombRelicSpark",
+        { type: 1, size: 0.18 },
+        scene
+      );
+      bSpark.position.set(0, 0.56, 0);
+      bSpark.material = glowingCrimsonMat;
+      bSpark.parent = frontierBombRelicNode;
+    }
+
+    // North Glacial Seal Gate to Map 5 (`FRONTIER_CITADEL_GATE_POS = 0, 31.8`)
+    const frCitadelGateNode = new TransformNode("frCitadelGateNode", scene);
+    frCitadelGateNode.parent = frontierRoot;
+    frCitadelGateNode.position.set(FRONTIER_CITADEL_GATE_POS.x, 0, FRONTIER_CITADEL_GATE_POS.z);
+    {
+      const h = 4.6;
+      const w = 7.4;
+      const parts: Mesh[] = [];
+      const barCount = 9;
+      for (let b = 0; b < barCount; b++) {
+        const bx = -3.2 + (b / (barCount - 1)) * 6.4;
+        const bar = MeshBuilder.CreateCylinder(
+          `frCitadelBar-${b}`,
+          { diameter: 0.26, height: h, tessellation: 12 },
+          scene
+        );
+        bar.position.set(bx, h / 2, 0);
+        parts.push(bar);
+      }
+      const beamTop = MeshBuilder.CreateBox(
+        "frCitadelBeamTop",
+        { width: w, height: 0.38, depth: 0.5 },
+        scene
+      );
+      beamTop.position.set(0, h - 0.5, 0);
+      parts.push(beamTop);
+
+      const beamMid = MeshBuilder.CreateBox(
+        "frCitadelBeamMid",
+        { width: w, height: 0.34, depth: 0.45 },
+        scene
+      );
+      beamMid.position.set(0, h * 0.45, 0);
+      parts.push(beamMid);
+
+      mergeGroupWithMaterial("mergedFrCitadelGateIron", parts, ironGateMat, frCitadelGateNode);
+
+      const lockPlate = MeshBuilder.CreateBox(
+        "frCitadelLockPlate",
+        { width: 1.15, height: 1.25, depth: 0.65 },
+        scene
+      );
+      lockPlate.position.set(0, h * 0.45, 0);
+      lockPlate.material = glacialIceMat;
+      lockPlate.parent = frCitadelGateNode;
+    }
+
+    // =========================================================
+    // MAP 4 (CAVERNS): NW RELIQUARY SHOVEL/MAIL CHEST & EAST GLACIAL CREST KEY PEDESTAL
+    // =========================================================
+    const cavernShovelChestRoot = new TransformNode("cavernShovelChestRoot", scene);
+    cavernShovelChestRoot.parent = cavernsRoot;
+    cavernShovelChestRoot.position.set(CAVERN_SHOVEL_CHEST_POS.x, 0, CAVERN_SHOVEL_CHEST_POS.z);
+
+    const cvChestDais = MeshBuilder.CreateBox(
+      "cvChestDais",
+      { width: 3.6, height: 0.36, depth: 2.8 },
+      scene
+    );
+    cvChestDais.position.set(0, 0.18, 0);
+    cvChestDais.material = dgPillarMat;
+    cvChestDais.parent = cavernShovelChestRoot;
+
+    const cvChestBase = MeshBuilder.CreateBox(
+      "cvChestBase",
+      { width: 1.85, height: 0.92, depth: 1.25 },
+      scene
+    );
+    cvChestBase.position.set(0, 0.82, 0);
+    cvChestBase.material = glacialIceMat;
+    cvChestBase.parent = cavernShovelChestRoot;
+
+    const cvChestTrim = MeshBuilder.CreateBox(
+      "cvChestTrim",
+      { width: 1.94, height: 0.22, depth: 1.32 },
+      scene
+    );
+    cvChestTrim.position.set(0, 1.2, 0);
+    cvChestTrim.material = goldKeyMat;
+    cvChestTrim.parent = cavernShovelChestRoot;
+
+    const cavernShovelChestLid = MeshBuilder.CreateCylinder(
+      "cavernShovelChestLid",
+      { diameter: 1.25, height: 1.88, tessellation: 16 },
+      scene
+    );
+    cavernShovelChestLid.rotation.z = Math.PI / 2;
+    cavernShovelChestLid.position.set(0, 1.32, 0);
+    cavernShovelChestLid.material = goldKeyMat;
+    cavernShovelChestLid.parent = cavernShovelChestRoot;
+
+    const cavernShovelChestRing = MeshBuilder.CreateTorus(
+      "cavernShovelChestRing",
+      { diameter: 2.9, thickness: 0.13, tessellation: 24 },
+      scene
+    );
+    cavernShovelChestRing.position.set(0, 0.45, 0);
+    cavernShovelChestRing.material = glacialIceMat;
+    cavernShovelChestRing.parent = cavernShovelChestRoot;
+
+    const cavernShovelRelicNode = new TransformNode("cavernShovelRelicNode", scene);
+    cavernShovelRelicNode.parent = cavernShovelChestRoot;
+    cavernShovelRelicNode.position.set(0, 2.25, 0);
+    {
+      const shShaft = MeshBuilder.CreateCylinder(
+        "cvShovelRelicShaft",
+        { diameter: 0.12, height: 1.0, tessellation: 10 },
+        scene
+      );
+      shShaft.rotation.z = 0.35;
+      shShaft.material = woodMat;
+      shShaft.parent = cavernShovelRelicNode;
+
+      const shBlade = MeshBuilder.CreateBox(
+        "cvShovelRelicBlade",
+        { width: 0.46, height: 0.52, depth: 0.08 },
+        scene
+      );
+      shBlade.position.set(-0.2, -0.45, 0);
+      shBlade.rotation.z = 0.35;
+      shBlade.material = bladeMat;
+      shBlade.parent = cavernShovelRelicNode;
+    }
+
+    // East Glacial Sanctum Pedestal & Floating Glacial Crest Key (`CAVERN_CREST_KEY_POS = 24.0, 14.0`)
+    const cvKeyPedestal = MeshBuilder.CreateCylinder(
+      "cvKeyPedestal",
+      { diameterTop: 2.2, diameterBottom: 2.7, height: 0.72, tessellation: 16 },
+      scene
+    );
+    cvKeyPedestal.position.set(CAVERN_CREST_KEY_POS.x, 0.36, CAVERN_CREST_KEY_POS.z);
+    cvKeyPedestal.material = dgPillarMat;
+    cvKeyPedestal.parent = cavernsRoot;
+
+    const glacialKeyBeaconRing = MeshBuilder.CreateTorus(
+      "glacialKeyBeaconRing",
+      { diameter: 2.7, thickness: 0.12, tessellation: 28 },
+      scene
+    );
+    glacialKeyBeaconRing.position.set(CAVERN_CREST_KEY_POS.x, 0.14, CAVERN_CREST_KEY_POS.z);
+    glacialKeyBeaconRing.material = glacialIceMat;
+    glacialKeyBeaconRing.parent = cavernsRoot;
+
+    const glacialKeyNode = new TransformNode("glacialKeyNode", scene);
+    glacialKeyNode.parent = cavernsRoot;
+    glacialKeyNode.position.set(CAVERN_CREST_KEY_POS.x, 1.65, CAVERN_CREST_KEY_POS.z);
+    {
+      const gkParts: Mesh[] = [];
+      const gkBow = MeshBuilder.CreateTorus(
+        "glacialKeyBow",
+        { diameter: 0.82, thickness: 0.18, tessellation: 20 },
+        scene
+      );
+      gkBow.rotation.x = Math.PI / 2;
+      gkBow.position.set(0, 0.48, 0);
+      gkParts.push(gkBow);
+
+      const gkShaft = MeshBuilder.CreateCylinder(
+        "glacialKeyShaft",
+        { diameter: 0.18, height: 1.0, tessellation: 12 },
+        scene
+      );
+      gkShaft.position.set(0, -0.12, 0);
+      gkParts.push(gkShaft);
+
+      const gkBit1 = MeshBuilder.CreateBox(
+        "glacialKeyBit1",
+        { width: 0.36, height: 0.15, depth: 0.14 },
+        scene
+      );
+      gkBit1.position.set(0.2, -0.38, 0);
+      gkParts.push(gkBit1);
+
+      const gkBit2 = MeshBuilder.CreateBox(
+        "glacialKeyBit2",
+        { width: 0.28, height: 0.15, depth: 0.14 },
+        scene
+      );
+      gkBit2.position.set(0.16, -0.16, 0);
+      gkParts.push(gkBit2);
+
+      mergeGroupWithMaterial("mergedGlacialKey", gkParts, glacialIceMat, glacialKeyNode);
+    }
+
+    // =========================================================
+    // MAP 5 (CITADEL): WEST ARMORY CHEST, INNER SANCTUM GATE, VICTORY CHEST & EXIT GATE
+    // =========================================================
+    const ctRunner = MeshBuilder.CreateBox(
+      "ctRunner",
+      { width: 5.2, height: 0.05, depth: 68 },
+      scene
+    );
+    ctRunner.position.set(0, 0.025, 0);
+    ctRunner.material = dgRunnerMat;
+    ctRunner.parent = citadelRoot;
+    ctRunner.isPickable = false;
+
+    const ctBossArenaRing = MeshBuilder.CreateTorus(
+      "ctBossArenaRing",
+      { diameter: 15, thickness: 0.24, tessellation: 36 },
+      scene
+    );
+    ctBossArenaRing.position.set(0, 0.06, 23);
+    ctBossArenaRing.material = glowingCrimsonMat;
+    ctBossArenaRing.parent = citadelRoot;
+    ctBossArenaRing.isPickable = false;
+
+    // West Armory Chest (`CITADEL_ARMORY_CHEST_POS = -22.0, -6.0`)
+    const citadelArmoryChestRoot = new TransformNode("citadelArmoryChestRoot", scene);
+    citadelArmoryChestRoot.parent = citadelRoot;
+    citadelArmoryChestRoot.position.set(CITADEL_ARMORY_CHEST_POS.x, 0, CITADEL_ARMORY_CHEST_POS.z);
+
+    const ctArmoryDais = MeshBuilder.CreateBox(
+      "ctArmoryDais",
+      { width: 3.6, height: 0.36, depth: 2.8 },
+      scene
+    );
+    ctArmoryDais.position.set(0, 0.18, 0);
+    ctArmoryDais.material = dgPillarMat;
+    ctArmoryDais.parent = citadelArmoryChestRoot;
+
+    const ctArmoryBase = MeshBuilder.CreateBox(
+      "ctArmoryBase",
+      { width: 1.9, height: 0.95, depth: 1.3 },
+      scene
+    );
+    ctArmoryBase.position.set(0, 0.84, 0);
+    ctArmoryBase.material = darkObsidianMat;
+    ctArmoryBase.parent = citadelArmoryChestRoot;
+
+    const ctArmoryTrim = MeshBuilder.CreateBox(
+      "ctArmoryTrim",
+      { width: 2.0, height: 0.22, depth: 1.36 },
+      scene
+    );
+    ctArmoryTrim.position.set(0, 1.22, 0);
+    ctArmoryTrim.material = goldKeyMat;
+    ctArmoryTrim.parent = citadelArmoryChestRoot;
+
+    const citadelArmoryChestLid = MeshBuilder.CreateCylinder(
+      "citadelArmoryChestLid",
+      { diameter: 1.3, height: 1.92, tessellation: 16 },
+      scene
+    );
+    citadelArmoryChestLid.rotation.z = Math.PI / 2;
+    citadelArmoryChestLid.position.set(0, 1.34, 0);
+    citadelArmoryChestLid.material = goldKeyMat;
+    citadelArmoryChestLid.parent = citadelArmoryChestRoot;
+
+    const citadelArmoryChestRing = MeshBuilder.CreateTorus(
+      "citadelArmoryChestRing",
+      { diameter: 3.0, thickness: 0.13, tessellation: 24 },
+      scene
+    );
+    citadelArmoryChestRing.position.set(0, 0.45, 0);
+    citadelArmoryChestRing.material = goldKeyMat;
+    citadelArmoryChestRing.parent = citadelArmoryChestRoot;
+
+    const citadelArmoryRelicNode = new TransformNode("citadelArmoryRelicNode", scene);
+    citadelArmoryRelicNode.parent = citadelArmoryChestRoot;
+    citadelArmoryRelicNode.position.set(0, 2.3, 0);
+    {
+      const sunBlade = MeshBuilder.CreateBox(
+        "ctArmorySunBlade",
+        { width: 0.18, height: 1.15, depth: 0.06 },
+        scene
+      );
+      sunBlade.rotation.z = -0.3;
+      sunBlade.material = goldKeyMat;
+      sunBlade.parent = citadelArmoryRelicNode;
+
+      const aegisShield = MeshBuilder.CreateCylinder(
+        "ctArmoryAegisShield",
+        { diameterTop: 0.68, diameterBottom: 0.4, height: 0.12, tessellation: 12 },
+        scene
+      );
+      aegisShield.position.set(0.32, -0.1, 0.12);
+      aegisShield.rotation.x = Math.PI / 2.2;
+      aegisShield.material = bladeMat;
+      aegisShield.parent = citadelArmoryRelicNode;
+    }
+
+    // Inner Sanctum Gate (`CITADEL_BOSS_GATE_POS = 0, 12.0`)
+    const citadelBossGateNode = new TransformNode("citadelBossGateNode", scene);
+    citadelBossGateNode.parent = citadelRoot;
+    citadelBossGateNode.position.set(CITADEL_BOSS_GATE_POS.x, 0, CITADEL_BOSS_GATE_POS.z);
+    {
+      const h = 4.6;
+      const w = 7.4;
+      const parts: Mesh[] = [];
+      const barCount = 9;
+      for (let b = 0; b < barCount; b++) {
+        const bx = -3.2 + (b / (barCount - 1)) * 6.4;
+        const bar = MeshBuilder.CreateCylinder(
+          `ctBossGateBar-${b}`,
+          { diameter: 0.26, height: h, tessellation: 12 },
+          scene
+        );
+        bar.position.set(bx, h / 2, 0);
+        parts.push(bar);
+      }
+      const beamTop = MeshBuilder.CreateBox(
+        "ctBossGateBeamTop",
+        { width: w, height: 0.38, depth: 0.5 },
+        scene
+      );
+      beamTop.position.set(0, h - 0.5, 0);
+      parts.push(beamTop);
+
+      const beamMid = MeshBuilder.CreateBox(
+        "ctBossGateBeamMid",
+        { width: w, height: 0.34, depth: 0.45 },
+        scene
+      );
+      beamMid.position.set(0, h * 0.45, 0);
+      parts.push(beamMid);
+
+      mergeGroupWithMaterial("mergedCtBossGateIron", parts, ironGateMat, citadelBossGateNode);
+
+      const lockPlate = MeshBuilder.CreateBox(
+        "ctBossGateLockPlate",
+        { width: 1.15, height: 1.25, depth: 0.65 },
+        scene
+      );
+      lockPlate.position.set(0, h * 0.45, 0);
+      lockPlate.material = glowingCrimsonMat;
+      lockPlate.parent = citadelBossGateNode;
+    }
+
+    // North Exit Gate (`CITADEL_EXIT_GATE_POS = 0, 35.8`)
+    const citadelExitGateNode = new TransformNode("citadelExitGateNode", scene);
+    citadelExitGateNode.parent = citadelRoot;
+    citadelExitGateNode.position.set(CITADEL_EXIT_GATE_POS.x, 0, CITADEL_EXIT_GATE_POS.z);
+    {
+      const h = 4.8;
+      const w = 7.4;
+      const parts: Mesh[] = [];
+      const barCount = 9;
+      for (let b = 0; b < barCount; b++) {
+        const bx = -3.2 + (b / (barCount - 1)) * 6.4;
+        const bar = MeshBuilder.CreateCylinder(
+          `ctExitGateBar-${b}`,
+          { diameter: 0.26, height: h, tessellation: 12 },
+          scene
+        );
+        bar.position.set(bx, h / 2, 0);
+        parts.push(bar);
+      }
+      const beamTop = MeshBuilder.CreateBox(
+        "ctExitGateBeamTop",
+        { width: w, height: 0.4, depth: 0.52 },
+        scene
+      );
+      beamTop.position.set(0, h - 0.5, 0);
+      parts.push(beamTop);
+
+      mergeGroupWithMaterial("mergedCtExitGateIron", parts, ironGateMat, citadelExitGateNode);
+
+      const sealEmblem = MeshBuilder.CreateTorus(
+        "ctExitGateSealEmblem",
+        { diameter: 1.5, thickness: 0.18, tessellation: 20 },
+        scene
+      );
+      sealEmblem.rotation.x = Math.PI / 2;
+      sealEmblem.position.set(0, h * 0.48, 0);
+      sealEmblem.material = goldKeyMat;
+      sealEmblem.parent = citadelExitGateNode;
+    }
+
+    // Sovereign's Victory Chest (`CITADEL_VICTORY_CHEST_POS = -6.5, 32.0`)
+    const citadelVictoryChestRoot = new TransformNode("citadelVictoryChestRoot", scene);
+    citadelVictoryChestRoot.parent = citadelRoot;
+    citadelVictoryChestRoot.position.set(
+      CITADEL_VICTORY_CHEST_POS.x,
+      0,
+      CITADEL_VICTORY_CHEST_POS.z
+    );
+
+    const ctVicDais = MeshBuilder.CreateBox(
+      "ctVicDais",
+      { width: 4.4, height: 0.45, depth: 3.4 },
+      scene
+    );
+    ctVicDais.position.set(0, 0.225, 0);
+    ctVicDais.material = dgPillarMat;
+    ctVicDais.parent = citadelVictoryChestRoot;
+
+    const ctVicBase = MeshBuilder.CreateBox(
+      "ctVicBase",
+      { width: 2.1, height: 1.05, depth: 1.4 },
+      scene
+    );
+    ctVicBase.position.set(0, 0.95, 0);
+    ctVicBase.material = glowingCrimsonMat;
+    ctVicBase.parent = citadelVictoryChestRoot;
+
+    const ctVicTrim = MeshBuilder.CreateBox(
+      "ctVicTrim",
+      { width: 2.2, height: 0.25, depth: 1.48 },
+      scene
+    );
+    ctVicTrim.position.set(0, 1.38, 0);
+    ctVicTrim.material = goldKeyMat;
+    ctVicTrim.parent = citadelVictoryChestRoot;
+
+    const citadelVictoryChestLid = MeshBuilder.CreateCylinder(
+      "citadelVictoryChestLid",
+      { diameter: 1.4, height: 2.12, tessellation: 18 },
+      scene
+    );
+    citadelVictoryChestLid.rotation.z = Math.PI / 2;
+    citadelVictoryChestLid.position.set(0, 1.5, 0);
+    citadelVictoryChestLid.material = goldKeyMat;
+    citadelVictoryChestLid.parent = citadelVictoryChestRoot;
+
+    const citadelVictorySealRing = MeshBuilder.CreateTorus(
+      "citadelVictorySealRing",
+      { diameter: 3.4, thickness: 0.16, tessellation: 28 },
+      scene
+    );
+    citadelVictorySealRing.position.set(0, 1.1, 0);
+    citadelVictorySealRing.material = glowingCrimsonMat;
+    citadelVictorySealRing.parent = citadelVictoryChestRoot;
+
+    const citadelVictoryUnsealedRing = MeshBuilder.CreateTorus(
+      "citadelVictoryUnsealedRing",
+      { diameter: 3.6, thickness: 0.14, tessellation: 32 },
+      scene
+    );
+    citadelVictoryUnsealedRing.position.set(0, 0.55, 0);
+    citadelVictoryUnsealedRing.material = goldKeyMat;
+    citadelVictoryUnsealedRing.parent = citadelVictoryChestRoot;
+
+    const citadelVictoryCrestNode = new TransformNode("citadelVictoryCrestNode", scene);
+    citadelVictoryCrestNode.parent = citadelVictoryChestRoot;
+    citadelVictoryCrestNode.position.set(0, 2.75, 0);
+    {
+      const vParts: Mesh[] = [];
+      for (let idx = 0; idx < crestOffsets.length; idx++) {
+        const pos = crestOffsets[idx];
+        const shard = MeshBuilder.CreatePolyhedron(
+          `ctVictoryCrestShard-${idx}`,
+          { type: 1, size: 0.36 },
+          scene
+        );
+        shard.position.set(pos.x, pos.y, 0);
+        vParts.push(shard);
+      }
+      mergeGroupWithMaterial("mergedCtVictoryCrest", vParts, goldKeyMat, citadelVictoryCrestNode);
+    }
 
     // =========================================================
     // INDIVIDUAL PICKABLE 3D PROP PREFAB BUILDER (FOR MAP EDITOR!)
@@ -5835,7 +6494,7 @@ export default function BabylonCanvas() {
     let lastPointerY = 0;
     let cursorGroundPos: { x: number; z: number } | null = null;
 
-     const pickGroundPoint = (): { x: number; z: number } | null => {
+    const pickGroundPoint = (): { x: number; z: number } | null => {
       const snap = useGameStore.getState();
       const targetGround =
         snap.zone === "overworld"
@@ -5844,6 +6503,10 @@ export default function BabylonCanvas() {
           ? grGround
           : snap.zone === "frontier"
           ? frGround
+          : snap.zone === "caverns"
+          ? cvGround
+          : snap.zone === "citadel"
+          ? ctGround
           : dgGround;
       const pick = scene.pick(
         scene.pointerX,
@@ -6169,13 +6832,15 @@ export default function BabylonCanvas() {
       const t = now * 0.001;
       const activeCells = snap.terrainCells[snap.zone];
 
-       // 0. Sync Sculpted & Painted Terrain Vertex Buffers when modified
+      // 0. Sync Sculpted & Painted Terrain Vertex Buffers when modified
       if (snap.terrainRevision !== syncedTerrainRevision) {
         syncedTerrainRevision = snap.terrainRevision;
         applyTerrainCellsToGroundMesh(owGround, owBaseColor, snap.terrainCells.overworld);
         applyTerrainCellsToGroundMesh(grGround, grBaseColor, snap.terrainCells.grove ?? {});
         applyTerrainCellsToGroundMesh(dgGround, dgBaseColor, snap.terrainCells.dungeon);
         applyTerrainCellsToGroundMesh(frGround, frBaseColor, snap.terrainCells.frontier ?? {});
+        applyTerrainCellsToGroundMesh(cvGround, cvBaseColor, snap.terrainCells.caverns ?? {});
+        applyTerrainCellsToGroundMesh(ctGround, ctBaseColor, snap.terrainCells.citadel ?? {});
       }
 
       // 1. Zone visibility & lighting atmosphere
@@ -6183,10 +6848,14 @@ export default function BabylonCanvas() {
       const isGrove = snap.zone === "grove";
       const isDungeon = snap.zone === "dungeon";
       const isFrontier = snap.zone === "frontier";
+      const isCaverns = snap.zone === "caverns";
+      const isCitadel = snap.zone === "citadel";
       overworldRoot.setEnabled(isOverworld);
       groveRoot.setEnabled(isGrove);
       dungeonRoot.setEnabled(isDungeon);
       frontierRoot.setEnabled(isFrontier);
+      cavernsRoot.setEnabled(isCaverns);
+      citadelRoot.setEnabled(isCitadel);
 
       if (isOverworld) {
         scene.clearColor.set(0.08, 0.16, 0.11, 1);
@@ -6205,6 +6874,18 @@ export default function BabylonCanvas() {
         hemiLight.intensity = 0.88;
         dirLight.intensity = 0.74;
         sanctumPointLight.intensity = 0;
+        heroLanternDisc.setEnabled(false);
+      } else if (isCaverns) {
+        scene.clearColor.set(0.04, 0.09, 0.16, 1);
+        hemiLight.intensity = 0.72;
+        dirLight.intensity = 0.62;
+        sanctumPointLight.intensity = 0.35;
+        heroLanternDisc.setEnabled(false);
+      } else if (isCitadel) {
+        scene.clearColor.set(0.06, 0.03, 0.09, 1);
+        hemiLight.intensity = 0.64;
+        dirLight.intensity = 0.54;
+        sanctumPointLight.intensity = snap.flags.citadelBossDefeated ? 1.45 : 0.85;
         heroLanternDisc.setEnabled(false);
       } else {
         // Dark Room Visibility Cone & Lantern Illumination in Dungeon Room 4 (The Dark Archery Crypt)
@@ -6760,6 +7441,106 @@ export default function BabylonCanvas() {
 
       scoutLyraCompass.rotation.y = t * 2.5;
       scoutLyraCompass.position.y = 2.75 + Math.sin(t * 3.8) * 0.14;
+
+      // 6c. Sync Map 3 (Frontier), Map 4 (Frostpeak Caverns) & Map 5 (Obsidian Citadel) Progression Landmarks
+      sapperQuestMarker.setEnabled(!snap.flags.frontierBombChestOpened);
+      if (!snap.flags.frontierBombChestOpened) {
+        sapperQuestMarker.rotation.y = t * 3.0;
+        sapperQuestMarker.position.y = 2.75 + Math.sin(t * 4.2) * 0.16;
+      }
+
+      if (snap.flags.frontierBombChestOpened) {
+        frontierBombChestLid.position.set(0, 1.62, 0.42);
+        frontierBombChestRing.setEnabled(false);
+        frontierBombRelicNode.setEnabled(false);
+      } else {
+        frontierBombChestLid.position.set(0, 1.3, 0);
+        frontierBombChestRing.setEnabled(true);
+        frontierBombChestRing.rotation.y = t * 2.2;
+        frontierBombRelicNode.setEnabled(true);
+        frontierBombRelicNode.rotation.y = t * 2.6;
+        frontierBombRelicNode.position.y = 2.2 + Math.sin(t * 3.5) * 0.16;
+      }
+
+      const isFrCitadelGateOpen = Boolean(
+        snap.flags.frontierCitadelGateUnlocked ||
+          snap.flags.cavernCrestKeyPickedUp ||
+          snap.flags.hasGlacialKey
+      );
+      const targetFrCitadelGateY = isFrCitadelGateOpen ? -4.8 : 0;
+      frCitadelGateNode.position.y +=
+        (targetFrCitadelGateY - frCitadelGateNode.position.y) *
+        Math.min(1, dt * (isFrCitadelGateOpen ? 6 : 26));
+
+      if (snap.flags.cavernShovelChestOpened) {
+        cavernShovelChestLid.position.set(0, 1.65, 0.42);
+        cavernShovelChestRing.setEnabled(false);
+        cavernShovelRelicNode.setEnabled(false);
+      } else {
+        cavernShovelChestLid.position.set(0, 1.32, 0);
+        cavernShovelChestRing.setEnabled(true);
+        cavernShovelChestRing.rotation.y = t * 2.0;
+        cavernShovelRelicNode.setEnabled(true);
+        cavernShovelRelicNode.rotation.y = t * 2.5;
+        cavernShovelRelicNode.position.y = 2.25 + Math.sin(t * 3.3) * 0.16;
+      }
+
+      const showGlacialKey = isCaverns && !snap.flags.cavernCrestKeyPickedUp;
+      glacialKeyNode.setEnabled(showGlacialKey);
+      glacialKeyBeaconRing.setEnabled(showGlacialKey);
+      if (showGlacialKey) {
+        glacialKeyNode.rotation.y = t * 2.4;
+        if (snap.boomerang?.carryingGlacialKey && snap.boomerang.zone === "caverns") {
+          glacialKeyNode.position.set(snap.boomerang.x, 1.35, snap.boomerang.z);
+        } else {
+          glacialKeyNode.position.set(
+            CAVERN_CREST_KEY_POS.x,
+            1.65 + Math.sin(t * 3.4) * 0.18,
+            CAVERN_CREST_KEY_POS.z
+          );
+        }
+      }
+
+      if (snap.flags.citadelArmoryChestOpened) {
+        citadelArmoryChestLid.position.set(0, 1.68, 0.44);
+        citadelArmoryChestRing.setEnabled(false);
+        citadelArmoryRelicNode.setEnabled(false);
+      } else {
+        citadelArmoryChestLid.position.set(0, 1.34, 0);
+        citadelArmoryChestRing.setEnabled(true);
+        citadelArmoryChestRing.rotation.y = t * 2.2;
+        citadelArmoryRelicNode.setEnabled(true);
+        citadelArmoryRelicNode.rotation.y = t * 2.7;
+        citadelArmoryRelicNode.position.y = 2.3 + Math.sin(t * 3.4) * 0.16;
+      }
+
+      const isCtBossGateOpen = Boolean(
+        snap.flags.citadelGateUnlocked &&
+          (!snap.flags.citadelBossAwakened || snap.flags.citadelBossDefeated)
+      );
+      const targetCtBossGateY = isCtBossGateOpen ? -4.8 : 0;
+      citadelBossGateNode.position.y +=
+        (targetCtBossGateY - citadelBossGateNode.position.y) *
+        Math.min(1, dt * (isCtBossGateOpen ? 6 : 26));
+
+      const targetCtExitGateY = snap.flags.citadelBossDefeated ? -5.0 : 0;
+      citadelExitGateNode.position.y +=
+        (targetCtExitGateY - citadelExitGateNode.position.y) * Math.min(1, dt * 6);
+
+      citadelVictorySealRing.setEnabled(!snap.flags.citadelBossDefeated);
+      citadelVictorySealRing.rotation.y = t * 1.8;
+      citadelVictoryUnsealedRing.setEnabled(Boolean(snap.flags.citadelBossDefeated));
+      citadelVictoryUnsealedRing.scaling.setAll(1 + Math.sin(t * 4) * 0.06);
+
+      if (snap.flags.citadelVictoryChestOpened) {
+        citadelVictoryChestLid.position.set(0, 1.85, 0.45);
+        citadelVictoryCrestNode.setEnabled(true);
+        citadelVictoryCrestNode.rotation.y = t * 2.4;
+        citadelVictoryCrestNode.position.y = 2.85 + Math.sin(t * 3.0) * 0.18;
+      } else {
+        citadelVictoryChestLid.position.set(0, 1.5, 0);
+        citadelVictoryCrestNode.setEnabled(false);
+      }
 
       // 7. Sync Enemies & Billboard Floating Health Bars
       const activeEnemyIds = new Set<string>();

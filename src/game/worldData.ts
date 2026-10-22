@@ -1,4 +1,10 @@
-export type ZoneId = "overworld" | "grove" | "dungeon" | "frontier";
+export type ZoneId =
+  | "overworld"
+  | "grove"
+  | "dungeon"
+  | "frontier"
+  | "caverns"
+  | "citadel";
 export type DungeonRoomId = "hub" | "west_wing" | "east_wing" | "crypt" | "sanctum";
 export type BossArmorState = "ARMORED" | "EXPOSED_EYE" | "STUNNED" | "DEAD";
 export type EnemyKind =
@@ -162,7 +168,12 @@ export interface EnemySpawn {
   shieldArmor?: EnemyShieldArmor; // "wood" (Wooden Shield) or "ice" (Ice Armor) — blocks Sword/Arrows until burned/melted with Flame Rod (R)!
   shockArmor?: boolean; // Electrified/spiked shell that hurts on contact or melee unless stunned for 2s by the Boomerang (Q)!
   isBounty?: boolean; // Gold/Crimson Bounty Monster variant that drops 5x Rupees when killed!
-  questGroup?: "heirloom" | "grove_ambush" | "ember_guards"; // Marks monsters belonging to quests or dungeon room ambushes
+  questGroup?:
+    | "heirloom"
+    | "grove_ambush"
+    | "ember_guards"
+    | "frontier_sappers"
+    | "cavern_wardens"; // Marks monsters belonging to quests or dungeon room ambushes
 }
 
 export interface WorldRupeeSpawn {
@@ -314,6 +325,9 @@ export const BOSS_EXIT_PORTAL_POS = {
   z: 34.8,
 };
 
+// =========================================================
+// MAP 3 (ELDERWOOD FRONTIER), MAP 4 (FROSTPEAK CAVERNS) & MAP 5 (OBSIDIAN CITADEL) POSITIONS
+// =========================================================
 export const FRONTIER_ENTRY_SPAWN = {
   x: 0,
   z: -30.5,
@@ -324,10 +338,62 @@ export const FRONTIER_EXIT_PORTAL_POS = {
   z: -34.8,
 };
 
+// Map 3 South-East Sapper Camp NPC & Bomb Bag Reward Chest (Requires Flame Rod [R] to clear briars & Ice Raiders!)
+export const FRONTIER_SAPPER_NPC_POS = {
+  x: 16.0,
+  z: -21.5,
+};
+
+export const FRONTIER_BOMB_CHEST_POS = {
+  x: 24.5,
+  z: -18.5,
+};
+
+// Map 3 North Exit Gate to Map 5 (Obsidian Citadel — unlocked with Glacial Crest Key from Map 4!)
+export const FRONTIER_CITADEL_GATE_POS = {
+  x: 0,
+  z: 31.8,
+};
+
+// Map 4 (Frostpeak Caverns) North-West Reliquary Chest (Unlocks Explorer's Shovel [G] & Sapphire Mail!)
+export const CAVERN_SHOVEL_CHEST_POS = {
+  x: -22.0,
+  z: 20.0,
+};
+
+// Map 4 (Frostpeak Caverns) East Glacial Sanctum Pedestal (Rewards the Glacial Crest Key to unlock Map 5!)
+export const CAVERN_CREST_KEY_POS = {
+  x: 24.0,
+  z: 14.0,
+};
+
+// Map 5 (Obsidian Citadel) West Armory Chest (Unlocks Tempered Sun-Blade 2x DMG & Aegis Mirror Shield!)
+export const CITADEL_ARMORY_CHEST_POS = {
+  x: -22.0,
+  z: -6.0,
+};
+
+// Map 5 (Obsidian Citadel) Inner Sanctum Gate (`0, 12.0` -> Sovereign's Throne Boss Arena!)
+export const CITADEL_BOSS_GATE_POS = {
+  x: 0,
+  z: 12.0,
+};
+
+// Map 5 (Obsidian Citadel) Sovereign's Victory Chest & North Golden Exit Gate
+export const CITADEL_VICTORY_CHEST_POS = {
+  x: -6.5,
+  z: 32.0,
+};
+
+export const CITADEL_EXIT_GATE_POS = {
+  x: 0,
+  z: 36.2,
+};
+
 export const BOSS_MAX_LUNGE_RANGE = 14.5;
 
 export const INITIAL_PORTALS: MapPortal[] = [
-  // NORTH EXIT: Map 1 (Central Hub) -> Map 2 (The First Dungeon: Sunken Sanctum — 5-Room Cross Puzzle Box!)
+  // NORTH EXIT: Map 1 (Central Hub) <-> Map 2 (The First Dungeon: Sunken Sanctum — 5-Room Cross Puzzle Box!)
   {
     id: "portal-ow-sanctum",
     zone: "overworld",
@@ -356,7 +422,7 @@ export const INITIAL_PORTALS: MapPortal[] = [
     sublabel: "Returned to the Central Hub from the Sunken Sanctum.",
     color: "cyan",
   },
-  // NORTH SANCTUARY DOOR (Room 5 Boss Lair Exit): Opens when Ignis is defeated, leading directly into Map 3 (Elderwood Frontier)!
+  // NORTH SANCTUARY DOOR (Room 5 Boss Lair Exit) <-> Map 3 (Elderwood Frontier South Gate)!
   {
     id: "portal-dg-frontier",
     zone: "dungeon",
@@ -367,11 +433,25 @@ export const INITIAL_PORTALS: MapPortal[] = [
     targetX: FRONTIER_ENTRY_SPAWN.x,
     targetZ: FRONTIER_ENTRY_SPAWN.z,
     targetFacing: 0,
-    label: "Map 3: Elderwood Frontier (Beyond the Sanctum)",
-    sublabel: "Ignis Vanquished! You stepped through the North Sanctuary Door with +1 Max Heart and the Flame Rod!",
+    label: "Map 3: Elderwood Highlands",
+    sublabel: "Use your Flame Rod [R] at the SE Sapper Outpost to earn the Bomb Bag [B] and blast open the East Quarry to Map 4!",
     color: "gold",
   },
-  // WEST EXIT: Map 1 (Central Hub West) -> Map 1B (The Mini-Cave / Forest Grove)
+  {
+    id: "portal-fr-dungeon",
+    zone: "frontier",
+    x: FRONTIER_EXIT_PORTAL_POS.x,
+    z: FRONTIER_EXIT_PORTAL_POS.z,
+    radius: 2.0,
+    targetZone: "dungeon",
+    targetX: 0,
+    targetZ: 31.2,
+    targetFacing: Math.PI,
+    label: "Map 2: Sunken Sanctum (Boss Lair)",
+    sublabel: "Returned South from the Elderwood Highlands into the Sunken Sanctum.",
+    color: "gold",
+  },
+  // WEST EXIT: Map 1 (Central Hub West) <-> Map 1B (The Mini-Cave / Forest Grove)
   {
     id: "portal-ow-grove",
     zone: "overworld",
@@ -383,7 +463,7 @@ export const INITIAL_PORTALS: MapPortal[] = [
     targetZ: -24.5,
     targetFacing: 0,
     label: "Map 1B: Whispering Forest Grove",
-    sublabel: "Hit the Crystal Switch with your Boomerang [Q] or defeat the 3 Ambush Monsters for the Dungeon Key & Flame Rod!",
+    sublabel: "Hit the Crystal Switch with your Boomerang [Q] or defeat the 3 Ambush Monsters for the Sanctum Entry Key!",
     color: "emerald",
   },
   {
@@ -400,7 +480,7 @@ export const INITIAL_PORTALS: MapPortal[] = [
     sublabel: "Returned to the West Crossroads of the Central Hub.",
     color: "emerald",
   },
-  // EAST EXIT: Map 1 (Central Hub East, blocked by Dry Vines & Unlit Torches) -> Map 3 (The Burned Pass / Next Biome)
+  // EAST EXIT: Map 1 (Central Hub East, blocked by Dry Vines & Unlit Torches) <-> Map 3 West Gate!
   {
     id: "portal-ow-frontier",
     zone: "overworld",
@@ -408,27 +488,28 @@ export const INITIAL_PORTALS: MapPortal[] = [
     z: -2.5,
     radius: 2.2,
     targetZone: "frontier",
-    targetX: FRONTIER_ENTRY_SPAWN.x,
-    targetZ: FRONTIER_ENTRY_SPAWN.z,
-    targetFacing: 0,
-    label: "Map 3: The Burned Pass (Elderwood Frontier)",
-    sublabel: "You burned the Eastern Vine Barrier and stepped into Map 3 with more Hearts and your full toolkit!",
+    targetX: -30.0,
+    targetZ: -2.5,
+    targetFacing: Math.PI / 2,
+    label: "Map 3: Elderwood Highlands (West Pass)",
+    sublabel: "You burned the Eastern Vine Barrier and stepped into Map 3 — head SE to rescue the Sapper Outpost for the Bomb Bag!",
     color: "crimson",
   },
   {
-    id: "portal-fr-dungeon",
+    id: "portal-fr-overworld-west",
     zone: "frontier",
-    x: FRONTIER_EXIT_PORTAL_POS.x,
-    z: FRONTIER_EXIT_PORTAL_POS.z,
-    radius: 2.0,
+    x: -34.8,
+    z: -2.5,
+    radius: 2.1,
     targetZone: "overworld",
     targetX: 29.0,
     targetZ: -2.5,
     targetFacing: -Math.PI / 2,
     label: "Map 1: Whispering Crossroads (East Pass)",
-    sublabel: "Returned to the East Gate of the Central Hub.",
+    sublabel: "Returned West through the Burned Pass into the Central Hub.",
     color: "crimson",
   },
+  // NW SECRET GROTTO: Map 1 NW Cracked Cliff <-> Map 3 NW Echo Grotto
   {
     id: "portal-ow-secret-cave",
     zone: "overworld",
@@ -455,6 +536,92 @@ export const INITIAL_PORTALS: MapPortal[] = [
     targetFacing: Math.PI,
     label: "Whispering Vale Cliffside",
     sublabel: "Emerged from the Secret Echo Grotto.",
+    color: "gold",
+  },
+  // MAP 3 EAST QUARRY GATE <-> MAP 4 (FROSTPEAK CAVERNS & GLACIAL RELIQUARY)
+  {
+    id: "portal-fr-caverns",
+    zone: "frontier",
+    x: 34.8,
+    z: -2.5,
+    radius: 2.2,
+    targetZone: "caverns",
+    targetX: -30.0,
+    targetZ: -2.5,
+    targetFacing: Math.PI / 2,
+    label: "Map 4: Frostpeak Caverns & Reliquary",
+    sublabel: "Explore the NW Reliquary for the Explorer's Shovel [G] & Sapphire Mail, and the East Sanctum for the Glacial Crest Key!",
+    color: "cyan",
+  },
+  {
+    id: "portal-cv-frontier",
+    zone: "caverns",
+    x: -34.8,
+    z: -2.5,
+    radius: 2.1,
+    targetZone: "frontier",
+    targetX: 29.5,
+    targetZ: -2.5,
+    targetFacing: -Math.PI / 2,
+    label: "Map 3: Elderwood Highlands (East Quarry)",
+    sublabel: "Returned West from Frostpeak Caverns to the Elderwood Highlands.",
+    color: "cyan",
+  },
+  {
+    id: "portal-cv-frontier-shortcut",
+    zone: "caverns",
+    x: 24.0,
+    z: 29.5,
+    radius: 2.0,
+    targetZone: "frontier",
+    targetX: 5.5,
+    targetZ: 26.5,
+    targetFacing: 0,
+    label: "Map 3: North Citadel Approach",
+    sublabel: "Emerged from the Glacial Sanctum right beside the North Citadel Gate!",
+    color: "gold",
+  },
+  // MAP 3 NORTH CITADEL GATE <-> MAP 5 (THE OBSIDIAN CITADEL & SOVEREIGN'S THRONE)
+  {
+    id: "portal-fr-citadel",
+    zone: "frontier",
+    x: 0,
+    z: 34.8,
+    radius: 2.2,
+    targetZone: "citadel",
+    targetX: 0,
+    targetZ: -30.0,
+    targetFacing: 0,
+    label: "Map 5: The Obsidian Citadel",
+    sublabel: "Claim the Tempered Sun-Blade & Mirror Shield in the West Armory, unseal the Inner Gate, and face Vaelkor!",
+    color: "purple",
+  },
+  {
+    id: "portal-ct-frontier",
+    zone: "citadel",
+    x: 0,
+    z: -34.8,
+    radius: 2.1,
+    targetZone: "frontier",
+    targetX: 0,
+    targetZ: 28.5,
+    targetFacing: Math.PI,
+    label: "Map 3: Elderwood Highlands (North Gate)",
+    sublabel: "Returned South from the Obsidian Citadel to the Elderwood Highlands.",
+    color: "purple",
+  },
+  {
+    id: "portal-ct-overworld-victory",
+    zone: "citadel",
+    x: 0,
+    z: 34.8,
+    radius: 2.1,
+    targetZone: "overworld",
+    targetX: 0,
+    targetZ: -8.5,
+    targetFacing: Math.PI,
+    label: "Map 1: Whispering Crossroads (Champion's Return)",
+    sublabel: "Returned to the Crossroads in triumph with the Sovereign's treasures!",
     color: "gold",
   },
 ];
@@ -1141,6 +1308,288 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     rupeeDrop: "red",
     questGroup: "grove_ambush",
   },
+  // Map 3 (Elderwood Frontier) — South-East Sapper Outpost Raiders (`questGroup: "frontier_sappers"`)
+  // Burn the Briar Barrier with your Flame Rod [R] and defeat these 3 raiders to unlock the Sapper's Bomb Bag Chest (`24.5, -18.5`)!
+  {
+    id: "fr-sapper-raider-1",
+    kind: "goblin",
+    zone: "frontier",
+    x: 21.5,
+    z: -21.0,
+    hp: 4,
+    weight: 2.0,
+    aggroRadius: 8.8,
+    speed: 5.4,
+    damage: 1,
+    rupeeDrop: "blue",
+    shieldArmor: "wood",
+    questGroup: "frontier_sappers",
+  },
+  {
+    id: "fr-sapper-raider-2",
+    kind: "goblin",
+    zone: "frontier",
+    x: 21.5,
+    z: -16.0,
+    hp: 4,
+    weight: 2.0,
+    aggroRadius: 8.8,
+    speed: 5.4,
+    damage: 1,
+    rupeeDrop: "blue",
+    shieldArmor: "ice",
+    questGroup: "frontier_sappers",
+  },
+  {
+    id: "fr-sapper-raider-chief",
+    kind: "knight",
+    zone: "frontier",
+    x: 27.5,
+    z: -18.5,
+    hp: 7,
+    weight: 10.0,
+    aggroRadius: 8.8,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "red",
+    shieldArmor: "ice",
+    isBounty: true,
+    questGroup: "frontier_sappers",
+  },
+
+  // =========================================================
+  // MAP 4: FROSTPEAK CAVERNS & GLACIAL RELIQUARY (`zone: "caverns"`)
+  // =========================================================
+  {
+    id: "cv-entry-spiked-1",
+    kind: "slime",
+    zone: "caverns",
+    x: -18.0,
+    z: -7.5,
+    hp: 4,
+    weight: 0.6,
+    aggroRadius: 8.5,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "blue",
+    shockArmor: true,
+  },
+  {
+    id: "cv-entry-spiked-2",
+    kind: "slime",
+    zone: "caverns",
+    x: -16.5,
+    z: 2.5,
+    hp: 4,
+    weight: 0.6,
+    aggroRadius: 8.5,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "blue",
+    shockArmor: true,
+  },
+  {
+    id: "cv-entry-goblin-1",
+    kind: "goblin",
+    zone: "caverns",
+    x: -4.5,
+    z: -2.5,
+    hp: 5,
+    weight: 2.2,
+    aggroRadius: 9.0,
+    speed: 5.5,
+    damage: 1,
+    rupeeDrop: "blue",
+    shieldArmor: "ice",
+  },
+  // NW Reliquary Guardian (behind the Cracked Cavern Wall — guards the Explorer's Shovel & Sapphire Mail Chest!)
+  {
+    id: "cv-reliquary-knight",
+    kind: "knight",
+    zone: "caverns",
+    x: -22.0,
+    z: 15.5,
+    hp: 8,
+    weight: 12.0,
+    aggroRadius: 8.8,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "red",
+    shieldArmor: "ice",
+  },
+  // East Glacial Sanctum Wardens (`questGroup: "cavern_wardens"` — defeat them & shoot the Cyclops Eye Statue for the Glacial Crest Key!)
+  {
+    id: "cv-warden-knight-1",
+    kind: "knight",
+    zone: "caverns",
+    x: 19.5,
+    z: 5.5,
+    hp: 8,
+    weight: 12.0,
+    aggroRadius: 9.2,
+    speed: 5.1,
+    damage: 1,
+    rupeeDrop: "red",
+    shieldArmor: "ice",
+    questGroup: "cavern_wardens",
+  },
+  {
+    id: "cv-warden-knight-2",
+    kind: "knight",
+    zone: "caverns",
+    x: 28.5,
+    z: 5.5,
+    hp: 8,
+    weight: 12.0,
+    aggroRadius: 9.2,
+    speed: 5.1,
+    damage: 1,
+    rupeeDrop: "red",
+    shieldArmor: "ice",
+    questGroup: "cavern_wardens",
+  },
+  {
+    id: "cv-warden-archer",
+    kind: "archer",
+    zone: "caverns",
+    x: 24.0,
+    z: 19.5,
+    hp: 5,
+    weight: 0.8,
+    aggroRadius: 12.5,
+    speed: 4.8,
+    damage: 1,
+    rupeeDrop: "red",
+    isBounty: true,
+    questGroup: "cavern_wardens",
+  },
+
+  // =========================================================
+  // MAP 5: THE OBSIDIAN CITADEL & SOVEREIGN'S THRONE (`zone: "citadel"`)
+  // =========================================================
+  {
+    id: "ct-courtyard-turret-w",
+    kind: "turret",
+    zone: "citadel",
+    x: -9.5,
+    z: 4.5,
+    hp: 5,
+    weight: 18.0,
+    aggroRadius: 16.5,
+    speed: 0,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ct-courtyard-turret-e",
+    kind: "turret",
+    zone: "citadel",
+    x: 9.5,
+    z: 4.5,
+    hp: 5,
+    weight: 18.0,
+    aggroRadius: 16.5,
+    speed: 0,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ct-courtyard-spiked-1",
+    kind: "slime",
+    zone: "citadel",
+    x: -6.5,
+    z: -15.0,
+    hp: 4,
+    weight: 0.6,
+    aggroRadius: 8.8,
+    speed: 5.2,
+    damage: 1,
+    rupeeDrop: "blue",
+    shockArmor: true,
+  },
+  {
+    id: "ct-courtyard-spiked-2",
+    kind: "slime",
+    zone: "citadel",
+    x: 6.5,
+    z: -15.0,
+    hp: 4,
+    weight: 0.6,
+    aggroRadius: 8.8,
+    speed: 5.2,
+    damage: 1,
+    rupeeDrop: "blue",
+    shockArmor: true,
+  },
+  {
+    id: "ct-armory-guard",
+    kind: "knight",
+    zone: "citadel",
+    x: -18.5,
+    z: -6.0,
+    hp: 9,
+    weight: 12.0,
+    aggroRadius: 9.0,
+    speed: 5.2,
+    damage: 1,
+    rupeeDrop: "red",
+    shieldArmor: "wood",
+  },
+  {
+    id: "ct-east-guard",
+    kind: "knight",
+    zone: "citadel",
+    x: 18.5,
+    z: -6.0,
+    hp: 9,
+    weight: 12.0,
+    aggroRadius: 9.0,
+    speed: 5.2,
+    damage: 1,
+    rupeeDrop: "red",
+    shieldArmor: "ice",
+    isBounty: true,
+  },
+  // North Sovereign's Throne Boss Encounter ("Vaelkor, the Obsidian Sovereign" + 2 Shadow Minions)
+  {
+    id: "ct-minion-1",
+    kind: "minion",
+    zone: "citadel",
+    x: -8.5,
+    z: 22.0,
+    hp: 6,
+    weight: 2.2,
+    aggroRadius: 13.0,
+    speed: 5.8,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ct-minion-2",
+    kind: "minion",
+    zone: "citadel",
+    x: 8.5,
+    z: 22.0,
+    hp: 6,
+    weight: 2.2,
+    aggroRadius: 13.0,
+    speed: 5.8,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ct-boss",
+    kind: "boss",
+    zone: "citadel",
+    x: 0,
+    z: 26.0,
+    hp: 30,
+    weight: 100.0,
+    aggroRadius: 14.5,
+    speed: 4.1,
+    damage: 2,
+    rupeeDrop: "boss",
+  },
 ];
 
 export const INITIAL_WORLD_RUPEES: WorldRupeeSpawn[] = [
@@ -1179,6 +1628,16 @@ export const INITIAL_WORLD_RUPEES: WorldRupeeSpawn[] = [
   { id: "rupee-grotto-2", zone: "frontier", x: -24.8, z: 31.2, tier: "red", value: 20 },
   { id: "rupee-grotto-3", zone: "frontier", x: -27.0, z: 29.5, tier: "blue", value: 5 },
   { id: "rupee-grotto-4", zone: "frontier", x: -25.0, z: 29.5, tier: "blue", value: 5 },
+  // Map 4 (Frostpeak Caverns) pickups (including a Red Rupee across the frozen stream to snag with Boomerang [Q]!)
+  { id: "rupee-cv-gap", zone: "caverns", x: 15.5, z: -8.5, tier: "red", value: 20 },
+  { id: "rupee-cv-1", zone: "caverns", x: -24.0, z: 14.5, tier: "red", value: 20 },
+  { id: "rupee-cv-2", zone: "caverns", x: 24.0, z: -12.0, tier: "red", value: 20 },
+  { id: "rupee-cv-heart", zone: "caverns", x: -26.0, z: -2.5, tier: "heart", value: 2 },
+  // Map 5 (Obsidian Citadel) pickups
+  { id: "rupee-ct-1", zone: "citadel", x: -24.0, z: -10.5, tier: "red", value: 20 },
+  { id: "rupee-ct-2", zone: "citadel", x: 24.0, z: -10.5, tier: "red", value: 20 },
+  { id: "rupee-ct-heart-1", zone: "citadel", x: -12.0, z: -26.0, tier: "heart", value: 2 },
+  { id: "rupee-ct-heart-2", zone: "citadel", x: 12.0, z: -26.0, tier: "heart", value: 2 },
 ];
 
 /**
@@ -1961,14 +2420,24 @@ export function buildInitialMapProps(): MapPropInstance[] {
     });
   });
 
-  // 8. Elderwood Frontier (New Post-Boss Map — perimeter cliffs, entrance road & starter props ready for Map Editor!)
+  // 8. Elderwood Frontier (Map 3 Mid-Game Hub — 4-Way Crossroads connecting Map 1 West, Map 2 South, Map 4 East Caverns & Map 5 North Citadel!)
   const frCliffDefs = [
     { id: "fr-border-s-w", name: "Frontier South-West Ridge", minX: -40, maxX: -7, minZ: -40, maxZ: -36.5, h: 4.8 },
     { id: "fr-border-s-e", name: "Frontier South-East Ridge", minX: 7, maxX: 40, minZ: -40, maxZ: -36.5, h: 4.8 },
-    { id: "fr-border-s-back", name: "Frontier Gate Backdrop", minX: -7, maxX: 7, minZ: -40, maxZ: -37.2, h: 5.5 },
-    { id: "fr-border-n", name: "Frontier North Ridge", minX: -40, maxX: 40, minZ: 36.5, maxZ: 40, h: 5.2 },
-    { id: "fr-border-w", name: "Frontier West Ridge", minX: -40, maxX: -36.5, minZ: -40, maxZ: 40, h: 4.8 },
-    { id: "fr-border-e", name: "Frontier East Ridge", minX: 36.5, maxX: 40, minZ: -40, maxZ: 40, h: 4.8 },
+    { id: "fr-border-s-back", name: "Frontier South Gate Backdrop", minX: -7, maxX: 7, minZ: -40, maxZ: -37.2, h: 5.5 },
+    { id: "fr-border-n-w", name: "Frontier North-West Ridge", minX: -40, maxX: -7, minZ: 36.5, maxZ: 40, h: 5.2 },
+    { id: "fr-border-n-e", name: "Frontier North-East Ridge", minX: 7, maxX: 40, minZ: 36.5, maxZ: 40, h: 5.2 },
+    { id: "fr-border-n-back", name: "Frontier North Citadel Backdrop", minX: -7, maxX: 7, minZ: 37.2, maxZ: 40, h: 6.2 },
+    { id: "fr-border-w-s", name: "Frontier West Ridge South", minX: -40, maxX: -36.5, minZ: -40, maxZ: -6.5, h: 4.8 },
+    { id: "fr-border-w-n", name: "Frontier West Ridge North", minX: -40, maxX: -36.5, minZ: 1.5, maxZ: 40, h: 4.8 },
+    { id: "fr-border-w-back", name: "Frontier West Pass Backdrop", minX: -40, maxX: -37.2, minZ: -6.5, maxZ: 1.5, h: 5.2 },
+    { id: "fr-border-e-s", name: "Frontier East Ridge South", minX: 36.5, maxX: 40, minZ: -40, maxZ: -6.5, h: 4.8 },
+    { id: "fr-border-e-n", name: "Frontier East Ridge North", minX: 36.5, maxX: 40, minZ: 1.5, maxZ: 40, h: 4.8 },
+    { id: "fr-border-e-back", name: "Frontier East Quarry Backdrop", minX: 37.2, maxX: 40, minZ: -6.5, maxZ: 1.5, h: 5.2 },
+    // SE Sapper Outpost Stone Enclosure (x: 18..31, z: -24..-13 — entered from the West at x=17.5, z=-18.5!)
+    { id: "fr-sapper-wall-n", name: "Sapper Outpost North Wall", minX: 18.0, maxX: 31.0, minZ: -13.8, maxZ: -12.2, h: 3.6 },
+    { id: "fr-sapper-wall-s", name: "Sapper Outpost South Wall", minX: 18.0, maxX: 31.0, minZ: -24.8, maxZ: -23.2, h: 3.6 },
+    { id: "fr-sapper-wall-e", name: "Sapper Outpost East Wall", minX: 29.5, maxX: 31.2, minZ: -24.5, maxZ: -12.5, h: 3.8 },
   ];
   frCliffDefs.forEach((fc) => {
     const w = fc.maxX - fc.minX;
@@ -1996,7 +2465,7 @@ export function buildInitialMapProps(): MapPropInstance[] {
     {
       id: "prop-fr-entry-arch",
       prefab: "temple_arch",
-      name: "Sanctum Exit Archway",
+      name: "South Exit: Sunken Sanctum Archway (Map 2)",
       zone: "frontier",
       x: 0,
       y: 0,
@@ -2011,29 +2480,153 @@ export function buildInitialMapProps(): MapPropInstance[] {
       colliderKind: "ruin",
     },
     {
-      id: "prop-fr-main-road",
-      prefab: "path_tile",
-      name: "Frontier Highland Road",
+      id: "prop-fr-north-citadel-arch",
+      prefab: "temple_arch",
+      name: "North Exit: Obsidian Citadel Facade (Map 5)",
       zone: "frontier",
       x: 0,
       y: 0,
-      z: -6,
+      z: 35.0,
+      rotY: 0,
+      scaleX: 1.05,
+      scaleY: 1.05,
+      scaleZ: 1.05,
+      hasCollider: false,
+      colliderWidth: 10,
+      colliderDepth: 3.2,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-fr-west-pass-arch",
+      prefab: "temple_arch",
+      name: "West Exit: Whispering Crossroads Archway (Map 1)",
+      zone: "frontier",
+      x: -35.2,
+      y: 0,
+      z: -2.5,
+      rotY: Math.PI / 2,
+      scaleX: 0.92,
+      scaleY: 0.92,
+      scaleZ: 0.92,
+      hasCollider: false,
+      colliderWidth: 9.2,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-fr-east-quarry-arch",
+      prefab: "temple_arch",
+      name: "East Exit: Frostpeak Caverns Archway (Map 4)",
+      zone: "frontier",
+      x: 35.2,
+      y: 0,
+      z: -2.5,
+      rotY: -Math.PI / 2,
+      scaleX: 0.92,
+      scaleY: 0.92,
+      scaleZ: 0.92,
+      hasCollider: false,
+      colliderWidth: 9.2,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-fr-main-road",
+      prefab: "path_tile",
+      name: "Frontier North-South Highland Road",
+      zone: "frontier",
+      x: 0,
+      y: 0,
+      z: 0,
       rotY: 0,
       scaleX: 5.2,
       scaleY: 1,
-      scaleZ: 54,
+      scaleZ: 68,
       hasCollider: false,
       colliderWidth: 5.2,
-      colliderDepth: 54,
+      colliderDepth: 68,
       colliderKind: "ruin",
+    },
+    {
+      id: "prop-fr-cross-road",
+      prefab: "path_tile",
+      name: "Frontier East-West Quarry Road",
+      zone: "frontier",
+      x: 0,
+      y: 0,
+      z: -2.5,
+      rotY: 0,
+      scaleX: 70,
+      scaleY: 1,
+      scaleZ: 4.6,
+      hasCollider: false,
+      colliderWidth: 70,
+      colliderDepth: 4.6,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-fr-sapper-trail",
+      prefab: "path_tile",
+      name: "Sapper Outpost Trail",
+      zone: "frontier",
+      x: 13.5,
+      y: 0,
+      z: -18.5,
+      rotY: 0,
+      scaleX: 24.0,
+      scaleY: 1,
+      scaleZ: 3.8,
+      hasCollider: false,
+      colliderWidth: 24.0,
+      colliderDepth: 3.8,
+      colliderKind: "ruin",
+    },
+    // Sapper Outpost Briar Barrier (Burn with Flame Rod [R] to rescue the Sappers & unlock the Bomb Bag Chest!)
+    {
+      id: "prop-fr-sapper-briar",
+      prefab: "briar_barrier",
+      name: "Sapper Outpost Dry Briars (Burn with Flame Rod [R] to Rescue Outpost!)",
+      zone: "frontier",
+      x: 17.5,
+      y: 0,
+      z: -18.5,
+      rotY: Math.PI / 2,
+      scaleX: 1.45,
+      scaleY: 1.2,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 2.2,
+      colliderDepth: 4.2,
+      colliderKind: "tree",
+      smashed: false,
+    },
+    // East Quarry Cracked Boulder (Blocks East Exit to Map 4 Frostpeak Caverns until blown up with Bombs [B]!)
+    {
+      id: "prop-fr-east-cracked-rock",
+      prefab: "cracked_rock",
+      name: "East Quarry Cracked Boulder (Blast with Bomb [B] to Enter Map 4: Frostpeak Caverns!)",
+      zone: "frontier",
+      x: 31.2,
+      y: 0,
+      z: -2.5,
+      rotY: 0.25,
+      scaleX: 1.55,
+      scaleY: 1.45,
+      scaleZ: 1.55,
+      hasCollider: true,
+      colliderWidth: 3.6,
+      colliderDepth: 3.6,
+      colliderKind: "cliff",
+      smashed: false,
+      potReward: "red_rupee",
     }
   );
 
   const frTrees = [
     { x: -16, z: -24 },
-    { x: 16, z: -24 },
+    { x: 11, z: -26 },
     { x: -25, z: -8 },
-    { x: 25, z: -8 },
+    { x: 25, z: 6 },
     { x: -22, z: 16 },
     { x: 22, z: 16 },
   ];
@@ -2088,6 +2681,8 @@ export function buildInitialMapProps(): MapPropInstance[] {
   const frPillars = [
     { x: -6.5, z: 15 },
     { x: 6.5, z: 15 },
+    { x: -6.5, z: 28 },
+    { x: 6.5, z: 28 },
   ];
   frPillars.forEach((fp, idx) => {
     props.push({
@@ -3258,6 +3853,612 @@ export function buildInitialMapProps(): MapPropInstance[] {
     });
   });
 
+  // 20. MAP 4 ("caverns") — FROSTPEAK CAVERNS & GLACIAL RELIQUARY
+  const cavernCliffs: Array<{
+    name: string;
+    x: number;
+    z: number;
+    w: number;
+    d: number;
+    h?: number;
+  }> = [
+    // Outer perimeter cavern cliffs with West Entrance gap (z = -2.5) and NE Shortcut gap (x = 24, z = 29.5)
+    { name: "Cavern West Cliff S", x: -37.5, z: -21.0, w: 4.5, d: 28.0, h: 1.4 },
+    { name: "Cavern West Cliff N", x: -37.5, z: 18.0, w: 4.5, d: 32.0, h: 1.4 },
+    { name: "Cavern East Cliff", x: 37.5, z: 0, w: 4.5, d: 72.0, h: 1.5 },
+    { name: "Cavern South Cliff", x: 0, z: -37.5, w: 72.0, d: 4.5, h: 1.4 },
+    { name: "Cavern North Cliff W", x: -8.0, z: 37.5, w: 56.0, d: 4.5, h: 1.5 },
+    { name: "Cavern North Cliff E", x: 33.0, z: 37.5, w: 12.0, d: 4.5, h: 1.5 },
+    // NW Reliquary Vault Enclosure (gap at x = -22.0, z = 11.5 blocked by Cracked Rock!)
+    { name: "Reliquary South Wall W", x: -29.5, z: 11.5, w: 10.0, d: 2.5, h: 1.2 },
+    { name: "Reliquary South Wall E", x: -14.5, z: 11.5, w: 10.0, d: 2.5, h: 1.2 },
+    { name: "Reliquary East Wall", x: -9.5, z: 22.0, w: 2.5, d: 22.0, h: 1.25 },
+  ];
+  cavernCliffs.forEach((cc, idx) => {
+    props.push({
+      id: `prop-cv-cliff-${idx}`,
+      prefab: "cliff_block",
+      name: cc.name,
+      zone: "caverns",
+      x: cc.x,
+      y: 0,
+      z: cc.z,
+      rotY: 0,
+      scaleX: cc.w,
+      scaleY: cc.h ?? 1.3,
+      scaleZ: cc.d,
+      hasCollider: true,
+      colliderWidth: cc.w,
+      colliderDepth: cc.d,
+      colliderKind: "cliff",
+    });
+  });
+
+  // Frozen Underground Stream at x = 10.0 (bridge gap at z = -2.5 guarded by Crystal Barrier!)
+  const cavernStreamTiles: Array<{ z: number; d: number }> = [
+    { z: -20.5, d: 31.0 },
+    { z: 17.5, d: 35.0 },
+  ];
+  cavernStreamTiles.forEach((st, idx) => {
+    props.push({
+      id: `prop-cv-water-${idx}`,
+      prefab: "water_tile",
+      name: `Cavern Glacial Stream #${idx + 1}`,
+      zone: "caverns",
+      x: 10.0,
+      y: 0,
+      z: st.z,
+      rotY: 0,
+      scaleX: 4.4,
+      scaleY: 1,
+      scaleZ: st.d,
+      hasCollider: true,
+      colliderWidth: 4.4,
+      colliderDepth: st.d,
+      colliderKind: "water",
+    });
+  });
+
+  // Cavern Stone Paths & Bridge
+  const cavernPaths: Array<{ name: string; x: number; z: number; w: number; d: number }> = [
+    { name: "West Quarry Entry Path", x: -12.0, z: -2.5, w: 44.0, d: 3.6 },
+    { name: "Reliquary Approach Path", x: -22.0, z: 8.5, w: 3.6, d: 22.0 },
+    { name: "Glacial Stream Bridge", x: 10.0, z: -2.5, w: 6.5, d: 4.2 },
+    { name: "East Sanctum Spine", x: 24.0, z: 12.0, w: 4.0, d: 34.0 },
+  ];
+  cavernPaths.forEach((cp, idx) => {
+    props.push({
+      id: `prop-cv-path-${idx}`,
+      prefab: "path_tile",
+      name: cp.name,
+      zone: "caverns",
+      x: cp.x,
+      y: 0,
+      z: cp.z,
+      rotY: 0,
+      scaleX: cp.w,
+      scaleY: 1,
+      scaleZ: cp.d,
+      hasCollider: false,
+      colliderWidth: cp.w,
+      colliderDepth: cp.d,
+      colliderKind: "wall",
+    });
+  });
+
+  // Cavern Portal Archways
+  props.push(
+    {
+      id: "prop-cv-west-arch",
+      prefab: "temple_arch",
+      name: "West Quarry Return Arch",
+      zone: "caverns",
+      x: -35.0,
+      y: 0,
+      z: -2.5,
+      rotY: Math.PI / 2,
+      scaleX: 0.95,
+      scaleY: 0.95,
+      scaleZ: 0.95,
+      hasCollider: false,
+      colliderWidth: 9.2,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-cv-ne-shortcut-arch",
+      prefab: "temple_arch",
+      name: "NE Highland Shortcut Arch",
+      zone: "caverns",
+      x: 24.0,
+      y: 0,
+      z: 32.0,
+      rotY: 0,
+      scaleX: 0.95,
+      scaleY: 0.95,
+      scaleZ: 0.95,
+      hasCollider: false,
+      colliderWidth: 9.2,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    }
+  );
+
+  // NW Reliquary Vault Cracked Boulder (Requires Bombs from Map 3 to blast open!)
+  props.push({
+    id: "prop-cv-reliquary-cracked-rock",
+    prefab: "cracked_rock",
+    name: "Reliquary Vault Cracked Wall (Bomb Required)",
+    zone: "caverns",
+    x: -22.0,
+    y: 0,
+    z: 11.5,
+    rotY: 0,
+    scaleX: 1.35,
+    scaleY: 1.3,
+    scaleZ: 1.25,
+    hasCollider: true,
+    colliderWidth: 3.8,
+    colliderDepth: 2.4,
+    colliderKind: "ruin",
+    smashed: false,
+  });
+
+  // Glacial Stream Crystal Switch (across the stream at 15.5, 4.5 — hit with Boomerang Q or Bow E!)
+  // & Crystal Barrier blocking the bridge at (10.0, -2.5)
+  props.push(
+    {
+      id: "prop-cv-crystal-switch",
+      prefab: "crystal_switch",
+      name: "Glacial Stream Crystal Switch",
+      zone: "caverns",
+      x: 15.5,
+      y: 0,
+      z: 4.5,
+      rotY: 0,
+      scaleX: 1.1,
+      scaleY: 1.1,
+      scaleZ: 1.1,
+      hasCollider: true,
+      colliderWidth: 1.4,
+      colliderDepth: 1.4,
+      colliderKind: "pillar",
+      switchState: "blue",
+      switchTarget: "orange",
+    },
+    {
+      id: "prop-cv-crystal-barrier",
+      prefab: "crystal_barrier",
+      name: "Glacial Bridge Crystal Barrier",
+      zone: "caverns",
+      x: 10.0,
+      y: 0,
+      z: -2.5,
+      rotY: Math.PI / 2,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 2.4,
+      colliderDepth: 4.2,
+      colliderKind: "pillar",
+      switchTarget: "orange",
+    }
+  );
+
+  // East Glacial Sanctum Cyclops Eye Statue (shoot with Bow & Arrow to unseal the Glacial Crest Key!)
+  props.push({
+    id: "prop-cv-eye-statue",
+    prefab: "eye_statue",
+    name: "Glacial Sanctum Cyclops Eye Statue",
+    zone: "caverns",
+    x: 24.0,
+    y: 0,
+    z: 24.5,
+    rotY: Math.PI,
+    scaleX: 1.2,
+    scaleY: 1.2,
+    scaleZ: 1.2,
+    hasCollider: true,
+    colliderWidth: 2.2,
+    colliderDepth: 1.8,
+    colliderKind: "wall",
+    eyeActivated: false,
+  });
+
+  // Soft Dirt Patches in Frostpeak Caverns (test your newly unlocked Iron Shovel [G] right away!)
+  const cavernDirtPatches: Array<{
+    x: number;
+    z: number;
+    name: string;
+    reward: BuriedRewardKind;
+  }> = [
+    { x: -16.5, z: 20.0, name: "Reliquary Vault Dirt Patch (Empty Bottle)", reward: "bottle" },
+    { x: -4.5, z: -12.0, name: "Cavern Crossing Dirt Patch (Woodland Fairy)", reward: "fairy" },
+    { x: 29.0, z: 6.0, name: "East Sanctum Dirt Patch (Red Rupee)", reward: "rupee_red" },
+  ];
+  cavernDirtPatches.forEach((dp, idx) => {
+    props.push({
+      id: `prop-cv-dirt-${idx}`,
+      prefab: "dirt_patch",
+      name: dp.name,
+      zone: "caverns",
+      x: dp.x,
+      y: 0,
+      z: dp.z,
+      rotY: idx * 0.9,
+      scaleX: 1.1,
+      scaleY: 1,
+      scaleZ: 1.1,
+      hasCollider: false,
+      colliderWidth: 1.8,
+      colliderDepth: 1.8,
+      colliderKind: "ruin",
+      dug: false,
+      buriedReward: dp.reward,
+    });
+  });
+
+  // Cavern Braziers & Supply Pots
+  const cavernTorches: Array<{ x: number; z: number }> = [
+    { x: -22.0, z: 16.0 },
+    { x: 6.5, z: -5.5 },
+    { x: 6.5, z: 0.5 },
+    { x: 20.5, z: 14.0 },
+    { x: 27.5, z: 14.0 },
+  ];
+  cavernTorches.forEach((ct, idx) => {
+    props.push({
+      id: `prop-cv-torch-${idx}`,
+      prefab: "wall_torch",
+      name: `Cavern Brazier #${idx + 1}`,
+      zone: "caverns",
+      x: ct.x,
+      y: 0,
+      z: ct.z,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.1,
+      colliderDepth: 1.1,
+      colliderKind: "pillar",
+      lit: idx < 2,
+    });
+  });
+
+  const cavernPots: Array<{ x: number; z: number; reward: PotRewardKind }> = [
+    { x: -26.0, z: 22.0, reward: "bombs_5" },
+    { x: -18.0, z: 22.0, reward: "heart" },
+    { x: 18.5, z: 22.0, reward: "arrows_10" },
+    { x: 29.5, z: 22.0, reward: "red_rupee" },
+  ];
+  cavernPots.forEach((cp, idx) => {
+    props.push({
+      id: `prop-cv-pot-${idx}`,
+      prefab: "clay_pot",
+      name: `Cavern Supply Pot #${idx + 1}`,
+      zone: "caverns",
+      x: cp.x,
+      y: 0,
+      z: cp.z,
+      rotY: idx * 0.7,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.0,
+      colliderDepth: 1.0,
+      colliderKind: "ruin",
+      potReward: cp.reward,
+    });
+  });
+
+  // 21. MAP 5 ("citadel") — THE OBSIDIAN CITADEL & SOVEREIGN'S THRONE
+  const citadelWalls: Array<{ name: string; x: number; z: number; w: number; d: number }> = [
+    // Outer fortress walls with South Entry gap (0, -35) and North Victory Exit gap (0, 35)
+    { name: "Citadel South Wall W", x: -21.0, z: -36.5, w: 30.0, d: 3.0 },
+    { name: "Citadel South Wall E", x: 21.0, z: -36.5, w: 30.0, d: 3.0 },
+    { name: "Citadel North Wall W", x: -21.0, z: 36.5, w: 30.0, d: 3.0 },
+    { name: "Citadel North Wall E", x: 21.0, z: 36.5, w: 30.0, d: 3.0 },
+    { name: "Citadel West Outer Wall", x: -36.5, z: 0, w: 3.0, d: 74.0 },
+    { name: "Citadel East Outer Wall", x: 36.5, z: 0, w: 3.0, d: 74.0 },
+    // Sovereign's Throne Dividing Wall at z = 12.0 (center doorway at x = -3.8..3.8 guarded by CITADEL_BOSS_GATE_POS)
+    { name: "Throne Divider Wall W", x: -19.5, z: 12.0, w: 31.0, d: 2.5 },
+    { name: "Throne Divider Wall E", x: 19.5, z: 12.0, w: 31.0, d: 2.5 },
+    // West Armory Vault corridor walls (doorway at x = -14.5, z = -6.0)
+    { name: "Armory Vault Wall N", x: -24.5, z: 1.5, w: 21.0, d: 2.2 },
+    { name: "Armory Vault Wall S", x: -24.5, z: -13.5, w: 21.0, d: 2.2 },
+    { name: "Armory Front Wall N", x: -14.5, z: -1.2, w: 2.2, d: 3.8 },
+    { name: "Armory Front Wall S", x: -14.5, z: -10.8, w: 2.2, d: 3.8 },
+  ];
+  citadelWalls.forEach((cw, idx) => {
+    props.push({
+      id: `prop-ct-wall-${idx}`,
+      prefab: "stone_wall",
+      name: cw.name,
+      zone: "citadel",
+      x: cw.x,
+      y: 0,
+      z: cw.z,
+      rotY: 0,
+      scaleX: cw.w,
+      scaleY: 1.25,
+      scaleZ: cw.d,
+      hasCollider: true,
+      colliderWidth: cw.w,
+      colliderDepth: cw.d,
+      colliderKind: "wall",
+    });
+  });
+
+  // Citadel Grand Carpet & Stone Walkways
+  const citadelPaths: Array<{ name: string; x: number; z: number; w: number; d: number }> = [
+    { name: "Citadel Grand Spine", x: 0, z: 0, w: 5.5, d: 68.0 },
+    { name: "Citadel Wing Crosswalk", x: 0, z: -6.0, w: 48.0, d: 4.0 },
+  ];
+  citadelPaths.forEach((cp, idx) => {
+    props.push({
+      id: `prop-ct-path-${idx}`,
+      prefab: "path_tile",
+      name: cp.name,
+      zone: "citadel",
+      x: cp.x,
+      y: 0,
+      z: cp.z,
+      rotY: 0,
+      scaleX: cp.w,
+      scaleY: 1,
+      scaleZ: cp.d,
+      hasCollider: false,
+      colliderWidth: cp.w,
+      colliderDepth: cp.d,
+      colliderKind: "wall",
+    });
+  });
+
+  // Citadel Archways (South Entry, Inner Throne Gate, North Victory Gate)
+  props.push(
+    {
+      id: "prop-ct-south-arch",
+      prefab: "temple_arch",
+      name: "Citadel South Entry Arch",
+      zone: "citadel",
+      x: 0,
+      y: 0,
+      z: -34.5,
+      rotY: 0,
+      scaleX: 1.0,
+      scaleY: 1.0,
+      scaleZ: 1.0,
+      hasCollider: false,
+      colliderWidth: 9.5,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-ct-throne-arch",
+      prefab: "temple_arch",
+      name: "Sovereign's Throne Gate Arch",
+      zone: "citadel",
+      x: 0,
+      y: 0,
+      z: 12.0,
+      rotY: 0,
+      scaleX: 1.0,
+      scaleY: 1.0,
+      scaleZ: 1.0,
+      hasCollider: false,
+      colliderWidth: 9.5,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-ct-north-arch",
+      prefab: "temple_arch",
+      name: "Citadel Victory Return Arch",
+      zone: "citadel",
+      x: 0,
+      y: 0,
+      z: 35.0,
+      rotY: 0,
+      scaleX: 1.0,
+      scaleY: 1.0,
+      scaleZ: 1.0,
+      hasCollider: false,
+      colliderWidth: 9.5,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    }
+  );
+
+  // West Armory Wing Barriers: Dry Briar / Spiderweb (Flame Rod R) + Cracked Boulder (Bomb B)
+  props.push(
+    {
+      id: "prop-ct-armory-web",
+      prefab: "spiderweb_barrier",
+      name: "Armory Vault Spiderweb Seal (Flame Rod R)",
+      zone: "citadel",
+      x: -14.2,
+      y: 0,
+      z: -6.0,
+      rotY: Math.PI / 2,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.1,
+      hasCollider: true,
+      colliderWidth: 1.6,
+      colliderDepth: 3.6,
+      colliderKind: "wall",
+      smashed: false,
+    },
+    {
+      id: "prop-ct-armory-rock",
+      prefab: "cracked_rock",
+      name: "Armory Vault Cracked Seal (Bomb B)",
+      zone: "citadel",
+      x: -16.8,
+      y: 0,
+      z: -6.0,
+      rotY: 0,
+      scaleX: 1.2,
+      scaleY: 1.2,
+      scaleZ: 1.2,
+      hasCollider: true,
+      colliderWidth: 2.4,
+      colliderDepth: 3.2,
+      colliderKind: "ruin",
+      smashed: false,
+    }
+  );
+
+  // East Courtyard Soft Dirt Patch (dig with Shovel G for Swiftwind Pegasus Boots!)
+  props.push({
+    id: "prop-ct-east-dirt",
+    prefab: "dirt_patch",
+    name: "Royal Courtyard Reliquary Mound (Dig with Shovel G)",
+    zone: "citadel",
+    x: 22.0,
+    y: 0,
+    z: -6.0,
+    rotY: 0.4,
+    scaleX: 1.2,
+    scaleY: 1,
+    scaleZ: 1.2,
+    hasCollider: false,
+    colliderWidth: 1.8,
+    colliderDepth: 1.8,
+    colliderKind: "ruin",
+    dug: false,
+    buriedReward: "swift_boots",
+  });
+
+  // 4 Obsidian Timed Braziers in Central Grand Hall + 2 Cyclops Eye Statues flanking the Throne Gate!
+  const citadelTimedTorches: Array<{ x: number; z: number }> = [
+    { x: -6.5, z: -2.0 },
+    { x: 6.5, z: -2.0 },
+    { x: -6.5, z: 6.5 },
+    { x: 6.5, z: 6.5 },
+  ];
+  citadelTimedTorches.forEach((tt, idx) => {
+    props.push({
+      id: `prop-ct-timed-torch-${idx}`,
+      prefab: "wall_torch",
+      name: `Citadel Seal Brazier #${idx + 1} (8s Timer)`,
+      zone: "citadel",
+      x: tt.x,
+      y: 0,
+      z: tt.z,
+      rotY: 0,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 1.1,
+      colliderDepth: 1.1,
+      colliderKind: "pillar",
+      lit: false,
+      timedDuration: 8,
+      litTimer: 0,
+      timedSolved: false,
+    });
+  });
+
+  props.push(
+    {
+      id: "prop-ct-eye-statue-w",
+      prefab: "eye_statue",
+      name: "West Sovereign Eye Statue",
+      zone: "citadel",
+      x: -10.5,
+      y: 0,
+      z: 10.2,
+      rotY: Math.PI,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 2.0,
+      colliderDepth: 1.6,
+      colliderKind: "wall",
+      eyeActivated: false,
+    },
+    {
+      id: "prop-ct-eye-statue-e",
+      prefab: "eye_statue",
+      name: "East Sovereign Eye Statue",
+      zone: "citadel",
+      x: 10.5,
+      y: 0,
+      z: 10.2,
+      rotY: Math.PI,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 2.0,
+      colliderDepth: 1.6,
+      colliderKind: "wall",
+      eyeActivated: false,
+    }
+  );
+
+  // Throne Room Boss Arena: 4 Corner Braziers & 4 Supply Pots (Arrows & Magic Refills)
+  const throneBossTorches: Array<{ x: number; z: number }> = [
+    { x: -16.0, z: 16.0 },
+    { x: 16.0, z: 16.0 },
+    { x: -16.0, z: 31.0 },
+    { x: 16.0, z: 31.0 },
+  ];
+  throneBossTorches.forEach((bt, idx) => {
+    props.push({
+      id: `prop-ct-boss-torch-${idx}`,
+      prefab: "wall_torch",
+      name: `Throne Arena Brazier #${idx + 1}`,
+      zone: "citadel",
+      x: bt.x,
+      y: 0,
+      z: bt.z,
+      rotY: 0,
+      scaleX: 1.1,
+      scaleY: 1.1,
+      scaleZ: 1.1,
+      hasCollider: true,
+      colliderWidth: 1.1,
+      colliderDepth: 1.1,
+      colliderKind: "pillar",
+      lit: true,
+    });
+  });
+
+  const throneBossPots: Array<{ x: number; z: number; reward: PotRewardKind }> = [
+    { x: -22.0, z: 16.0, reward: "arrows_10" },
+    { x: 22.0, z: 16.0, reward: "heart" },
+    { x: -22.0, z: 31.0, reward: "bombs_5" },
+    { x: 22.0, z: 31.0, reward: "arrows_10" },
+  ];
+  throneBossPots.forEach((bp, idx) => {
+    props.push({
+      id: `prop-ct-boss-pot-${idx}`,
+      prefab: "clay_pot",
+      name: `Throne Supply Pot #${idx + 1}`,
+      zone: "citadel",
+      x: bp.x,
+      y: 0,
+      z: bp.z,
+      rotY: idx * 0.6,
+      scaleX: 1.05,
+      scaleY: 1.05,
+      scaleZ: 1.05,
+      hasCollider: true,
+      colliderWidth: 1.0,
+      colliderDepth: 1.0,
+      colliderKind: "ruin",
+      potReward: bp.reward,
+    });
+  });
+
   return props;
 }
 
@@ -3329,6 +4530,39 @@ export function buildObstaclesFromMapProps(mapProps: MapPropInstance[]): RectObs
       maxX: BOSS_EXIT_GATE_POS.x + 3.5,
       minZ: BOSS_EXIT_GATE_POS.z - 0.8,
       maxZ: BOSS_EXIT_GATE_POS.z + 0.8,
+      kind: "gate",
+      height: 4.6,
+    },
+    // Map 3 ("frontier") North Glacial Seal Gate -> Map 5 ("citadel") (unlocks with Glacial Crest Key from Map 4!)
+    {
+      id: "fr-citadel-gate",
+      zone: "frontier",
+      minX: FRONTIER_CITADEL_GATE_POS.x - 3.6,
+      maxX: FRONTIER_CITADEL_GATE_POS.x + 3.6,
+      minZ: FRONTIER_CITADEL_GATE_POS.z - 0.8,
+      maxZ: FRONTIER_CITADEL_GATE_POS.z + 0.8,
+      kind: "gate",
+      height: 4.6,
+    },
+    // Map 5 ("citadel") Inner Sanctum Gate -> Sovereign's Throne Room
+    {
+      id: "ct-locked-gate",
+      zone: "citadel",
+      minX: CITADEL_BOSS_GATE_POS.x - 3.6,
+      maxX: CITADEL_BOSS_GATE_POS.x + 3.6,
+      minZ: CITADEL_BOSS_GATE_POS.z - 0.8,
+      maxZ: CITADEL_BOSS_GATE_POS.z + 0.8,
+      kind: "gate",
+      height: 4.6,
+    },
+    // Map 5 ("citadel") North Victory Return Gate -> Map 1 ("overworld")
+    {
+      id: "ct-boss-exit-gate",
+      zone: "citadel",
+      minX: CITADEL_EXIT_GATE_POS.x - 3.6,
+      maxX: CITADEL_EXIT_GATE_POS.x + 3.6,
+      minZ: CITADEL_EXIT_GATE_POS.z - 0.8,
+      maxZ: CITADEL_EXIT_GATE_POS.z + 0.8,
       kind: "gate",
       height: 4.6,
     },
@@ -3414,6 +4648,9 @@ export function resolveWorldCollisions(
     if (obs.id === "ow-dungeon-entry-gate" && gateUnlocked) continue;
     if (obs.id === "dg-locked-gate" && gateUnlocked) continue;
     if (obs.id === "dg-boss-exit-gate" && bossExitUnlocked) continue;
+    if (obs.id === "fr-citadel-gate" && gateUnlocked) continue;
+    if (obs.id === "ct-locked-gate" && gateUnlocked) continue;
+    if (obs.id === "ct-boss-exit-gate" && bossExitUnlocked) continue;
     const res = resolveCircleRectCollision(curX, curZ, radius, obs);
     if (res.collided) {
       hitObstacle = true;
@@ -3454,6 +4691,9 @@ export function computeEnemyChargePathLength(
       if (obs.zone !== zone) continue;
       if (obs.id === "dg-locked-gate" && gateUnlocked) continue;
       if (obs.id === "dg-boss-exit-gate" && bossExitUnlocked) continue;
+      if (obs.id === "fr-citadel-gate" && gateUnlocked) continue;
+      if (obs.id === "ct-locked-gate" && gateUnlocked) continue;
+      if (obs.id === "ct-boss-exit-gate" && bossExitUnlocked) continue;
       const res = resolveCircleRectCollision(testX, testZ, radius, obs);
       if (res.collided) {
         return d;
@@ -3465,7 +4705,7 @@ export function computeEnemyChargePathLength(
 
 /**
  * Computes how far a circle of `radius` can travel from `(startX, startZ)` along `angle`
- * before hitting a dungeon wall/pillar, up to `maxDist`. Used for the boss lunge path telegraph.
+ * before hitting a dungeon/citadel wall/pillar, up to `maxDist`. Used for the boss lunge path telegraph.
  */
 export function computeBossChargePathLength(
   startX: number,
@@ -3473,7 +4713,8 @@ export function computeBossChargePathLength(
   angle: number,
   radius: number,
   maxDist: number = BOSS_MAX_LUNGE_RANGE,
-  dynamicObstacles?: RectObstacle[]
+  dynamicObstacles?: RectObstacle[],
+  zone: ZoneId = "dungeon"
 ): number {
   const dirX = Math.sin(angle);
   const dirZ = Math.cos(angle);
@@ -3486,7 +4727,7 @@ export function computeBossChargePathLength(
       return d;
     }
     for (const obs of list) {
-      if (obs.zone !== "dungeon") continue;
+      if (obs.zone !== zone) continue;
       const res = resolveCircleRectCollision(testX, testZ, radius, obs);
       if (res.collided) {
         return d;

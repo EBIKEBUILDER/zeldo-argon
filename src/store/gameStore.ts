@@ -8,6 +8,12 @@ import {
   buildInitialMapProps,
   buildObstaclesFromMapProps,
   BuriedRewardKind,
+  CAVERN_CREST_KEY_POS,
+  CAVERN_SHOVEL_CHEST_POS,
+  CITADEL_ARMORY_CHEST_POS,
+  CITADEL_BOSS_GATE_POS,
+  CITADEL_EXIT_GATE_POS,
+  CITADEL_VICTORY_CHEST_POS,
   computeBossChargePathLength,
   computeEnemyChargePathLength,
   computePathfindingMoveDir,
@@ -21,6 +27,9 @@ import {
   EnemyKind,
   EnemyShieldArmor,
   FIRE_ROD_CHEST_POS,
+  FRONTIER_BOMB_CHEST_POS,
+  FRONTIER_CITADEL_GATE_POS,
+  FRONTIER_SAPPER_NPC_POS,
   getDefaultEnemyWeight,
   GUIDE_NPC_POS,
   HEIRLOOM_NPC_POS,
@@ -237,7 +246,12 @@ export interface EnemyState {
   initialShockArmor?: boolean;
   isBounty?: boolean;
   initialIsBounty?: boolean;
-  questGroup?: "heirloom" | "grove_ambush" | "ember_guards";
+  questGroup?:
+    | "heirloom"
+    | "grove_ambush"
+    | "ember_guards"
+    | "frontier_sappers"
+    | "cavern_wardens";
   provoked?: boolean;
   // Boss & Goblin Lunge combat state
   chargeAngle: number;
@@ -260,6 +274,7 @@ export interface BoomerangState {
   carriedRupeeIds?: string[];
   carryingKey?: boolean;
   carryingDgSmallKey?: boolean;
+  carryingGlacialKey?: boolean;
 }
 
 export interface ArrowProjectileState {
@@ -382,6 +397,7 @@ export interface GameFlags {
   overworldCrystalPuzzleSolved?: boolean;
   dungeonCrystalPuzzleSolved?: boolean;
   frontierCrystalPuzzleSolved?: boolean;
+  cavernsCrystalPuzzleSolved?: boolean;
   dungeonEyeStatuesSolved?: boolean;
   secretStashClaimed?: boolean;
   heirloomQuestStarted?: boolean;
@@ -405,6 +421,24 @@ export interface GameFlags {
   bigKeyChestOpened?: boolean;
   bossState?: BossArmorState;
   bossArmorTimer?: number;
+  // Map 3 (Frontier), Map 4 (Frostpeak Caverns) & Map 5 (Obsidian Citadel) Progression Flags
+  frontierSappersCleared?: boolean;
+  frontierBombChestOpened?: boolean;
+  frontierCitadelGateUnlocked?: boolean;
+  cavernWardensCleared?: boolean;
+  cavernEyeSolved?: boolean;
+  cavernShovelChestOpened?: boolean;
+  cavernCrestKeyPickedUp?: boolean;
+  hasGlacialKey?: boolean;
+  citadelArmoryChestOpened?: boolean;
+  citadelTimedTorchSolved?: boolean;
+  citadelEyeStatuesSolved?: boolean;
+  citadelGateUnlocked?: boolean;
+  citadelBossAwakened?: boolean;
+  citadelBossPhase2?: boolean;
+  citadelBossDefeated?: boolean;
+  citadelBossHeartAwarded?: boolean;
+  citadelVictoryChestOpened?: boolean;
 }
 
 export interface GameStats {
@@ -869,6 +903,8 @@ function createInitialState(
       grove: {},
       dungeon: {},
       frontier: {},
+      caverns: {},
+      citadel: {},
     },
     terrainRevision: 1,
     flags: {
@@ -885,6 +921,7 @@ function createInitialState(
       overworldCrystalPuzzleSolved: false,
       dungeonCrystalPuzzleSolved: false,
       frontierCrystalPuzzleSolved: false,
+      cavernsCrystalPuzzleSolved: false,
       dungeonEyeStatuesSolved: false,
       secretStashClaimed: false,
       heirloomQuestStarted: false,
@@ -907,6 +944,23 @@ function createInitialState(
       bigKeyChestOpened: false,
       bossState: "ARMORED",
       bossArmorTimer: 0,
+      frontierSappersCleared: false,
+      frontierBombChestOpened: false,
+      frontierCitadelGateUnlocked: false,
+      cavernWardensCleared: false,
+      cavernEyeSolved: false,
+      cavernShovelChestOpened: false,
+      cavernCrestKeyPickedUp: false,
+      hasGlacialKey: false,
+      citadelArmoryChestOpened: false,
+      citadelTimedTorchSolved: false,
+      citadelEyeStatuesSolved: false,
+      citadelGateUnlocked: false,
+      citadelBossAwakened: false,
+      citadelBossPhase2: false,
+      citadelBossDefeated: false,
+      citadelBossHeartAwarded: false,
+      citadelVictoryChestOpened: false,
     },
     stats: {
       enemiesDefeated: 0,
@@ -917,9 +971,9 @@ function createInitialState(
       phase === "playing"
         ? {
             id: 1,
-            text: "Map 1: Starting Crossroads Hub",
+            text: "Map 1: Whispering Crossroads (Act I — The Adventure Begins)",
             subtext:
-              "West Exit -> Map 1B Grove (Key & Flame Rod) • North -> Map 2 Dungeon • East -> Map 3 Burned Pass • South -> Shop!",
+              "West Exit -> Map 1B Grove (Sanctum Key) • North -> Map 2 Dungeon (Flame Rod) • East -> Map 3 Frontier (Bombs) • Map 4 Caverns (Shovel) • Map 5 Citadel!",
             timer: 6.5,
           }
         : null,
@@ -944,7 +998,7 @@ function createInitialState(
   };
 }
 
-const MAP_STORAGE_KEY = "zeldo-authored-map-v8";
+const MAP_STORAGE_KEY = "zeldo-authored-map-v9";
 
 function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   if (p.prefab === "dirt_patch") {
@@ -997,7 +1051,7 @@ function persistAuthoredMapToStorage(state: {
   if (typeof window === "undefined") return false;
   try {
     const cleanEnemies = state.enemies
-      .filter((e) => !e.id.startsWith("dg-minion-wave2-"))
+      .filter((e) => !e.id.startsWith("dg-minion-wave2-") && !e.id.startsWith("ct-minion-wave2-"))
       .map((e) => ({
         ...e,
         x: e.spawnX,
@@ -1021,7 +1075,7 @@ function persistAuthoredMapToStorage(state: {
       .map((r) => ({ ...r, collected: false, spawnBounceTimer: 0 }));
 
     const payload = {
-      version: 6,
+      version: 7,
       mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: cleanEnemies,
       rupees: cleanRupees,
@@ -1032,6 +1086,8 @@ function persistAuthoredMapToStorage(state: {
         grove: state.terrainCells.grove ?? {},
         dungeon: state.terrainCells.dungeon ?? {},
         frontier: state.terrainCells.frontier ?? {},
+        caverns: state.terrainCells.caverns ?? {},
+        citadel: state.terrainCells.citadel ?? {},
       },
     };
     window.localStorage.setItem(MAP_STORAGE_KEY, JSON.stringify(payload));
@@ -1989,7 +2045,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       phase: "playing",
       mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: state.enemies
-        .filter((e) => !e.id.startsWith("dg-minion-wave2-"))
+        .filter((e) => !e.id.startsWith("dg-minion-wave2-") && !e.id.startsWith("ct-minion-wave2-"))
         .map((e) => ({
           ...e,
           x: e.spawnX,
@@ -2059,6 +2115,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         overworldCrystalPuzzleSolved: false,
         dungeonCrystalPuzzleSolved: false,
         frontierCrystalPuzzleSolved: false,
+        cavernsCrystalPuzzleSolved: false,
         dungeonEyeStatuesSolved: false,
         secretStashClaimed: false,
         heirloomQuestStarted: false,
@@ -2081,6 +2138,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
         bigKeyChestOpened: false,
         bossState: "ARMORED",
         bossArmorTimer: 0,
+        frontierSappersCleared: false,
+        frontierBombChestOpened: false,
+        frontierCitadelGateUnlocked: false,
+        cavernWardensCleared: false,
+        cavernEyeSolved: false,
+        cavernShovelChestOpened: false,
+        cavernCrestKeyPickedUp: false,
+        hasGlacialKey: false,
+        citadelArmoryChestOpened: false,
+        citadelTimedTorchSolved: false,
+        citadelEyeStatuesSolved: false,
+        citadelGateUnlocked: false,
+        citadelBossAwakened: false,
+        citadelBossPhase2: false,
+        citadelBossDefeated: false,
+        citadelBossHeartAwarded: false,
+        citadelVictoryChestOpened: false,
       },
       hero: {
         ...state.hero,
@@ -2120,7 +2194,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const payload = {
       version: 3,
       mapProps: state.mapProps,
-      enemies: state.enemies.filter((e) => !e.id.startsWith("dg-minion-wave2-")),
+      enemies: state.enemies.filter(
+        (e) => !e.id.startsWith("dg-minion-wave2-") && !e.id.startsWith("ct-minion-wave2-")
+      ),
       rupees: state.rupees.filter(
         (r) => !r.id.startsWith("drop-") && !r.id.startsWith("bush-drop-")
       ),
@@ -2141,6 +2217,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           grove: data.terrainCells?.grove ?? state.terrainCells.grove ?? {},
           dungeon: data.terrainCells?.dungeon ?? state.terrainCells.dungeon ?? {},
           frontier: data.terrainCells?.frontier ?? state.terrainCells.frontier ?? {},
+          caverns: data.terrainCells?.caverns ?? state.terrainCells.caverns ?? {},
+          citadel: data.terrainCells?.citadel ?? state.terrainCells.citadel ?? {},
         };
         const nextState = {
           mapProps: data.mapProps,
@@ -2187,6 +2265,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           grove: data.terrainCells?.grove ?? {},
           dungeon: data.terrainCells?.dungeon ?? {},
           frontier: data.terrainCells?.frontier ?? {},
+          caverns: data.terrainCells?.caverns ?? {},
+          citadel: data.terrainCells?.citadel ?? {},
         },
         terrainRevision: state.terrainRevision + 1,
       }));
@@ -2215,6 +2295,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         grove: {},
         dungeon: {},
         frontier: {},
+        caverns: {},
+        citadel: {},
       },
       terrainRevision: state.terrainRevision + 1,
       editorSelected: null,
@@ -2723,7 +2805,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const hero: HeroState = {
       ...state.hero,
       heldObject: state.hero.heldObject ? { ...state.hero.heldObject } : null,
-      bottles: [...(state.hero.bottles ?? ["red_potion", "fairy", "bee", "empty"])],
+      bottles: [...(state.hero.bottles ?? [])],
     };
     const flags: GameFlags = { ...state.flags };
     flags.bossState = flags.bossState ?? "ARMORED";
@@ -2770,8 +2852,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Passive Magic Power regeneration (2.5 MP/s)
     hero.maxMp = hero.maxMp || 100;
     hero.mp = Math.min(hero.maxMp, (hero.mp ?? 100) + dt * 2.5);
-    hero.maxBombs = hero.maxBombs || 30;
-    hero.bombs = hero.bombs ?? 10;
+    hero.maxBombs = hero.maxBombs ?? 0;
+    hero.bombs = hero.bombs ?? 0;
 
     // Tunic damage multiplier:
     // - Forest Green Tunic (default): 1.0x (0% physical/magical reduction)
@@ -2948,6 +3030,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           carriedRupeeIds: [...(state.boomerang.carriedRupeeIds ?? [])],
           carryingKey: state.boomerang.carryingKey ?? false,
           carryingDgSmallKey: state.boomerang.carryingDgSmallKey ?? false,
+          carryingGlacialKey: state.boomerang.carryingGlacialKey ?? false,
         }
       : null;
     let arrows: ArrowProjectileState[] = state.arrows.map((a) => ({ ...a }));
@@ -3239,6 +3322,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
           );
           return true;
         }
+        if (targetZone === "caverns" && !flags.cavernsCrystalPuzzleSolved) {
+          flags.cavernsCrystalPuzzleSolved = true;
+          soundEngine.playSecretSolve();
+          rupees.push(
+            {
+              id: `crystal-cv-reward-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "caverns",
+              x: 13.5,
+              z: -2.5,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `crystal-cv-reward-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "caverns",
+              x: 15.0,
+              z: -2.5,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            }
+          );
+          pushBanner(
+            "Glacial Bridge Crystal Switch Activated! (East Sanctum Open!)",
+            "Cross the frozen bridge into the East Glacial Sanctum, melt the Frost Wardens [R], and shoot the Eye Statue [E] for the Glacial Crest Key!",
+            5.6
+          );
+          return true;
+        }
       }
       return false;
     };
@@ -3266,7 +3381,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return true;
     };
 
-    // Helper: Pierce the Room 4 Cyclops Eye Statue (`eye_statue`) with an Arrow -> Spawns Big Key Chest & Drops West Shortcut Door to Room 1!
+    // Helper: Pierce Cyclops Eye Statues (`eye_statue`) with an Arrow in Dungeon Room 4, Map 4 Caverns, or Map 5 Citadel!
     const activateEyeStatue = (propId: string): boolean => {
       ensureMutableMapProps();
       const eyeProp = mapProps.find((p) => p.id === propId);
@@ -3313,6 +3428,49 @@ export const useGameStore = create<GameStore>((set, get) => ({
             "Cyclops Eye Statue Pierced! (Big Key Chest & Shortcut Unlocked!)",
             "Claim the Big Boss Key Chest in the center of Room 4, then take the West Shortcut Door back to Room 1!",
             6.2
+          );
+          return true;
+        } else if (eyeProp.zone === "caverns" && !flags.cavernEyeSolved) {
+          flags.cavernEyeSolved = true;
+          soundEngine.playGateUnlock();
+          soundEngine.playSecretSolve();
+          rupees.push(
+            {
+              id: `eye-statue-cv-reward-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "caverns",
+              x: CAVERN_CREST_KEY_POS.x - 1.4,
+              z: CAVERN_CREST_KEY_POS.z,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `eye-statue-cv-reward-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "caverns",
+              x: CAVERN_CREST_KEY_POS.x + 1.4,
+              z: CAVERN_CREST_KEY_POS.z,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            }
+          );
+          pushBanner(
+            "Glacial Sanctum Eye Pierced! (Glacial Crest Key Unsealed!)",
+            "Claim the Glacial Crest Key at the pedestal (24, 14) and take the NE Shortcut Portal to unlock Map 5 (Obsidian Citadel)!",
+            6.2
+          );
+          return true;
+        } else if (eyeProp.zone === "citadel" && !flags.citadelEyeStatuesSolved) {
+          flags.citadelEyeStatuesSolved = true;
+          flags.citadelGateUnlocked = true;
+          soundEngine.playGateUnlock();
+          soundEngine.playSecretSolve();
+          pushBanner(
+            "Both Sovereign Eye Statues Pierced! (Throne Room Unsealed!)",
+            "The Inner Sanctum Gate dropped — step North into the Sovereign's Throne Room to challenge Vaelkor!",
+            6.0
           );
           return true;
         } else if (!wasAlreadyActivated) {
@@ -4087,12 +4245,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     hero.knockbackVx *= kbDecay;
     hero.knockbackVz *= kbDecay;
 
-     const initialGatePassable =
+    const initialGatePassable =
       zone === "overworld"
         ? Boolean(flags.dungeonEntryUnlocked || flags.keyPickedUp || hero.hasDungeonKey)
+        : zone === "frontier"
+        ? Boolean(flags.frontierCitadelGateUnlocked || flags.hasGlacialKey || flags.cavernCrestKeyPickedUp)
+        : zone === "citadel"
+        ? Boolean(flags.citadelGateUnlocked && (!flags.citadelBossAwakened || flags.citadelBossDefeated))
         : Boolean(flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated));
+    const initialBossExitOpen =
+      zone === "citadel" ? Boolean(flags.citadelBossDefeated) : Boolean(flags.bossDefeated);
     const clampedNextHeroZ =
-      zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated
+      (zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated) ||
+      (zone === "citadel" && flags.citadelBossAwakened && !flags.citadelBossDefeated)
         ? Math.max(13.55, nextHeroZ)
         : nextHeroZ;
     const resolvedHero = resolveWorldCollisions(
@@ -4102,7 +4267,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       zone,
       initialGatePassable,
       dynamicObstacles,
-      flags.bossDefeated
+      initialBossExitOpen
     );
     if (isKnockbackLocked && resolvedHero.hitObstacle) {
       hero.knockbackVx *= 0.45;
@@ -4110,7 +4275,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     hero.x = resolvedHero.x;
     hero.z =
-      zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated
+      (zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated) ||
+      (zone === "citadel" && flags.citadelBossAwakened && !flags.citadelBossDefeated)
         ? Math.max(13.55, resolvedHero.z)
         : resolvedHero.z;
 
@@ -4271,7 +4437,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             zone,
             initialGatePassable,
             obstaclesWithoutSelf,
-            flags.bossDefeated
+            initialBossExitOpen
           );
 
           if (!checkDest.hitObstacle) {
@@ -4341,6 +4507,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 "The North Sanctuary Door is Sealed!",
                 "Vanquish Ignis, the Armored Eye-Golem, to unseal the North Sanctuary Door to Map 3!",
                 3.6
+              );
+            }
+            continue;
+          }
+          if (
+            portal.id === "portal-fr-citadel" &&
+            !flags.frontierCitadelGateUnlocked &&
+            !flags.hasGlacialKey &&
+            !flags.cavernCrestKeyPickedUp
+          ) {
+            if (gateNoticeCooldown <= 0) {
+              gateNoticeCooldown = 3.2;
+              soundEngine.playGateLocked();
+              pushBanner(
+                "The North Citadel Gate is Sealed by Glacial Runes!",
+                "Journey East into Map 4 (Frostpeak Caverns) to claim the Glacial Crest Key first!",
+                4.2
+              );
+            }
+            continue;
+          }
+          if (portal.id === "portal-ct-victory-ow" && !flags.citadelBossDefeated) {
+            if (gateNoticeCooldown <= 0) {
+              gateNoticeCooldown = 3.2;
+              soundEngine.playGateLocked();
+              pushBanner(
+                "The Golden Return Portal is Sealed!",
+                "Vanquish Vaelkor, the Obsidian Sovereign, to unseal the Golden Return Portal!",
+                4.0
               );
             }
             continue;
@@ -4576,6 +4771,289 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // 4e. Map 3 (`frontier` — Elderwood Highlands & Sunstone Quarry):
+    // - SE Sapper Outpost NPC (`FRONTIER_SAPPER_NPC_POS = 16.0, -21.5`) & Bomb Bag Chest (`FRONTIER_BOMB_CHEST_POS = 24.5, -18.5`)
+    // - North Glacial Seal Gate (`FRONTIER_CITADEL_GATE_POS = 0, 31.8`) leading into Map 5 (`citadel`)
+    if (zone === "frontier") {
+      const distToSapperNpc = Math.hypot(
+        hero.x - FRONTIER_SAPPER_NPC_POS.x,
+        hero.z - FRONTIER_SAPPER_NPC_POS.z
+      );
+      const remainingSappers = enemies.filter(
+        (e) => e.questGroup === "frontier_sappers" && e.state !== "dead"
+      );
+      if (distToSapperNpc < 2.8 && chestNoticeCooldown <= 0) {
+        chestNoticeCooldown = 4.2;
+        soundEngine.playKeyPickup();
+        if (!flags.frontierBombChestOpened) {
+          if (remainingSappers.length > 0) {
+            pushBanner(
+              'Sapper Captain Vane: "Burn the Briars & Clear My Outpost!"',
+              `Use your Flame Rod [R / 3] to burn the Dry Briars and defeat the ${remainingSappers.length} Outpost Raider${remainingSappers.length === 1 ? "" : "s"} to claim our Canvas Bomb Bag Chest!`,
+              5.4
+            );
+          } else {
+            pushBanner(
+              'Sapper Captain Vane: "The Outpost is Saved! Claim the Bomb Bag!"',
+              "Walk up to the Sapper Chest inside the outpost to receive the Canvas Bomb Bag (20 Bombs), then blast the East Quarry boulder into Map 4!",
+              5.4
+            );
+          }
+        } else {
+          pushBanner(
+            'Sapper Captain Vane: "Blast the East Quarry Pass into Map 4!"',
+            "Throw a Bomb [B / 4] at the Cracked Quarry Boulder on the East Pass to enter Map 4: Frostpeak Caverns and recover the Glacial Crest Key!",
+            5.0
+          );
+        }
+      }
+
+      if (!flags.frontierBombChestOpened) {
+        const distToBombChest = Math.hypot(
+          hero.x - FRONTIER_BOMB_CHEST_POS.x,
+          hero.z - FRONTIER_BOMB_CHEST_POS.z
+        );
+        if (distToBombChest < 2.6) {
+          if (remainingSappers.length === 0) {
+            flags.frontierBombChestOpened = true;
+            flags.frontierSappersCleared = true;
+            hero.maxBombs = Math.max(hero.maxBombs ?? 0, 20);
+            hero.bombs = Math.max(hero.bombs ?? 0, 15);
+            hero.rupees += 50;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Acquired the Canvas Bomb Bag! (15 Bombs + 50 Rupees!)",
+              "Head to the East Quarry Pass and press B [or 4] to blast the Cracked Boulder blocking Map 4: Frostpeak Caverns!",
+              6.8
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Sapper's Bomb Bag Chest is Guarded!",
+              `Defeat the ${remainingSappers.length} Outpost Raider${remainingSappers.length === 1 ? "" : "s"} in the SE Sapper Outpost to unseal the Bomb Bag Chest!`,
+              4.2
+            );
+          }
+        }
+      }
+
+      // Check North Glacial Seal Gate (`FRONTIER_CITADEL_GATE_POS = 0, 31.8`) into Map 5 (`citadel`)
+      if (!flags.frontierCitadelGateUnlocked) {
+        const distToCitadelGate = Math.hypot(
+          hero.x - FRONTIER_CITADEL_GATE_POS.x,
+          hero.z - FRONTIER_CITADEL_GATE_POS.z
+        );
+        if (distToCitadelGate < 3.5) {
+          if (flags.hasGlacialKey || flags.cavernCrestKeyPickedUp) {
+            flags.frontierCitadelGateUnlocked = true;
+            flags.hasGlacialKey = false;
+            dynamicObstacles = getActiveObstacles(mapProps);
+            soundEngine.playGateUnlock();
+            pushBanner(
+              "North Glacial Seal Gate Unlocked! (Map 5: Obsidian Citadel)",
+              "The Glacial Crest Key shattered the ancient seal — step North into Map 5: The Obsidian Citadel!",
+              5.6
+            );
+          } else if (gateNoticeCooldown <= 0) {
+            gateNoticeCooldown = 3.2;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "North Gate Sealed! (Requires Glacial Crest Key)",
+              "1. Claim the Bomb Bag in the SE Outpost -> 2. Blast the East Quarry Boulder [B] into Map 4 (Frostpeak Caverns) -> 3. Win the Glacial Crest Key!",
+              5.0
+            );
+          }
+        }
+      }
+    }
+
+    // 4f. Map 4 (`caverns` — Frostpeak Caverns & Glacial Reliquary):
+    // - NW Reliquary Vault Chest (`CAVERN_SHOVEL_CHEST_POS = -22.0, 20.0`): Unlocks Explorer's Iron Shovel (`G`) + Sapphire Mail (`blue_mail`)!
+    // - East Glacial Sanctum Pedestal (`CAVERN_CREST_KEY_POS = 24.0, 14.0`): Unlocks Glacial Crest Key once the 3 Frost Wardens OR Cyclops Eye are cleared!
+    if (zone === "caverns") {
+      if (!flags.cavernShovelChestOpened) {
+        const distToShovelChest = Math.hypot(
+          hero.x - CAVERN_SHOVEL_CHEST_POS.x,
+          hero.z - CAVERN_SHOVEL_CHEST_POS.z
+        );
+        if (distToShovelChest < 2.6) {
+          flags.cavernShovelChestOpened = true;
+          hero.hasShovel = true;
+          if (!hero.unlockedTunics.includes("blue_mail")) {
+            hero.unlockedTunics = [...hero.unlockedTunics, "blue_mail"];
+          }
+          if (hero.equippedTunic === "green_tunic") {
+            hero.equippedTunic = "blue_mail";
+          }
+          hero.bombs = Math.min(hero.maxBombs || 20, (hero.bombs ?? 0) + 8);
+          soundEngine.playVictoryFanfare();
+          pushBanner(
+            "Acquired Explorer's Iron Shovel [G] & Sapphire Mail (-50% DMG)!",
+            "Dig the Soft Dirt Patches nearby with [G] for an Empty Bottle & Fairy, then cross the East Frozen Stream to win the Glacial Crest Key!",
+            6.8
+          );
+        }
+      }
+
+      if (!flags.cavernCrestKeyPickedUp) {
+        const distToCrestKey = Math.hypot(
+          hero.x - CAVERN_CREST_KEY_POS.x,
+          hero.z - CAVERN_CREST_KEY_POS.z
+        );
+        const remainingWardens = enemies.filter(
+          (e) => e.questGroup === "cavern_wardens" && e.state !== "dead"
+        );
+        const canClaimCrestKey =
+          Boolean(flags.cavernEyeSolved || flags.cavernWardensCleared) ||
+          remainingWardens.length === 0;
+        if (distToCrestKey < 2.25) {
+          if (canClaimCrestKey) {
+            flags.cavernCrestKeyPickedUp = true;
+            flags.hasGlacialKey = true;
+            hero.hasDungeonKey = true;
+            soundEngine.playVictoryFanfare();
+            soundEngine.playKeyPickup();
+            pushBanner(
+              "Acquired the Glacial Crest Key! (NE Shortcut Portal Open!)",
+              "Step into the North-East Shortcut Portal (or return West to Map 3) and unlock the North Citadel Gate into Map 5!",
+              6.5
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Glacial Crest Key Pedestal is Ward-Sealed!",
+              `Melt the ${remainingWardens.length} Frost Warden${remainingWardens.length === 1 ? "" : "s"} with your Flame Rod [R / 3] OR shoot the North Cyclops Eye Statue with your Bow [E / 2]!`,
+              4.5
+            );
+          }
+        }
+      }
+    }
+
+    // 4g. Map 5 (`citadel` — The Obsidian Citadel & Sovereign's Throne):
+    // - West Armory Chest (`CITADEL_ARMORY_CHEST_POS = -22.0, -6.0`): Unlocks Tempered Sun-Blade (2x DMG) & Aegis Mirror Shield!
+    // - Inner Sanctum Gate (`CITADEL_BOSS_GATE_POS = 0, 12.0`): Unlocked by lighting the 4 Timed Braziers OR piercing the 2 Eye Statues!
+    // - Sovereign's Throne (`z > 13.05`): Awakens Vaelkor, the Obsidian Sovereign (`ct-boss`)!
+    // - Sovereign's Victory Chest (`CITADEL_VICTORY_CHEST_POS = -6.5, 32.0`): Unlocks Crimson Dragon Mail (-75% DMG), +1 Heart Container, & +200 Rupees!
+    if (zone === "citadel") {
+      if (!flags.citadelArmoryChestOpened) {
+        const distToArmoryChest = Math.hypot(
+          hero.x - CITADEL_ARMORY_CHEST_POS.x,
+          hero.z - CITADEL_ARMORY_CHEST_POS.z
+        );
+        if (distToArmoryChest < 2.6) {
+          flags.citadelArmoryChestOpened = true;
+          hero.swordDamage = 2;
+          if (!hero.unlockedPrimaries.includes("tempered_blade")) {
+            hero.unlockedPrimaries = [...hero.unlockedPrimaries, "tempered_blade"];
+          }
+          hero.equippedPrimary = "tempered_blade";
+          if (!hero.unlockedOffhands.includes("mirror_shield")) {
+            hero.unlockedOffhands = [...hero.unlockedOffhands, "mirror_shield"];
+          }
+          hero.equippedOffhand = "mirror_shield";
+          hero.shieldBlock = 2;
+          hero.arrows = Math.min(99, (hero.arrows ?? 0) + 15);
+          hero.mp = hero.maxMp;
+          soundEngine.playVictoryFanfare();
+          pushBanner(
+            "Acquired Tempered Sun-Blade (2x DMG) & Aegis Mirror Shield!",
+            "Your blade now strikes for 2x damage and your Mirror Shield blocks magical blasts! Unlock the North Inner Sanctum Gate to face Vaelkor!",
+            6.8
+          );
+        }
+      }
+
+      if (!flags.citadelGateUnlocked) {
+        const distToCitadelBossGate = Math.hypot(
+          hero.x - CITADEL_BOSS_GATE_POS.x,
+          hero.z - CITADEL_BOSS_GATE_POS.z
+        );
+        if (distToCitadelBossGate < 3.2 && gateNoticeCooldown <= 0) {
+          gateNoticeCooldown = 3.2;
+          soundEngine.playGateLocked();
+          pushBanner(
+            "Inner Sanctum Gate Sealed! (Sovereign's Throne)",
+            "Light all 4 Central Obsidian Braziers with Flame Rod [R / 3] within 8s OR shoot both North Eye Statues with Bow [E / 2]!",
+            4.6
+          );
+        }
+      } else if (
+        flags.citadelGateUnlocked &&
+        flags.citadelBossAwakened &&
+        !flags.citadelBossDefeated
+      ) {
+        const distToCitadelBossGate = Math.hypot(
+          hero.x - CITADEL_BOSS_GATE_POS.x,
+          hero.z - CITADEL_BOSS_GATE_POS.z
+        );
+        if (distToCitadelBossGate < 2.8 && gateNoticeCooldown <= 0) {
+          gateNoticeCooldown = 3.5;
+          soundEngine.playGateLocked();
+          pushBanner(
+            "The Sovereign's Throne Door is Sealed Shut!",
+            "1. Burn Vaelkor's Obsidian Shell with Flame Rod [R] -> 2. Shoot Open Eye with Bow [E] -> 3. Slash with Tempered Blade [Space]!",
+            4.2
+          );
+        }
+      }
+
+      if (
+        flags.citadelGateUnlocked &&
+        !flags.citadelBossAwakened &&
+        hero.z > 13.05
+      ) {
+        flags.citadelBossAwakened = true;
+        flags.bossState = "ARMORED";
+        flags.bossArmorTimer = 0;
+        hero.z = Math.max(13.58, hero.z);
+        soundEngine.playGateLocked();
+        soundEngine.playBossRoar();
+        pushBanner(
+          "Vaelkor, the Obsidian Sovereign Awakens!",
+          "Phase 1: Burn his Obsidian Shell [R] or Blast with Bomb [B] • Phase 2: Pierce Open Eye [E / Q] • Phase 3: Slash with Sword [Space]!",
+          6.5
+        );
+      }
+
+      if (!flags.citadelVictoryChestOpened) {
+        const distToVictoryChest = Math.hypot(
+          hero.x - CITADEL_VICTORY_CHEST_POS.x,
+          hero.z - CITADEL_VICTORY_CHEST_POS.z
+        );
+        if (distToVictoryChest < 2.6) {
+          if (flags.citadelBossDefeated) {
+            flags.citadelVictoryChestOpened = true;
+            if (!hero.unlockedTunics.includes("red_mail")) {
+              hero.unlockedTunics = [...hero.unlockedTunics, "red_mail"];
+            }
+            hero.equippedTunic = "red_mail";
+            hero.maxHp += 2;
+            hero.hp = hero.maxHp;
+            hero.mp = hero.maxMp;
+            hero.damageFractionAcc = 0;
+            hero.rupees += 200;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Claimed the Sovereign's Relic Chest! (Crimson Dragon Mail + Heart + 200 Rupees!)",
+              "You conquered all 5 Realms! Step through the North Golden Return Portal to travel back to Map 1 Crossroads as Champion!",
+              7.5
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Sovereign's Relic Chest is Sealed!",
+              "Vanquish Vaelkor, the Obsidian Sovereign, and his Shadow Guard to unseal the ultimate reward!",
+              4.0
+            );
+          }
+        }
+      }
+    }
+
     // 5. Check North Boss Door in Room 1 (`LOCKED_GATE_POS = 0, 12.0` -> requires 4 Lit Hub Lanterns AND Big Boss Key!)
     if (zone === "dungeon" && !flags.gateUnlocked) {
       const distToGate = Math.hypot(
@@ -4654,8 +5132,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const gatePassable =
       zone === "overworld"
         ? Boolean(flags.dungeonEntryUnlocked || flags.keyPickedUp || hero.hasDungeonKey)
+        : zone === "frontier"
+        ? Boolean(flags.frontierCitadelGateUnlocked || flags.hasGlacialKey || flags.cavernCrestKeyPickedUp)
+        : zone === "citadel"
+        ? Boolean(flags.citadelGateUnlocked && (!flags.citadelBossAwakened || flags.citadelBossDefeated))
         : Boolean(flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated));
-    const bossExitOpen = flags.bossDefeated;
+    const bossExitOpen =
+      zone === "citadel" ? Boolean(flags.citadelBossDefeated) : Boolean(flags.bossDefeated);
 
     // 7. Update Arcing Boss Projectiles & Toxic Ground Hazards (Magical Damage!)
     const projectiles: BossProjectileState[] = [];
@@ -4768,7 +5251,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const toHz = hero.z - boomerang.z;
           const distH = Math.hypot(toHx, toHz);
           if (distH < 1.2) {
-            // Deliver any snagged Sanctum Key, Room 2 Small Key, or Rupees directly into the Hero's hands!
+            // Deliver any snagged Sanctum Key, Room 2 Small Key, Map 4 Glacial Key, or Rupees directly into the Hero's hands!
             if (boomerang.carryingKey && !flags.keyPickedUp) {
               flags.keyPickedUp = true;
               hero.hasDungeonKey = true;
@@ -4788,6 +5271,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 "Boomerang Fetched the Small Key Across the Chasm!",
                 "Return East to Room 1 (Central Hub) and unlock the Locked East Door into Room 3 (The Ember Sanctum)!",
                 5.8
+              );
+            }
+            if (boomerang.carryingGlacialKey && !flags.cavernCrestKeyPickedUp) {
+              flags.cavernCrestKeyPickedUp = true;
+              flags.hasGlacialKey = true;
+              hero.hasDungeonKey = true;
+              soundEngine.playVictoryFanfare();
+              soundEngine.playKeyPickup();
+              pushBanner(
+                "Boomerang Fetched the Glacial Crest Key!",
+                "Step into the North-East Shortcut Portal (or return West to Map 3) and unlock the North Citadel Gate into Map 5!",
+                6.2
               );
             }
             for (const cId of boomerang.carriedRupeeIds) {
@@ -4817,7 +5312,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
         }
 
-        // Boomerang snags & drags the Map 1B Grove Key, Room 2 Dungeon Small Key, and Rupees/Recovery Hearts in flight!
+        // Boomerang snags & drags the Map 1B Grove Key, Room 2 Dungeon Small Key, Map 4 Glacial Key, and Rupees/Recovery Hearts in flight!
         if (boomerang) {
           if (
             zone === "grove" &&
@@ -4847,6 +5342,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
             pushBanner(
               "Boomerang Snagged the Small Key Across the Chasm!",
               "Pulling the gleaming Small Key from the West Chasm pedestal...",
+              3.4
+            );
+          }
+
+          if (
+            zone === "caverns" &&
+            !flags.cavernCrestKeyPickedUp &&
+            !boomerang.carryingGlacialKey &&
+            (flags.cavernEyeSolved || flags.cavernWardensCleared) &&
+            Math.hypot(CAVERN_CREST_KEY_POS.x - boomerang.x, CAVERN_CREST_KEY_POS.z - boomerang.z) < 1.85
+          ) {
+            boomerang.carryingGlacialKey = true;
+            boomerang.returning = true;
+            soundEngine.playLift();
+            pushBanner(
+              "Boomerang Snagged the Glacial Crest Key!",
+              "Pulling the Glacial Crest Key from the East Sanctum pedestal...",
               3.4
             );
           }
@@ -5175,7 +5687,43 @@ export const useGameStore = create<GameStore>((set, get) => ({
           );
         }
       }
+
+      // Check if all 3 Map 3 Frontier Sapper Outpost Raiders (`questGroup === "frontier_sappers"`) are defeated!
+      if (enemy.questGroup === "frontier_sappers" && !flags.frontierBombChestOpened) {
+        const remainingSappers = enemies.filter(
+          (e) => e.questGroup === "frontier_sappers" && e.state !== "dead"
+        );
+        if (remainingSappers.length === 0) {
+          flags.frontierSappersCleared = true;
+          soundEngine.playSecretSolve();
+          pushBanner(
+            "Sapper Outpost Cleared! (Bomb Bag Chest Unsealed!)",
+            "Walk up to the Sapper Chest in the SE Outpost to claim the Canvas Bomb Bag (15 Bombs + 50 Rupees)!",
+            5.8
+          );
+        }
+      }
+
+      // Check if all 3 Map 4 Frostpeak Caverns Wardens (`questGroup === "cavern_wardens"`) are defeated!
+      if (enemy.questGroup === "cavern_wardens" && !flags.cavernWardensCleared) {
+        const remainingWardens = enemies.filter(
+          (e) => e.questGroup === "cavern_wardens" && e.state !== "dead"
+        );
+        if (remainingWardens.length === 0) {
+          flags.cavernWardensCleared = true;
+          soundEngine.playSecretSolve();
+          pushBanner(
+            "Frost Wardens Vanquished! (Glacial Crest Key Unsealed!)",
+            "Claim the Glacial Crest Key at the East Sanctum Pedestal (or shoot the North Cyclops Eye with Bow [E] for +20 Rupees)!",
+            5.8
+          );
+        }
+      }
     };
+
+    const isBossRoomSealed = (e: EnemyState): boolean =>
+      (e.zone === "dungeon" && (e.kind === "boss" || e.spawnZ > 13) && !flags.bossAwakened) ||
+      (e.zone === "citadel" && (e.kind === "boss" || e.spawnZ > 13) && !flags.citadelBossAwakened);
 
     // 9. Update Arrows & Stone Spitter Turret Rock Projectiles
     const remainingArrows: ArrowProjectileState[] = [];
@@ -5272,18 +5820,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const eRad = enemy.kind === "boss" ? 1.55 : enemy.kind === "turret" ? 1.05 : 0.85;
           if (Math.hypot(enemy.x - arrow.x, enemy.z - arrow.z) <= eRad) {
             arrowConsumed = true;
-            const isSanctumFoe =
-              enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
 
             // Prevent sniping or waking the Boss/Sanctum Minions from outside the Boss Room before entering!
-            if (isSanctumFoe && !flags.bossAwakened) {
+            if (isBossRoomSealed(enemy)) {
               soundEngine.playArmorDeflect();
               soundEngine.playArrowStick();
               if (armorNoticeCooldown <= 0) {
                 armorNoticeCooldown = 3.5;
                 pushBanner(
-                  "Enter Room 5: Lair of Ignis!",
-                  "Step through the North Boss Door to challenge Ignis, the Armored Eye-Golem!",
+                  zone === "citadel" ? "Enter the Sovereign's Throne!" : "Enter Room 5: Lair of Ignis!",
+                  zone === "citadel"
+                    ? "Step through the Inner Sanctum Gate to challenge Vaelkor, the Obsidian Sovereign!"
+                    : "Step through the North Boss Door to challenge Ignis, the Armored Eye-Golem!",
                   3.2
                 );
               }
@@ -5332,10 +5880,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
             } else {
               enemy.provoked = true;
               if (enemy.kind === "boss") {
-                // Boss Ignis 3-Step Vulnerability Loop:
-                // - ARMORED: Ice/Bramble Carapace deflects Arrows! Must burn with Flame Rod [R] first!
-                // - EXPOSED_EYE: Arrow pierces the giant glowing chest Eye and crashes Ignis to the floor ("STUNNED") for 4.0s!
-                // - STUNNED: Arrow deals 2 damage while Ignis is down!
+                // Boss 3-Step Vulnerability Loop:
+                // - ARMORED: Carapace deflects Arrows! Must burn with Flame Rod [R] first!
+                // - EXPOSED_EYE: Arrow pierces the giant glowing chest Eye and crashes Boss to the floor ("STUNNED") for 4.0s!
+                // - STUNNED: Arrow deals 2 damage while Boss is down!
+                const bossName = zone === "citadel" ? "Vaelkor" : "Ignis";
                 if (flags.bossState === "ARMORED") {
                   soundEngine.playArmorDeflect();
                   soundEngine.playArrowStick();
@@ -5343,8 +5892,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   if (armorNoticeCooldown <= 0) {
                     armorNoticeCooldown = 2.8;
                     pushBanner(
-                      "Ignis's Ice/Bramble Carapace Deflects Arrows!",
-                      "Phase 1: Shoot Ignis with your Flame Rod [R / 3] first to burn away its outer shell!",
+                      `${bossName}'s Outer Carapace Deflects Arrows!`,
+                      `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] first to burn away its outer shell!`,
                       3.6
                     );
                   }
@@ -5361,8 +5910,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   } else {
                     soundEngine.playArrowStick();
                     pushBanner(
-                      "Phase 2 Complete: Open Eye Pierced — Ignis Stunned! (-2 HP)",
-                      "Phase 3: Rush in and slash Ignis with your Sword [Space / LMB] or Charged Spin Attack while it is dazed on the floor!",
+                      `Phase 2 Complete: Open Eye Pierced — ${bossName} Stunned! (-2 HP)`,
+                      `Phase 3: Rush in and slash ${bossName} with your Sword [Space / LMB] or Charged Spin Attack while dazed on the floor!`,
                       4.4
                     );
                   }
@@ -5763,6 +6312,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
               5.8
             );
           }
+        } else if (zone === "citadel") {
+          flags.citadelTimedTorchSolved = true;
+          flags.citadelGateUnlocked = true;
+          dynamicObstacles = getActiveObstacles(mapProps);
+          soundEngine.playGateUnlock();
+          rupees.push(
+            {
+              id: `timed-torch-ct-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "citadel",
+              x: centerX - 0.7,
+              z: centerZ,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.46,
+            },
+            {
+              id: `timed-torch-ct-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "citadel",
+              x: centerX + 0.7,
+              z: centerZ,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.46,
+            }
+          );
+          pushBanner(
+            "4 Obsidian Braziers Lit! (Inner Sanctum Gate Unsealed!)",
+            "The Inner Sanctum Gate is open — step North to challenge Vaelkor, the Obsidian Sovereign!",
+            6.2
+          );
         } else {
           flags.overworldTimedTorchSolved = true;
           rupees.push(
@@ -6072,14 +6653,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           igniteBurnableBarrier(pIdx);
         }
       }
-      // Immediate splash damage on explosion (also melts Ice Armor, burns Wooden Shields, & burns Boss Ignis's Carapace)!
+      // Immediate splash damage on explosion (also melts Ice Armor, burns Wooden Shields, & burns Boss Carapace)!
       for (const enemy of enemies) {
         if (enemy.zone !== zone || enemy.state === "dead") continue;
         const eRad = enemy.kind === "boss" ? 1.5 : 0.9;
         if (Math.hypot(enemy.x - fx, enemy.z - fz) <= 2.25 + eRad) {
-          const isSanctumFoe =
-            enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
-          if (isSanctumFoe && !flags.bossAwakened) continue;
+          if (isBossRoomSealed(enemy)) continue;
           enemy.provoked = true;
           meltOrBurnEnemyShield(enemy);
           if (enemy.kind === "boss") {
@@ -6212,9 +6791,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           if (fb.isCharged) {
             spawnChargedFireZone(fb.x, fb.z);
           } else {
-            const isSanctumFoe =
-              enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
-            if (isSanctumFoe && !flags.bossAwakened) {
+            if (isBossRoomSealed(enemy)) {
               soundEngine.playArmorDeflect();
             } else {
               enemy.provoked = true;
@@ -6276,9 +6853,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           if (enemy.zone !== zone || enemy.state === "dead") continue;
           const eRad = enemy.kind === "boss" ? 1.35 : 0.75;
           if (Math.hypot(enemy.x - fz.x, enemy.z - fz.z) <= fz.radius + eRad * 0.5) {
-            const isSanctumFoe =
-              enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
-            if (isSanctumFoe && !flags.bossAwakened) continue;
+            if (isBossRoomSealed(enemy)) continue;
             enemy.provoked = true;
             meltOrBurnEnemyShield(enemy);
             if (enemy.kind === "boss") {
@@ -6314,9 +6889,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       let nearestDist = 16.0;
       for (const enemy of enemies) {
         if (enemy.zone !== zone || enemy.state === "dead") continue;
-        const isSanctumFoe =
-          enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
-        if (isSanctumFoe && !flags.bossAwakened) continue;
+        if (isBossRoomSealed(enemy)) continue;
         const d = Math.hypot(enemy.x - bee.x, enemy.z - bee.z);
         if (d < nearestDist) {
           nearestDist = d;
@@ -6402,17 +6975,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const eRad = enemy.kind === "boss" ? 1.45 : 0.85;
           if (Math.hypot(enemy.x - nextX, enemy.z - nextZ) <= eRad + 0.55) {
             shouldSmash = true;
-            const isSanctumFoe =
-              enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
-            if (!isSanctumFoe || flags.bossAwakened) {
+            if (!isBossRoomSealed(enemy)) {
               enemy.provoked = true;
               if (enemy.kind === "boss") {
                 soundEngine.playArmorDeflect();
                 if (armorNoticeCooldown <= 0) {
                   armorNoticeCooldown = 3.2;
                   pushBanner(
-                    "Malakor's Dread Plate Deflects Thrown Vessels!",
-                    "Shoot his glowing Open Eye with your Bow & Arrow [E / 2]!",
+                    "Boss Carapace Deflects Thrown Vessels!",
+                    "Burn the carapace with Flame Rod [R / 3], then shoot the Open Eye with Bow [E / 2]!",
                     3.4
                   );
                 }
@@ -6565,6 +7136,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 "Your bomb blasted open the South-West corner cave — step inside to claim the 50-Rupee Stash Chest!",
                 5.5
               );
+            } else if (prop.id === "prop-fr-east-cracked-rock") {
+              pushBanner(
+                "East Quarry Boulder Shattered! (Map 4: Frostpeak Caverns Open!)",
+                "Your bomb unsealed the East Quarry Pass — step through the portal into Map 4: Frostpeak Caverns!",
+                5.5
+              );
+            } else if (prop.id === "prop-cv-vault-cracked-rock") {
+              pushBanner(
+                "Reliquary Vault Unsealed! (Iron Shovel & Sapphire Mail Inside!)",
+                "Step North into the NW Reliquary Vault to claim the Explorer's Iron Shovel [G] & Sapphire Mail!",
+                5.5
+              );
             } else {
               pushBanner(
                 "Cracked Boulder Shattered!",
@@ -6605,7 +7188,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           dynamicObstacles = buildObstaclesFromMapProps(mapProps);
         }
 
-        // 2. Deal 3 Heavy Blast Damage to Enemies in blast radius (and crack/stagger Boss Ignis!)
+        // 2. Deal 3 Heavy Blast Damage to Enemies in blast radius (and crack/stagger Boss!)
         for (const enemy of enemies) {
           if (enemy.zone !== zone || enemy.state === "dead") continue;
           const eRad = enemy.kind === "boss" ? 1.5 : 0.85;
@@ -6613,14 +7196,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const dz = enemy.z - bomb.z;
           const dist = Math.hypot(dx, dz);
           if (dist <= blastRadius + eRad) {
-            const isSanctumFoe =
-              enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
-            if (isSanctumFoe && !flags.bossAwakened) continue;
+            if (isBossRoomSealed(enemy)) continue;
             enemy.provoked = true;
             if (enemy.kind === "boss") {
               if (flags.bossState === "ARMORED") {
                 burnBossIgnisCarapace(enemy);
               } else {
+                const bossName = zone === "citadel" ? "Vaelkor" : "Ignis";
                 soundEngine.playBossWallCrash();
                 flags.bossState = "STUNNED";
                 flags.bossArmorTimer = 3.8;
@@ -6628,7 +7210,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 enemy.stateTimer = 3.8;
                 enemy.hitFlashTimer = 0.28;
                 pushBanner(
-                  "Bomb Blast Knocked Down Ignis! (Phase 3: Melee Punish!)",
+                  `Bomb Blast Knocked Down ${bossName}! (Phase 3: Melee Punish!)`,
                   "Rush in and slash with your Sword [Space / LMB] before his carapace regenerates!",
                   3.6
                 );
@@ -6687,20 +7269,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const enemyRadius =
         enemy.kind === "boss" ? 1.35 : enemy.kind === "knight" || enemy.kind === "turret" ? 0.85 : 0.7;
 
-      // Check if Boomerang hits this enemy -> stuns Electrified (`shockArmor`), Wooden-Shielded Goblins, or Boss Ignis's Open Eye!
+      // Check if Boomerang hits this enemy -> stuns Electrified (`shockArmor`), Wooden-Shielded Goblins, or Boss Open Eye!
       if (boomerang && !boomerang.hitEnemyIds.includes(enemy.id)) {
         if (Math.hypot(enemy.x - boomerang.x, enemy.z - boomerang.z) <= enemyRadius + 0.65) {
           boomerang.hitEnemyIds.push(enemy.id);
           boomerang.returning = true;
-          const isSanctumFoe =
-            enemy.zone === "dungeon" && (enemy.kind === "boss" || enemy.spawnZ > 13);
-          if (isSanctumFoe && !flags.bossAwakened) {
+          if (isBossRoomSealed(enemy)) {
             soundEngine.playArmorDeflect();
           } else {
             enemy.provoked = true;
             if (enemy.kind === "boss") {
+              const bossName = zone === "citadel" ? "Vaelkor" : "Ignis";
               if (flags.bossState === "EXPOSED_EYE") {
-                // Phase 2 -> Phase 3: Stunning Ignis's Open Eye with the Boomerang!
+                // Phase 2 -> Phase 3: Stunning Boss's Open Eye with the Boomerang!
                 flags.bossState = "STUNNED";
                 flags.bossArmorTimer = 4.0;
                 enemy.state = "stunned";
@@ -6711,14 +7292,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 soundEngine.playEyeStatueHit();
                 soundEngine.playBossWallCrash();
                 pushBanner(
-                  "Boomerang Stunned Ignis's Open Eye! (Phase 3: Melee Punish!)",
-                  "Ignis crashed to the ground dazed for 4s — rush in and slash with your Sword [Space / LMB]!",
+                  `Boomerang Stunned ${bossName}'s Open Eye! (Phase 3: Melee Punish!)`,
+                  `${bossName} crashed to the ground dazed for 4s — rush in and slash with your Sword [Space / LMB]!`,
                   4.2
                 );
               } else if (flags.bossState === "STUNNED" || enemy.state === "stunned") {
                 soundEngine.playEyeStatueHit();
                 pushBanner(
-                  "Ignis is Stunned on the Floor!",
+                  `${bossName} is Stunned on the Floor!`,
                   "Phase 3: Rush in and slash with your Sword [Space / LMB] for massive damage!",
                   3.2
                 );
@@ -6727,8 +7308,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 if (armorNoticeCooldown <= 0) {
                   armorNoticeCooldown = 3.2;
                   pushBanner(
-                    "Ignis's Ice/Bramble Carapace Deflects Boomerang!",
-                    "Phase 1: Shoot Ignis with your Flame Rod [R / 3] to burn away his outer shell first!",
+                    `${bossName}'s Outer Carapace Deflects Boomerang!`,
+                    `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] to burn away his outer shell first!`,
                     3.4
                   );
                 }
@@ -6823,7 +7404,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             const strikeDamage = (hero.swordDamage || 1) * (isSpin ? 2 : 1);
 
             if (enemy.kind === "boss") {
-              // Boss Ignis 3-Step Vulnerability Loop: Phase 3 Melee Punish when STUNNED!
+              // Boss 3-Step Vulnerability Loop: Phase 3 Melee Punish when STUNNED!
+              const bossName = zone === "citadel" ? "Vaelkor" : "Ignis";
               enemy.knockbackVx = 0;
               enemy.knockbackVz = 0;
               if (flags.bossState === "STUNNED" || enemy.state === "stunned") {
@@ -6838,9 +7420,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   soundEngine.playEnemyHit(true);
                   pushBanner(
                     isSpin
-                      ? `Spin Attack Punish on Ignis! (-${bossPunishDamage} HP!)`
-                      : `Sword Punish on Stunned Ignis! (-${bossPunishDamage} HP!)`,
-                    "Keep slashing with your Sword before his Ice/Bramble carapace regenerates!",
+                      ? `Spin Attack Punish on ${bossName}! (-${bossPunishDamage} HP!)`
+                      : `Sword Punish on Stunned ${bossName}! (-${bossPunishDamage} HP!)`,
+                    "Keep slashing with your Sword before his outer carapace regenerates!",
                     2.8
                   );
                 }
@@ -6849,7 +7431,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 if (armorNoticeCooldown <= 0) {
                   armorNoticeCooldown = 3.0;
                   pushBanner(
-                    "Ignis's Chest Eye is Open — Shoot to Stun Him First!",
+                    `${bossName}'s Chest Eye is Open — Shoot to Stun Him First!`,
                     "Phase 2: Shoot his glowing Open Eye with your Bow [E / 2] or Boomerang [Q / 1] to knock him down!",
                     3.5
                   );
@@ -6859,8 +7441,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 if (armorNoticeCooldown <= 0) {
                   armorNoticeCooldown = 3.2;
                   pushBanner(
-                    "Ignis's Ice/Bramble Carapace Deflects Your Sword!",
-                    "Phase 1: Shoot Ignis with your Flame Rod [R / 3] to burn away his outer shell first!",
+                    `${bossName}'s Outer Carapace Deflects Your Sword!`,
+                    `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] to burn away his outer shell first!`,
                     3.6
                   );
                 }
@@ -6994,28 +7576,34 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
-      // Boss Rage Phase at 50% HP (spawns 2 Shadow Skeletons & intensifies Ignis!)
+      // Boss Rage Phase at 50% HP (spawns 2 Shadow Skeletons & intensifies Ignis / Vaelkor!)
       if (
         enemy.kind === "boss" &&
         enemy.hp <= Math.ceil(enemy.maxHp / 2) &&
-        !flags.bossPhase2
+        ((zone === "dungeon" && !flags.bossPhase2) ||
+          (zone === "citadel" && !flags.citadelBossPhase2))
       ) {
-        flags.bossPhase2 = true;
+        if (zone === "citadel") {
+          flags.citadelBossPhase2 = true;
+        } else {
+          flags.bossPhase2 = true;
+        }
+        const bossName = zone === "citadel" ? "Vaelkor" : "Ignis";
         soundEngine.playBossRoar();
         pushBanner(
-          "Ignis Enters His Molten Rage Phase!",
+          `${bossName} Enters His Molten Rage Phase!`,
           "Two Shadow Guards rise in the corners — keep burning his shell [R], stunning his Eye [E], and slashing [Space]!",
           4.2
         );
         const wave2Coords = [
-          { id: "dg-minion-wave2-1", x: -8.5, z: 28.5 },
-          { id: "dg-minion-wave2-2", x: 8.5, z: 28.5 },
+          { id: `${zone}-minion-wave2-1`, x: -8.5, z: 28.5 },
+          { id: `${zone}-minion-wave2-2`, x: 8.5, z: 28.5 },
         ];
         wave2Coords.forEach((wc) => {
           enemies.push({
             id: wc.id,
             kind: "minion",
-            zone: "dungeon",
+            zone,
             x: wc.x,
             z: wc.z,
             spawnX: wc.x,
@@ -7049,13 +7637,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const toHeroX = hero.x - enemy.x;
       const toHeroZ = hero.z - enemy.z;
       const distToHero = Math.hypot(toHeroX, toHeroZ);
-      const isSanctumEnemy = enemy.zone === "dungeon" && enemy.spawnZ > 13;
+      const isSanctumEnemy =
+        (enemy.zone === "dungeon" || enemy.zone === "citadel") && enemy.spawnZ > 13;
       const enemyWeight = enemy.weight ?? getDefaultEnemyWeight(enemy.kind);
 
       // =====================================================
-      // DEDICATED BOSS AI STATE MACHINE ("IGNIS, THE ARMORED EYE-GOLEM")
+      // DEDICATED BOSS AI STATE MACHINE ("IGNIS" & "VAELKOR")
       // =====================================================
       if (enemy.kind === "boss") {
+        const bossName = zone === "citadel" ? "Vaelkor" : "Ignis";
+        const isCurrentBossAwakened =
+          zone === "citadel" ? Boolean(flags.citadelBossAwakened) : Boolean(flags.bossAwakened);
+        const isCurrentBossPhase2 =
+          zone === "citadel" ? Boolean(flags.citadelBossPhase2) : Boolean(flags.bossPhase2);
+
         // Tick Phase 2 Exposed Eye countdown -> regenerates carapace if not stunned in time!
         if (flags.bossState === "EXPOSED_EYE" && enemy.state !== "stunned") {
           flags.bossArmorTimer = Math.max(0, (flags.bossArmorTimer ?? 0) - dt);
@@ -7063,15 +7658,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
             flags.bossState = "ARMORED";
             soundEngine.playArmorDeflect();
             pushBanner(
-              "Ignis's Ice/Bramble Carapace Regenerated!",
-              "Phase 1: Shoot Ignis with your Flame Rod [R / 3] to burn off his shell again!",
+              `${bossName}'s Outer Carapace Regenerated!`,
+              `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] to burn off his shell again!`,
               3.4
             );
           }
         }
 
         if (enemy.state === "idle") {
-          if (flags.bossAwakened || enemy.provoked) {
+          if (isCurrentBossAwakened || enemy.provoked) {
             enemy.state = "aggro";
             enemy.actionCooldown = 1.0;
           }
@@ -7156,7 +7751,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             const targetZ = Math.max(15.0, Math.min(33.5, hero.z));
             projectiles.push({
               id: `proj-${stats.elapsedSeconds.toFixed(3)}-1`,
-              zone: "dungeon",
+              zone,
               startX: enemy.x,
               startZ: enemy.z,
               targetX,
@@ -7167,7 +7762,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               directHitRadius: 1.45,
             });
 
-            if (flags.bossPhase2) {
+            if (isCurrentBossPhase2) {
               const offsetAngle = enemy.facing + 0.45;
               const tX2 = Math.max(
                 -14.5,
@@ -7179,7 +7774,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               );
               projectiles.push({
                 id: `proj-${stats.elapsedSeconds.toFixed(3)}-2`,
-                zone: "dungeon",
+                zone,
                 startX: enemy.x,
                 startZ: enemy.z,
                 targetX: tX2,
@@ -7296,7 +7891,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               enemy.state = "stunned";
               enemy.stateTimer = 3.8;
               pushBanner(
-                "Ignis Crashed into the Wall! (Phase 3: Melee Punish!)",
+                `${bossName} Crashed into the Wall! (Phase 3: Melee Punish!)`,
                 "He is dazed on the floor — rush in and slash with your Sword [Space / LMB]!",
                 3.6
               );
@@ -7304,7 +7899,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               enemy.state = "recover";
               enemy.stateTimer = 0.85;
               pushBanner(
-                "Ignis Slammed into the Wall! (Carapace Still Intact)",
+                `${bossName} Slammed into the Wall! (Carapace Still Intact)`,
                 "Phase 1: Burn his shell with the Flame Rod [R / 3], then shoot his Open Eye with Bow [E]!",
                 3.5
               );
@@ -7328,8 +7923,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             flags.bossArmorTimer = 0;
             soundEngine.playArmorDeflect();
             pushBanner(
-              "Ignis Recovered & Regenerated His Carapace!",
-              "Phase 1: Shoot Ignis with your Flame Rod [R / 3] to burn off his shell again!",
+              `${bossName} Recovered & Regenerated His Carapace!`,
+              `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] to burn off his shell again!`,
               3.5
             );
           }
@@ -7476,7 +8071,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         let moveVz = 0;
 
         if (enemy.state === "idle") {
-          const canAggro = !isSanctumEnemy || flags.bossAwakened;
+          const canAggro = !isBossRoomSealed(enemy);
           if (enemy.provoked || (canAggro && distToHero <= enemy.aggroRadius)) {
             enemy.state = "aggro";
             enemy.actionCooldown = 0.25;
@@ -7587,7 +8182,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           enemy.facing = Math.atan2(moveVx, moveVz);
         }
 
-        const canAggro = !isSanctumEnemy || flags.bossAwakened;
+        const canAggro = !isBossRoomSealed(enemy);
         if (enemy.provoked || (canAggro && distToHero <= enemy.aggroRadius)) {
           enemy.state = "aggro";
           enemy.actionCooldown = 0.25;
@@ -7936,9 +8531,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return true;
     });
 
-    // 11. Check if Boss Ignis and all Sanctum Minions (spawnZ > 13) are defeated -> Drops +1 Full Heart Container & Opens North Sanctuary Door!
-    if (!flags.bossDefeated) {
-      const bossEnemy = enemies.find((e) => e.kind === "boss");
+    // 11. Check if Boss Ignis (Map 2) or Boss Vaelkor (Map 5) and all Sanctum Minions (spawnZ > 13) are defeated!
+    if (zone === "dungeon" && !flags.bossDefeated) {
+      const bossEnemy = enemies.find((e) => e.zone === "dungeon" && e.kind === "boss");
       const aliveSanctumMinions = enemies.filter(
         (e) => e.zone === "dungeon" && e.kind === "minion" && e.spawnZ > 13 && e.state !== "dead"
       );
@@ -7952,12 +8547,37 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.hp = hero.maxHp;
           hero.damageFractionAcc = 0;
         }
+        dynamicObstacles = getActiveObstacles(mapProps);
         soundEngine.playVictoryFanfare();
         soundEngine.playGateUnlock();
         pushBanner(
           "Ignis, the Armored Eye-Golem Vanquished! (+1 Full Heart Container!)",
-          "Max HP permanently increased! Claim the Sanctum Relic Chest or step through the North Sanctuary Door to Map 1 Crossroads and burn the East Exit to Map 3!",
+          "Max HP permanently increased! Claim the Sanctum Relic Chest and step through the North Sanctuary Door into Map 3: Elderwood Highlands!",
           7.0
+        );
+      }
+    }
+
+    if (zone === "citadel" && !flags.citadelBossDefeated) {
+      const citadelBossEnemy = enemies.find((e) => e.zone === "citadel" && e.kind === "boss");
+      const aliveCitadelMinions = enemies.filter(
+        (e) => e.zone === "citadel" && e.kind === "minion" && e.spawnZ > 13 && e.state !== "dead"
+      );
+      if (
+        citadelBossEnemy &&
+        citadelBossEnemy.state === "dead" &&
+        aliveCitadelMinions.length === 0
+      ) {
+        flags.citadelBossDefeated = true;
+        flags.bossState = "DEAD";
+        flags.bossArmorTimer = 0;
+        dynamicObstacles = getActiveObstacles(mapProps);
+        soundEngine.playVictoryFanfare();
+        soundEngine.playGateUnlock();
+        pushBanner(
+          "Vaelkor, the Obsidian Sovereign Vanquished! (Citadel Conquered!)",
+          "Open the Sovereign's Relic Chest (Crimson Dragon Mail + Heart + 200 Rupees) and step through the North Golden Return Portal!",
+          7.5
         );
       }
     }

@@ -385,20 +385,65 @@ export default function GameOverlay() {
   );
 
   let currentObjective =
-    "Hub Goal: Take the West Exit to Forest Grove (Map 1B) to earn the Sanctum Entry Key (or earn 100 Rupees for the Shop Upgrade)!";
-  if (zone === "frontier") {
-    currentObjective =
-      "Map 3 (The Burned Pass): Melt Ice Armor & Burn Wooden Shields with Flame Rod (R), or dig Dirt Patches (G)!";
+    "Act I (Crossroads Hub): Take the West Path to Forest Grove (Map 1B) to earn the Sanctum Entry Key!";
+  if (zone === "citadel") {
+    if (flags.citadelVictoryChestOpened || flags.citadelBossDefeated) {
+      currentObjective = !flags.citadelVictoryChestOpened
+        ? "Act V (Obsidian Citadel): Open the Sovereign's Victory Chest (-6.5, 32) for +1 Heart Container, Crimson Mail & +200 Rupees!"
+        : "Campaign Complete! Step into the North Golden Return Portal (0, 34.8) to return to the Crossroads Hub with all your relics!";
+    } else if (flags.citadelBossAwakened) {
+      currentObjective =
+        flags.bossState === "ARMORED"
+          ? "Boss Vaelkor (Phase 1): Burn Vaelkor's Obsidian-Flame Carapace with Flame Rod (R)!"
+          : flags.bossState === "EXPOSED_EYE"
+          ? "Boss Vaelkor (Phase 2): Vaelkor's Eye is OPEN! Shoot it with Bow (E) or Boomerang (Q)!"
+          : "Boss Vaelkor (Phase 3): VAELKOR IS STUNNED! Slash with Sword (Space / LMB) for 3x Damage!";
+    } else if (!flags.citadelArmoryChestOpened) {
+      currentObjective =
+        "Act V (Obsidian Citadel): Burn West Spiderwebs (R) & Bomb Cracked Wall (B) to claim Tempered Blade + Mirror Shield in West Armory!";
+    } else if (!flags.citadelGateUnlocked) {
+      currentObjective =
+        "Act V (Obsidian Citadel): Light all 4 Center Braziers in 8s with Flame Rod (R) OR shoot both Eye Statues with Bow (E) to unseal the Throne!";
+    } else {
+      currentObjective =
+        "Act V (Obsidian Citadel): Step North into the Sovereign's Throne to confront Vaelkor!";
+    }
+  } else if (zone === "caverns") {
+    if (!flags.cavernShovelChestOpened) {
+      currentObjective =
+        "Act IV (Frostpeak Caverns): Blast the NW Cracked Wall (-22, 11.5) with a Bomb (B) to unlock the Shovel (G) & Sapphire Mail!";
+    } else if (!flags.cavernCrestKeyPickedUp) {
+      currentObjective =
+        "Act IV (Frostpeak Caverns): Throw Boomerang (Q) at the East Crystal Orb (15.5, 4.5), melt the 3 Frost Wardens (R) & claim the Glacial Crest Key!";
+    } else {
+      currentObjective =
+        "Glacial Crest Key Acquired! Take the NE Shortcut Portal (24, 29.5) or West Exit back to Map 3 to unlock the North Citadel Gate!";
+    }
+  } else if (zone === "frontier") {
+    if (!flags.frontierBombChestOpened) {
+      currentObjective = !flags.frontierSappersCleared
+        ? "Act III (Elderwood Highlands): Burn the SE Outpost Briars (17.5, -18.5) with Flame Rod (R) & defeat all 3 Raiders to unlock the Bomb Bag!"
+        : "Act III (Elderwood Highlands): Open the SE Sapper Outpost Chest (24.5, -18.5) to claim the Canvas Bomb Bag (B) + 50 Rupees!";
+    } else if (!flags.cavernCrestKeyPickedUp && !flags.frontierCitadelGateUnlocked) {
+      currentObjective =
+        "Act III (Elderwood Highlands): Blast the Cracked Boulder at the East Quarry Pass (31.2, -2.5) with a Bomb (B) to enter Map 4: Frostpeak Caverns!";
+    } else if (!flags.frontierCitadelGateUnlocked) {
+      currentObjective =
+        "Act III (Elderwood Highlands): Approach the North Glacial Gate (0, 31.8) to unlock Map 5: The Obsidian Citadel!";
+    } else {
+      currentObjective =
+        "North Citadel Gate Open! Step North into Map 5: The Obsidian Citadel (or travel East to Caverns / West to Crossroads)!";
+    }
   } else if (zone === "grove") {
     currentObjective = !flags.grovePuzzleSolved
-      ? "Map 1B (Forest Grove): Hit the Crystal Orb Switch across the stream with Boomerang (Q) OR defeat all 3 Ambush Monsters!"
+      ? "Act I (Forest Grove): Hit the Crystal Orb Switch across the stream with Boomerang (Q) OR defeat all 3 Ambush Monsters!"
       : !flags.keyPickedUp
       ? "Claim the Sanctum Entry Key from the North Shrine Pedestal (or snag it with Boomerang Q)!"
       : "Return East to the Crossroads Hub and unlock the North Dungeon Gate!";
   } else if (flags.chestUnlocked || flags.bossDefeated) {
     currentObjective = !flags.eastExitBurned
-      ? "Boss Ignis Defeated (+1 Heart)! Take the North Sanctuary Portal or return to Map 1 and burn the East Vines with Flame Rod (R)!"
-      : "Step through the East Exit of Map 1 into Map 3: The Burned Pass!";
+      ? "Act II Complete (+1 Heart)! Take the North Sanctum Portal to Map 3 OR burn the East Vines in Map 1 with Flame Rod (R)!"
+      : "Explore Map 3 (East), Map 4: Frostpeak Caverns, and Map 5: The Obsidian Citadel!";
   } else if (zone === "dungeon" && dungeonRoom === "sanctum") {
     currentObjective =
       flags.bossState === "ARMORED"
@@ -455,7 +500,11 @@ export default function GameOverlay() {
       : zone === "grove"
       ? "Map 1B: Whispering Forest Grove (West)"
       : zone === "frontier"
-      ? "Map 3: The Burned Pass (East Frontier)"
+      ? "Map 3: Elderwood Highlands & Quarry (Hub)"
+      : zone === "caverns"
+      ? "Map 4: Frostpeak Caverns & Glacial Reliquary"
+      : zone === "citadel"
+      ? "Map 5: The Obsidian Citadel & Sovereign's Throne"
       : dungeonRoom === "hub"
       ? "Map 2: Sunken Sanctum — Room 1: Central Lantern Hub"
       : dungeonRoom === "west_wing"
@@ -822,21 +871,28 @@ export default function GameOverlay() {
 
           {!editorMode &&
             phase === "playing" &&
-            zone === "dungeon" &&
-            flags.bossAwakened &&
-            !flags.bossDefeated &&
+            ((zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated) ||
+              (zone === "citadel" &&
+                flags.citadelBossAwakened &&
+                !flags.citadelBossDefeated)) &&
             bossEnemy && (
               <div className="hud-panel boss-bar-panel">
                 <div className="boss-bar-header">
-                  <span className="boss-name">IGNIS, THE ARMORED EYE-GOLEM</span>
+                  <span className="boss-name">
+                    {zone === "citadel"
+                      ? "VAELKOR, THE OBSIDIAN SOVEREIGN"
+                      : "IGNIS, THE ARMORED EYE-GOLEM"}
+                  </span>
                   <span className="minion-tag">
                     {flags.bossState === "STUNNED" || bossEnemy.state === "stunned"
                       ? "PHASE 3: STUNNED ON FLOOR — SLASH WITH SWORD (SPACE / LMB) FOR 3X DMG!"
                       : flags.bossState === "EXPOSED_EYE"
                       ? `PHASE 2: EYE OPEN (${(flags.bossArmorTimer ?? 0).toFixed(1)}s) — SHOOT WITH BOW (E) OR BOOMERANG (Q)!`
                       : activeMinions > 0
-                      ? `PHASE 1: ICE/BRAMBLE SHELL — BURN WITH FLAME ROD (R)! • +${activeMinions} Minion${activeMinions > 1 ? "s" : ""}`
-                      : "PHASE 1: ICE/BRAMBLE SHELL — BURN WITH FLAME ROD (R)!"}
+                      ? `PHASE 1: ELEMENTAL SHELL — BURN WITH FLAME ROD (R)! • +${activeMinions} Minion${
+                          activeMinions > 1 ? "s" : ""
+                        }`
+                      : "PHASE 1: ELEMENTAL SHELL — BURN WITH FLAME ROD (R)!"}
                   </span>
                 </div>
                 <div className="boss-hp-track">
@@ -871,13 +927,19 @@ export default function GameOverlay() {
 
             <div
               className={`counter-chip ${
-                flags.hasBigKey || flags.hasSmallKey || hero.hasDungeonKey
+                flags.hasGlacialKey ||
+                flags.hasBigKey ||
+                flags.hasSmallKey ||
+                hero.hasDungeonKey
                   ? "key-chip-active"
-                  : flags.gateUnlocked || flags.eastWingDoorUnlocked || flags.dungeonEntryUnlocked
+                  : flags.frontierCitadelGateUnlocked ||
+                    flags.gateUnlocked ||
+                    flags.eastWingDoorUnlocked ||
+                    flags.dungeonEntryUnlocked
                   ? "key-chip-used"
                   : "key-chip-empty"
               }`}
-              title="Dungeon & Sanctum Key Status (Small Key unlocks Room 3; Big Boss Key unlocks Room 5)"
+              title="Progression Key Status"
             >
               <svg width="22" height="22" viewBox="0 0 24 24">
                 <circle
@@ -886,6 +948,7 @@ export default function GameOverlay() {
                   r="5"
                   fill="none"
                   stroke={
+                    flags.hasGlacialKey ||
                     flags.hasBigKey ||
                     flags.hasSmallKey ||
                     hero.hasDungeonKey ||
@@ -898,6 +961,7 @@ export default function GameOverlay() {
                 <path
                   d="M13 12H22M18 12V16M21 12V15"
                   stroke={
+                    flags.hasGlacialKey ||
                     flags.hasBigKey ||
                     flags.hasSmallKey ||
                     hero.hasDungeonKey ||
@@ -910,12 +974,16 @@ export default function GameOverlay() {
                 />
               </svg>
               <span className="key-status-text">
-                {flags.hasBigKey
+                {flags.hasGlacialKey && !flags.frontierCitadelGateUnlocked
+                  ? "Glacial Key"
+                  : flags.hasBigKey
                   ? "Big Boss Key"
                   : flags.hasSmallKey
                   ? "Small Key (1)"
                   : hero.hasDungeonKey && !flags.dungeonEntryUnlocked
                   ? "Entry Key"
+                  : flags.frontierCitadelGateUnlocked
+                  ? "Citadel Open"
                   : flags.gateUnlocked
                   ? "Boss Gate Open"
                   : flags.eastWingDoorUnlocked
@@ -973,13 +1041,13 @@ export default function GameOverlay() {
           <aside className="editor-dock editor-left-dock">
             <div className="editor-dock-header">
               <span className="editor-badge">UNITY-STYLE SCENE EDITOR</span>
-              <div className="editor-zone-switch">
+              <div className="editor-zone-switch" style={{ flexWrap: "wrap" }}>
                 <button
                   type="button"
                   onClick={() => setEditorZone("overworld", true)}
                   className={`zone-switch-btn ${zone === "overworld" ? "active" : ""}`}
                 >
-                  Hub (Map 1)
+                  Hub (1)
                 </button>
                 <button
                   type="button"
@@ -993,14 +1061,28 @@ export default function GameOverlay() {
                   onClick={() => setEditorZone("dungeon", true)}
                   className={`zone-switch-btn ${zone === "dungeon" ? "active" : ""}`}
                 >
-                  Dungeon (2)
+                  Sanctum (2)
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditorZone("frontier", true)}
                   className={`zone-switch-btn ${zone === "frontier" ? "active" : ""}`}
                 >
-                  Pass (3)
+                  Highlands (3)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorZone("caverns", true)}
+                  className={`zone-switch-btn ${zone === "caverns" ? "active" : ""}`}
+                >
+                  Caverns (4)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorZone("citadel", true)}
+                  className={`zone-switch-btn ${zone === "citadel" ? "active" : ""}`}
+                >
+                  Citadel (5)
                 </button>
               </div>
             </div>
@@ -2140,7 +2222,9 @@ export default function GameOverlay() {
                     <option value="overworld">Map 1: Crossroads Village Hub</option>
                     <option value="grove">Map 1B: Whispering Forest Grove (West Exit)</option>
                     <option value="dungeon">Map 2: Sunken Sanctum (First Dungeon)</option>
-                    <option value="frontier">Map 3: The Burned Pass (East Frontier)</option>
+                    <option value="frontier">Map 3: Elderwood Highlands &amp; Quarry</option>
+                    <option value="caverns">Map 4: Frostpeak Caverns &amp; Reliquary</option>
+                    <option value="citadel">Map 5: The Obsidian Citadel</option>
                   </select>
                 </label>
 
