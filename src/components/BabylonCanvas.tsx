@@ -4081,9 +4081,12 @@ export default function BabylonCanvas() {
     const buildArrowRig = (
       id: string,
       fromHero: boolean,
-      isRock = false
+      isRock = false,
+      isFrost = false,
+      isReflected = false
     ): TransformNode => {
       const node = new TransformNode(`arrow-${id}`, scene);
+      node.metadata = { fromHero, isReflected };
       if (isRock) {
         const rockMesh = MeshBuilder.CreatePolyhedron(
           `rockProj-${id}`,
@@ -4104,13 +4107,34 @@ export default function BabylonCanvas() {
         return node;
       }
 
+      if (isFrost) {
+        const shard = MeshBuilder.CreatePolyhedron(
+          `frostBoltShard-${id}`,
+          { type: 1, size: 0.36 },
+          scene
+        );
+        shard.scaling.set(0.85, 0.85, 2.15);
+        shard.material = isReflected ? goldKeyMat : slashMat;
+        shard.parent = node;
+
+        const frostHalo = MeshBuilder.CreateTorus(
+          `frostBoltHalo-${id}`,
+          { diameter: 0.82, thickness: 0.075, tessellation: 16 },
+          scene
+        );
+        frostHalo.rotation.x = Math.PI / 2;
+        frostHalo.material = isReflected ? slashMat : iceArmorMat;
+        frostHalo.parent = node;
+        return node;
+      }
+
       const shaft = MeshBuilder.CreateCylinder(
         `arrowShaft-${id}`,
         { diameter: 0.08, height: 1.35, tessellation: 8 },
         scene
       );
       shaft.rotation.x = Math.PI / 2;
-      shaft.material = woodMat;
+      shaft.material = isReflected ? goldKeyMat : woodMat;
       shaft.parent = node;
 
       const tip = MeshBuilder.CreateCylinder(
@@ -4120,7 +4144,7 @@ export default function BabylonCanvas() {
       );
       tip.rotation.x = Math.PI / 2;
       tip.position.set(0, 0, 0.72);
-      tip.material = fromHero ? slashMat : glowingCrimsonMat;
+      tip.material = isReflected ? goldKeyMat : fromHero ? slashMat : glowingCrimsonMat;
       tip.parent = node;
 
       const fletchH = MeshBuilder.CreateBox(
@@ -4129,7 +4153,7 @@ export default function BabylonCanvas() {
         scene
       );
       fletchH.position.set(0, 0, -0.52);
-      fletchH.material = fromHero ? slashMat : glowingCrimsonMat;
+      fletchH.material = isReflected ? goldKeyMat : fromHero ? slashMat : glowingCrimsonMat;
       fletchH.parent = node;
 
       const fletchV = MeshBuilder.CreateBox(
@@ -4138,7 +4162,7 @@ export default function BabylonCanvas() {
         scene
       );
       fletchV.position.set(0, 0, -0.52);
-      fletchV.material = fromHero ? slashMat : glowingCrimsonMat;
+      fletchV.material = isReflected ? goldKeyMat : fromHero ? slashMat : glowingCrimsonMat;
       fletchV.parent = node;
 
       return node;
@@ -4983,6 +5007,295 @@ export default function BabylonCanvas() {
           eyeParts.push(eye);
         }
         mergeGroupWithMaterial(`minionEyes-${id}`, eyeParts, glowingYellowEyeMat, body);
+      } else if (kind === "wraith") {
+        // =====================================================
+        // FROST WRAITH / GLACIAL SPECTER ("wraith")
+        // Floating crystalline ice specter with jagged frost crown, orbiting
+        // glacial shards, and a frost scepter that fires chilling bolts!
+        // =====================================================
+        const wraithIceMat = registerMat(
+          `wraithIceMat-${id}`,
+          new Color3(0.24, 0.78, 0.98),
+          new Color3(0.08, 0.34, 0.56),
+          new Color3(0.95, 0.98, 1.0),
+          0.92,
+          84
+        );
+        const wraithCoreMat = registerMat(
+          `wraithCoreMat-${id}`,
+          new Color3(0.72, 0.95, 1.0),
+          new Color3(0.32, 0.72, 0.96)
+        );
+        const iceParts: Mesh[] = [];
+        const crystalParts: Mesh[] = [];
+
+        const shroud = MeshBuilder.CreateCylinder(
+          `wraithShroud-${id}`,
+          { diameterTop: 0.48, diameterBottom: 1.32, height: 1.42, tessellation: 10 },
+          scene
+        );
+        shroud.position.set(0, 0.88, 0);
+        iceParts.push(shroud);
+
+        const mantle = MeshBuilder.CreateSphere(
+          `wraithMantle-${id}`,
+          { diameterX: 1.24, diameterY: 0.52, diameterZ: 0.86, segments: 12 },
+          scene
+        );
+        mantle.position.set(0, 1.38, 0);
+        iceParts.push(mantle);
+
+        const head = MeshBuilder.CreatePolyhedron(
+          `wraithHead-${id}`,
+          { type: 1, size: 0.42 },
+          scene
+        );
+        head.scaling.set(0.95, 1.22, 0.95);
+        head.position.set(0, 1.78, 0.04);
+        iceParts.push(head);
+
+        for (let c = 0; c < 5; c++) {
+          const ang = (c / 5) * Math.PI * 2;
+          const crownShard = MeshBuilder.CreateCylinder(
+            `wraithCrown-${id}-${c}`,
+            { diameterTop: 0.02, diameterBottom: 0.18, height: 0.46, tessellation: 6 },
+            scene
+          );
+          crownShard.position.set(Math.sin(ang) * 0.34, 2.15, 0.04 + Math.cos(ang) * 0.34);
+          crownShard.rotation.z = -Math.sin(ang) * 0.32;
+          crownShard.rotation.x = Math.cos(ang) * 0.32;
+          crystalParts.push(crownShard);
+        }
+
+        for (let s = 0; s < 4; s++) {
+          const a = (s / 4) * Math.PI * 2 + 0.4;
+          const shard = MeshBuilder.CreatePolyhedron(
+            `wraithOrbit-${id}-${s}`,
+            { type: 1, size: 0.24 },
+            scene
+          );
+          shard.scaling.set(0.75, 1.55, 0.75);
+          shard.position.set(Math.cos(a) * 0.92, 1.15, Math.sin(a) * 0.92);
+          crystalParts.push(shard);
+        }
+
+        mergeGroupWithMaterial(`wraithIceMerged-${id}`, iceParts, wraithIceMat, body);
+        mergeGroupWithMaterial(`wraithCrystMerged-${id}`, crystalParts, wraithCoreMat, body);
+
+        const eyeParts: Mesh[] = [];
+        for (const ex of [-0.15, 0.15]) {
+          const eye = MeshBuilder.CreateSphere(`wraithEye-${id}-${ex}`, { diameter: 0.14, segments: 8 }, scene);
+          eye.position.set(ex, 1.78, 0.38);
+          eyeParts.push(eye);
+        }
+        mergeGroupWithMaterial(`wraithEyes-${id}`, eyeParts, whiteEyeMat, body);
+
+        const scepterShaft = MeshBuilder.CreateCylinder(
+          `wraithStaff-${id}`,
+          { diameter: 0.1, height: 1.45, tessellation: 8 },
+          scene
+        );
+        scepterShaft.rotation.x = Math.PI / 2;
+        scepterShaft.position.set(0.58, 1.15, 0.55);
+        scepterShaft.material = wraithCoreMat;
+        scepterShaft.parent = weapon;
+
+        const scepterGem = MeshBuilder.CreatePolyhedron(
+          `wraithStaffGem-${id}`,
+          { type: 1, size: 0.24 },
+          scene
+        );
+        scepterGem.position.set(0.58, 1.15, 1.32);
+        scepterGem.material = slashMat;
+        scepterGem.parent = weapon;
+      } else if (kind === "bomber") {
+        // =====================================================
+        // SAPPER GREMLIN / BOMB-LOBBER ("bomber")
+        // Mischievous copper-skinned gremlin with blasting goggles, a strapped
+        // canvas bomb-pack on its back, and a ticking bomb held ready to lob!
+        // =====================================================
+        const sapperSkinMat = registerMat(
+          `sapperSkinMat-${id}`,
+          new Color3(0.84, 0.44, 0.18),
+          new Color3(0.12, 0.05, 0.02)
+        );
+        const sapperPackMat = registerMat(
+          `sapperPackMat-${id}`,
+          new Color3(0.36, 0.26, 0.18),
+          new Color3(0.05, 0.03, 0.02)
+        );
+        const skinParts: Mesh[] = [];
+        const packParts: Mesh[] = [];
+        const metalParts: Mesh[] = [];
+
+        const torso = MeshBuilder.CreateCylinder(
+          `sapperTorso-${id}`,
+          { diameterTop: 0.76, diameterBottom: 0.94, height: 0.92, tessellation: 12 },
+          scene
+        );
+        torso.position.set(0, 0.78, 0);
+        skinParts.push(torso);
+
+        const head = MeshBuilder.CreateSphere(
+          `sapperHead-${id}`,
+          { diameter: 0.84, segments: 14 },
+          scene
+        );
+        head.scaling.set(1.08, 0.92, 1.0);
+        head.position.set(0, 1.48, 0.06);
+        skinParts.push(head);
+
+        for (const ex of [-1, 1]) {
+          const ear = MeshBuilder.CreateCylinder(
+            `sapperEar-${id}-${ex}`,
+            { diameterTop: 0.04, diameterBottom: 0.28, height: 0.65, tessellation: 8 },
+            scene
+          );
+          ear.position.set(ex * 0.58, 1.52, 0);
+          ear.rotation.z = -ex * 1.18;
+          skinParts.push(ear);
+        }
+
+        const backpack = MeshBuilder.CreateBox(
+          `sapperPack-${id}`,
+          { width: 0.82, height: 0.86, depth: 0.56 },
+          scene
+        );
+        backpack.position.set(0, 0.96, -0.46);
+        packParts.push(backpack);
+
+        for (const lx of [-0.24, 0.24]) {
+          const boot = MeshBuilder.CreateCylinder(
+            `sapperBoot-${id}-${lx}`,
+            { diameterTop: 0.26, diameterBottom: 0.34, height: 0.4, tessellation: 10 },
+            scene
+          );
+          boot.position.set(lx, 0.2, 0);
+          packParts.push(boot);
+
+          const goggleRim = MeshBuilder.CreateCylinder(
+            `sapperGoggle-${id}-${lx}`,
+            { diameter: 0.32, height: 0.18, tessellation: 12 },
+            scene
+          );
+          goggleRim.rotation.x = Math.PI / 2;
+          goggleRim.position.set(lx * 0.85, 1.56, 0.42);
+          metalParts.push(goggleRim);
+        }
+
+        mergeGroupWithMaterial(`sapperSkinMerged-${id}`, skinParts, sapperSkinMat, body);
+        mergeGroupWithMaterial(`sapperPackMerged-${id}`, packParts, sapperPackMat, body);
+        mergeGroupWithMaterial(`sapperMetalMerged-${id}`, metalParts, goldKeyMat, body);
+
+        // Held Bomb in throwing arm (`weapon`)
+        const heldBomb = MeshBuilder.CreateSphere(
+          `sapperHeldBomb-${id}`,
+          { diameter: 0.68, segments: 12 },
+          scene
+        );
+        heldBomb.position.set(0.52, 1.15, 0.52);
+        heldBomb.material = darkObsidianMat;
+        heldBomb.parent = weapon;
+
+        const heldSpark = MeshBuilder.CreatePolyhedron(
+          `sapperSpark-${id}`,
+          { type: 1, size: 0.14 },
+          scene
+        );
+        heldSpark.position.set(0.52, 1.55, 0.52);
+        heldSpark.material = goldKeyMat;
+        heldSpark.parent = weapon;
+      } else if (kind === "burrower") {
+        // =====================================================
+        // SUBTERRANEAN TUNNEL WYRM ("burrower")
+        // Segmented armored sand/stone wyrm with a surface dirt collar (attached
+        // to `root` so the rumbling dirt mound stays visible while `body` burrows!)
+        // =====================================================
+        const wyrmShellMat = registerMat(
+          `wyrmShellMat-${id}`,
+          new Color3(0.72, 0.52, 0.26),
+          new Color3(0.1, 0.06, 0.02)
+        );
+        const wyrmBellyMat = registerMat(
+          `wyrmBellyMat-${id}`,
+          new Color3(0.46, 0.32, 0.16),
+          new Color3(0.05, 0.03, 0.01)
+        );
+
+        // Surface dirt collar parented directly to `root` so it stays on the ground when `body` submerges!
+        const collarParts: Mesh[] = [];
+        const dirtRing = MeshBuilder.CreateTorus(
+          `wyrmDirtCollar-${id}`,
+          { diameter: 1.65, thickness: 0.36, tessellation: 16 },
+          scene
+        );
+        dirtRing.scaling.set(1.0, 0.55, 1.0);
+        dirtRing.position.set(0, 0.1, 0);
+        collarParts.push(dirtRing);
+        mergeGroupWithMaterial(`wyrmCollarMerged-${id}`, collarParts, dirtSoilMat, root);
+
+        const shellParts: Mesh[] = [];
+        const bellyParts: Mesh[] = [];
+        const mandibleParts: Mesh[] = [];
+
+        const lowerSeg = MeshBuilder.CreateCylinder(
+          `wyrmSeg1-${id}`,
+          { diameterTop: 1.12, diameterBottom: 1.32, height: 0.68, tessellation: 14 },
+          scene
+        );
+        lowerSeg.position.set(0, 0.42, 0);
+        shellParts.push(lowerSeg);
+
+        const midSeg = MeshBuilder.CreateCylinder(
+          `wyrmSeg2-${id}`,
+          { diameterTop: 0.96, diameterBottom: 1.16, height: 0.68, tessellation: 14 },
+          scene
+        );
+        midSeg.position.set(0, 0.98, 0.06);
+        midSeg.rotation.x = 0.14;
+        bellyParts.push(midSeg);
+
+        const headDome = MeshBuilder.CreateSphere(
+          `wyrmHead-${id}`,
+          { diameter: 1.08, segments: 14 },
+          scene
+        );
+        headDome.scaling.set(1.02, 1.12, 1.08);
+        headDome.position.set(0, 1.48, 0.14);
+        shellParts.push(headDome);
+
+        // Dorsal crest fin on top of the head (peeks out slightly even when burrowed!)
+        const dorsalCrest = MeshBuilder.CreateCylinder(
+          `wyrmCrest-${id}`,
+          { diameterTop: 0.04, diameterBottom: 0.36, height: 0.52, tessellation: 8 },
+          scene
+        );
+        dorsalCrest.position.set(0, 2.02, 0.08);
+        mandibleParts.push(dorsalCrest);
+
+        for (const mx of [-0.36, 0.36]) {
+          const mandible = MeshBuilder.CreateCylinder(
+            `wyrmMandible-${id}-${mx}`,
+            { diameterTop: 0.03, diameterBottom: 0.22, height: 0.58, tessellation: 8 },
+            scene
+          );
+          mandible.rotation.x = Math.PI / 2;
+          mandible.rotation.y = mx > 0 ? -0.28 : 0.28;
+          mandible.position.set(mx, 1.36, 0.68);
+          mandibleParts.push(mandible);
+        }
+
+        mergeGroupWithMaterial(`wyrmShellMerged-${id}`, shellParts, wyrmShellMat, body);
+        mergeGroupWithMaterial(`wyrmBellyMerged-${id}`, bellyParts, wyrmBellyMat, body);
+        mergeGroupWithMaterial(`wyrmMandiblesMerged-${id}`, mandibleParts, boneHornMat, body);
+
+        const eyeParts: Mesh[] = [];
+        for (const ex of [-0.24, 0.24]) {
+          const eye = MeshBuilder.CreateSphere(`wyrmEye-${id}-${ex}`, { diameter: 0.18, segments: 10 }, scene);
+          eye.position.set(ex, 1.62, 0.58);
+          eyeParts.push(eye);
+        }
+        mergeGroupWithMaterial(`wyrmEyesMerged-${id}`, eyeParts, glowingYellowEyeMat, body);
       } else if (kind === "turret") {
         // =====================================================
         // CARVED STONE SPITTER TURRET (SHIELD BRIDGE PUZZLE OBSTACLE)
@@ -5094,24 +5407,32 @@ export default function BabylonCanvas() {
         mergeGroupWithMaterial(`turretEyesMerged-${id}`, eyeParts, glowingYellowEyeMat, body);
       } else {
         // =====================================================
-        // MARIO RPG-INSPIRED HIGH-DEFINITION LOW-POLY BOSS MALAKOR
-        // Preserves Malakor's iconic horned Eclipse Warden silhouette while
-        // adding multi-tone enameled royal plate, polished silver trim,
-        // gilded imperial gold details, clawed sabatons, fluted greaves,
-        // segmented tassets, sculpted rib plackart, recessed eclipse core,
-        // gold-banded curved horns, orbiting halo shards & Dread Greataxe!
+        // HIGH-DEFINITION LOW-POLY BOSS RIG:
+        // - Map 2 (`dungeon`): IGNIS, THE ARMORED EYE-GOLEM (Crimson-Iron Plate)
+        // - Map 4 (`caverns`): CRYOS, THE GLACIAL COLOSSUS (Sapphire-Cyan Ice Plate)
+        // - Map 5 (`citadel`): VAELKOR, THE OBSIDIAN SOVEREIGN (Obsidian-Gold Royal Plate)
         // =====================================================
+        const isCryos = zone === "caverns";
+        const isVaelkor = zone === "citadel";
         const bossArmorMat = registerMat(
           `bossMat-${id}`,
-          new Color3(0.76, 0.11, 0.19),
-          new Color3(0.24, 0.03, 0.06),
-          new Color3(0.92, 0.72, 0.72),
+          isCryos
+            ? new Color3(0.16, 0.62, 0.96)
+            : isVaelkor
+            ? new Color3(0.28, 0.12, 0.44)
+            : new Color3(0.76, 0.11, 0.19),
+          isCryos
+            ? new Color3(0.06, 0.24, 0.45)
+            : isVaelkor
+            ? new Color3(0.12, 0.04, 0.22)
+            : new Color3(0.24, 0.03, 0.06),
+          new Color3(0.92, 0.85, 0.95),
           1.0,
           76
         );
         const bossSilverMat = registerMat(
           `bossSilverMat-${id}`,
-          new Color3(0.84, 0.88, 0.96),
+          isCryos ? new Color3(0.76, 0.94, 1.0) : new Color3(0.84, 0.88, 0.96),
           new Color3(0.08, 0.09, 0.14),
           new Color3(1.0, 1.0, 1.0),
           1.0,
@@ -5119,15 +5440,19 @@ export default function BabylonCanvas() {
         );
         const bossGoldMat = registerMat(
           `bossGoldMat-${id}`,
-          new Color3(1.0, 0.82, 0.22),
-          new Color3(0.32, 0.2, 0.03),
+          isCryos ? new Color3(0.38, 0.88, 1.0) : new Color3(1.0, 0.82, 0.22),
+          isCryos ? new Color3(0.12, 0.36, 0.52) : new Color3(0.32, 0.2, 0.03),
           new Color3(1.0, 0.95, 0.78),
           1.0,
           84
         );
         const bossCapeMat = registerMat(
           `bossCapeMat-${id}`,
-          new Color3(0.34, 0.07, 0.44),
+          isCryos
+            ? new Color3(0.08, 0.32, 0.64)
+            : isVaelkor
+            ? new Color3(0.68, 0.08, 0.18)
+            : new Color3(0.34, 0.07, 0.44),
           new Color3(0.11, 0.02, 0.16),
           new Color3(0.45, 0.28, 0.55),
           1.0,
@@ -7575,9 +7900,20 @@ export default function BabylonCanvas() {
             rig.body.scaling.set(squashXZ, stretchY, squashXZ);
           } else if (enemy.kind === "minion") {
             bob = Math.sin(t * 4.5 + eIdx) * 0.22;
+          } else if (enemy.kind === "wraith") {
+            bob = 0.28 + Math.sin(t * 4.2 + eIdx) * 0.22;
+          }
+          if (enemy.kind === "burrower") {
+            if (enemy.burrowed) {
+              rig.body.position.y = -1.28 + Math.sin(t * 14 + eIdx) * 0.06;
+              rig.hpBarHolder.setEnabled(false);
+            } else {
+              rig.body.position.y = 0;
+            }
           }
         } else {
           rig.body.scaling.setAll(1);
+          rig.body.position.y = 0;
         }
 
         const enemyGroundY = sampleTerrainHeight(activeCells, enemy.x, enemy.z);
@@ -7755,12 +8091,22 @@ export default function BabylonCanvas() {
         }
       });
 
-      // 7b. Sync 3D Arrows & Turret Rock Boulders (Hero, Goblin Archer & Stone Spitter Turret!)
+      // 7b. Sync 3D Arrows, Frost Bolts, Reflected Bolts & Turret Rock Boulders
       const activeArrowIds = new Set<string>();
       for (const arrow of snap.arrows) {
         let aRig = arrowRigs.get(arrow.id);
+        if (aRig && aRig.metadata?.isReflected !== Boolean(arrow.isReflected)) {
+          aRig.dispose();
+          aRig = undefined;
+        }
         if (!aRig) {
-          aRig = buildArrowRig(arrow.id, arrow.fromHero, Boolean(arrow.isRock));
+          aRig = buildArrowRig(
+            arrow.id,
+            arrow.fromHero,
+            Boolean(arrow.isRock),
+            Boolean(arrow.isFrost),
+            Boolean(arrow.isReflected)
+          );
           arrowRigs.set(arrow.id, aRig);
         }
 

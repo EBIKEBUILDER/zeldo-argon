@@ -210,6 +210,7 @@ export interface HeroState {
   swingId: number;
   invulnerableTimer: number;
   hurtFlashTimer: number;
+  chillTimer?: number;
   knockbackLockTimer: number;
   knockbackVx: number;
   knockbackVz: number;
@@ -246,6 +247,7 @@ export interface EnemyState {
   initialShockArmor?: boolean;
   isBounty?: boolean;
   initialIsBounty?: boolean;
+  burrowed?: boolean;
   questGroup?:
     | "heirloom"
     | "grove_ambush"
@@ -288,6 +290,8 @@ export interface ArrowProjectileState {
   damage: number;
   lifeTimer: number;
   isRock?: boolean;
+  isFrost?: boolean;
+  isReflected?: boolean;
   deflectedRock?: boolean;
   stuck?: boolean;
   stuckTimer?: number;
@@ -430,6 +434,10 @@ export interface GameFlags {
   cavernShovelChestOpened?: boolean;
   cavernCrestKeyPickedUp?: boolean;
   hasGlacialKey?: boolean;
+  cavernBossAwakened?: boolean;
+  cavernBossPhase2?: boolean;
+  cavernBossDefeated?: boolean;
+  cavernBossHeartAwarded?: boolean;
   citadelArmoryChestOpened?: boolean;
   citadelTimedTorchSolved?: boolean;
   citadelEyeStatuesSolved?: boolean;
@@ -772,6 +780,7 @@ function createInitialEnemies(): EnemyState[] {
     initialShockArmor: spawn.shockArmor ?? false,
     isBounty: spawn.isBounty ?? false,
     initialIsBounty: spawn.isBounty ?? false,
+    burrowed: spawn.kind === "burrower",
     questGroup: spawn.questGroup,
     chargeAngle: Math.PI,
     chargePathLength: BOSS_MAX_LUNGE_RANGE,
@@ -855,6 +864,7 @@ function createInitialState(
       swingId: 0,
       invulnerableTimer: 0,
       hurtFlashTimer: 0,
+      chillTimer: 0,
       knockbackLockTimer: 0,
       knockbackVx: 0,
       knockbackVz: 0,
@@ -952,6 +962,10 @@ function createInitialState(
       cavernShovelChestOpened: false,
       cavernCrestKeyPickedUp: false,
       hasGlacialKey: false,
+      cavernBossAwakened: false,
+      cavernBossPhase2: false,
+      cavernBossDefeated: false,
+      cavernBossHeartAwarded: false,
       citadelArmoryChestOpened: false,
       citadelTimedTorchSolved: false,
       citadelEyeStatuesSolved: false,
@@ -998,7 +1012,7 @@ function createInitialState(
   };
 }
 
-const MAP_STORAGE_KEY = "zeldo-authored-map-v9";
+const MAP_STORAGE_KEY = "zeldo-authored-map-v10";
 
 function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   if (p.prefab === "dirt_patch") {
@@ -1051,7 +1065,15 @@ function persistAuthoredMapToStorage(state: {
   if (typeof window === "undefined") return false;
   try {
     const cleanEnemies = state.enemies
-      .filter((e) => !e.id.startsWith("dg-minion-wave2-") && !e.id.startsWith("ct-minion-wave2-"))
+      .filter(
+        (e) =>
+          !e.id.startsWith("dg-minion-wave2-") &&
+          !e.id.startsWith("cv-minion-wave2-") &&
+          !e.id.startsWith("ct-minion-wave2-") &&
+          !e.id.startsWith("dungeon-minion-wave2-") &&
+          !e.id.startsWith("caverns-minion-wave2-") &&
+          !e.id.startsWith("citadel-minion-wave2-")
+      )
       .map((e) => ({
         ...e,
         x: e.spawnX,
@@ -1059,6 +1081,7 @@ function persistAuthoredMapToStorage(state: {
         hp: e.maxHp,
         shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
         shockArmor: e.initialShockArmor ?? e.shockArmor ?? false,
+        burrowed: e.kind === "burrower",
         state: "idle" as EnemyAIState,
         stateTimer: 0,
         hitFlashTimer: 0,
@@ -1075,7 +1098,7 @@ function persistAuthoredMapToStorage(state: {
       .map((r) => ({ ...r, collected: false, spawnBounceTimer: 0 }));
 
     const payload = {
-      version: 7,
+      version: 8,
       mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: cleanEnemies,
       rupees: cleanRupees,
@@ -1155,7 +1178,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // Preserve all authored map edits (props, enemies, rupees, portals, custom models, terrain)!
       mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: state.enemies
-        .filter((e) => !e.id.startsWith("dg-minion-wave2-"))
+        .filter(
+          (e) =>
+            !e.id.startsWith("dg-minion-wave2-") &&
+            !e.id.startsWith("cv-minion-wave2-") &&
+            !e.id.startsWith("ct-minion-wave2-") &&
+            !e.id.startsWith("dungeon-minion-wave2-") &&
+            !e.id.startsWith("caverns-minion-wave2-") &&
+            !e.id.startsWith("citadel-minion-wave2-")
+        )
         .map((e) => ({
           ...e,
           x: e.spawnX,
@@ -1163,6 +1194,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hp: e.maxHp,
           shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
           shockArmor: e.initialShockArmor ?? e.shockArmor ?? false,
+          burrowed: e.kind === "burrower",
           state: "idle",
           stateTimer: 0,
           hitFlashTimer: 0,
@@ -1191,7 +1223,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ...createInitialState("playing", state.muted, state.fps),
       mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: state.enemies
-        .filter((e) => !e.id.startsWith("dg-minion-wave2-"))
+        .filter(
+          (e) =>
+            !e.id.startsWith("dg-minion-wave2-") &&
+            !e.id.startsWith("cv-minion-wave2-") &&
+            !e.id.startsWith("ct-minion-wave2-") &&
+            !e.id.startsWith("dungeon-minion-wave2-") &&
+            !e.id.startsWith("caverns-minion-wave2-") &&
+            !e.id.startsWith("citadel-minion-wave2-")
+        )
         .map((e) => ({
           ...e,
           x: e.spawnX,
@@ -1199,6 +1239,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hp: e.maxHp,
           shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
           shockArmor: e.initialShockArmor ?? e.shockArmor ?? false,
+          burrowed: e.kind === "burrower",
           state: "idle",
           stateTimer: 0,
           hitFlashTimer: 0,
@@ -1644,9 +1685,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? 25
           : kind === "knight"
           ? 8
-          : kind === "turret"
+          : kind === "turret" || kind === "burrower"
           ? 6
-          : kind === "minion"
+          : kind === "minion" || kind === "wraith" || kind === "bomber"
           ? 5
           : kind === "goblin"
           ? 4
@@ -1672,18 +1713,40 @@ export const useGameStore = create<GameStore>((set, get) => ({
         lastHitSwingId: -1,
         knockbackVx: 0,
         knockbackVz: 0,
-        aggroRadius: kind === "turret" ? 15.5 : kind === "archer" ? 11.5 : 8.5,
+        aggroRadius:
+          kind === "turret"
+            ? 15.5
+            : kind === "wraith" || kind === "archer" || kind === "bomber"
+            ? 11.8
+            : kind === "burrower"
+            ? 11.0
+            : 8.5,
         speed:
           kind === "turret"
             ? 0
             : kind === "boss"
             ? 3.9
+            : kind === "burrower"
+            ? 4.2
+            : kind === "bomber"
+            ? 4.6
+            : kind === "wraith"
+            ? 4.8
             : kind === "goblin" || kind === "minion"
             ? 5.5
             : 5.0,
         damage: 1,
         rupeeDrop:
-          kind === "boss" ? "boss" : kind === "knight" || kind === "turret" ? "red" : "blue",
+          kind === "boss"
+            ? "boss"
+            : kind === "knight" ||
+              kind === "turret" ||
+              kind === "wraith" ||
+              kind === "bomber" ||
+              kind === "burrower"
+            ? "red"
+            : "blue",
+        burrowed: kind === "burrower",
         chargeAngle: Math.PI,
         chargePathLength: BOSS_MAX_LUNGE_RANGE,
         chargeDistanceTraveled: 0,
@@ -2045,7 +2108,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       phase: "playing",
       mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: state.enemies
-        .filter((e) => !e.id.startsWith("dg-minion-wave2-") && !e.id.startsWith("ct-minion-wave2-"))
+        .filter(
+          (e) =>
+            !e.id.startsWith("dg-minion-wave2-") &&
+            !e.id.startsWith("cv-minion-wave2-") &&
+            !e.id.startsWith("ct-minion-wave2-") &&
+            !e.id.startsWith("dungeon-minion-wave2-") &&
+            !e.id.startsWith("caverns-minion-wave2-") &&
+            !e.id.startsWith("citadel-minion-wave2-")
+        )
         .map((e) => ({
           ...e,
           x: e.spawnX,
@@ -2054,6 +2125,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           shieldArmor: e.initialShieldArmor ?? e.shieldArmor ?? "none",
           shockArmor: e.initialShockArmor ?? e.shockArmor ?? false,
           isBounty: e.initialIsBounty ?? e.isBounty ?? false,
+          burrowed: e.kind === "burrower",
           state: "idle",
           stateTimer: 0,
           hitFlashTimer: 0,
@@ -2146,6 +2218,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         cavernShovelChestOpened: false,
         cavernCrestKeyPickedUp: false,
         hasGlacialKey: false,
+        cavernBossAwakened: false,
+        cavernBossPhase2: false,
+        cavernBossDefeated: false,
+        cavernBossHeartAwarded: false,
         citadelArmoryChestOpened: false,
         citadelTimedTorchSolved: false,
         citadelEyeStatuesSolved: false,
@@ -2182,6 +2258,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         weaponLockTimer: 0,
         invulnerableTimer: 0,
         hurtFlashTimer: 0,
+        chillTimer: 0,
         knockbackLockTimer: 0,
         knockbackVx: 0,
         knockbackVz: 0,
@@ -2195,7 +2272,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       version: 3,
       mapProps: state.mapProps,
       enemies: state.enemies.filter(
-        (e) => !e.id.startsWith("dg-minion-wave2-") && !e.id.startsWith("ct-minion-wave2-")
+        (e) =>
+          !e.id.startsWith("dg-minion-wave2-") &&
+          !e.id.startsWith("cv-minion-wave2-") &&
+          !e.id.startsWith("ct-minion-wave2-") &&
+          !e.id.startsWith("dungeon-minion-wave2-") &&
+          !e.id.startsWith("caverns-minion-wave2-") &&
+          !e.id.startsWith("citadel-minion-wave2-")
       ),
       rupees: state.rupees.filter(
         (r) => !r.id.startsWith("drop-") && !r.id.startsWith("bush-drop-")
@@ -3019,6 +3102,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     hero.portalCooldown = Math.max(0, hero.portalCooldown - dt);
     hero.invulnerableTimer = Math.max(0, hero.invulnerableTimer - dt);
     hero.hurtFlashTimer = Math.max(0, (hero.hurtFlashTimer ?? 0) - dt);
+    hero.chillTimer = Math.max(0, (hero.chillTimer ?? 0) - dt);
     hero.knockbackLockTimer = Math.max(0, (hero.knockbackLockTimer ?? 0) - dt);
     hero.isSpinAttacking = hero.spinAttackTimer > 0;
     hero.isAttacking = hero.attackTimer > 0 || hero.spinAttackTimer > 0;
@@ -3645,14 +3729,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (pickedUpBombIdx !== -1) {
         const picked = activeBombs[pickedUpBombIdx];
         activeBombs.splice(pickedUpBombIdx, 1);
+        const isSapperBomb = picked.id.startsWith("sapper-bomb-");
         hero.heldObject = {
           kind: "bomb",
-          fuseTimer: picked.fuseTimer,
+          fuseTimer: isSapperBomb ? Math.max(picked.fuseTimer, 1.65) : picked.fuseTimer,
           maxFuseTimer: picked.maxFuseTimer,
         };
         hero.isBlocking = false;
         hero.weaponLockTimer = 0.22;
         soundEngine.playLift();
+        if (isSapperBomb) {
+          pushBanner(
+            "Caught the Sapper Gremlin's Live Bomb!",
+            "Press [F / B / Space] to hurl it right back at monsters or cracked boulders!",
+            3.2
+          );
+        }
       } else {
         // Find the closest liftable Clay Pot or Light Rock adjacent to the Hero
         let bestProp: MapPropInstance | null = null;
@@ -3726,14 +3818,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (nearbyBombIdx !== -1) {
         const picked = activeBombs[nearbyBombIdx];
         activeBombs.splice(nearbyBombIdx, 1);
+        const isSapperBomb = picked.id.startsWith("sapper-bomb-");
         hero.heldObject = {
           kind: "bomb",
-          fuseTimer: picked.fuseTimer,
+          fuseTimer: isSapperBomb ? Math.max(picked.fuseTimer, 1.65) : picked.fuseTimer,
           maxFuseTimer: picked.maxFuseTimer,
         };
         hero.isBlocking = false;
         hero.weaponLockTimer = 0.20;
         soundEngine.playLift();
+        if (isSapperBomb) {
+          pushBanner(
+            "Caught the Sapper Gremlin's Live Bomb!",
+            "Press [F / B / Space] to hurl it right back at monsters or cracked boulders!",
+            3.2
+          );
+        }
       } else if ((hero.maxBombs ?? 0) <= 0) {
         soundEngine.playGateLocked();
         pushBanner(
@@ -4113,7 +4213,51 @@ export const useGameStore = create<GameStore>((set, get) => ({
           );
         }
       } else {
-        soundEngine.playShovelDig(false);
+        // Check if digging near a burrowed Subterranean Tunnel Wyrm (`burrower`) -> unearths & stuns it for 3.5s!
+        let unearthedWyrm = false;
+        for (const enemy of enemies) {
+          if (
+            enemy.zone === zone &&
+            enemy.kind === "burrower" &&
+            enemy.state !== "dead" &&
+            enemy.burrowed &&
+            (Math.hypot(enemy.x - digX, enemy.z - digZ) <= 2.95 ||
+              Math.hypot(enemy.x - hero.x, enemy.z - hero.z) <= 2.95)
+          ) {
+            unearthedWyrm = true;
+            enemy.burrowed = false;
+            enemy.provoked = true;
+            enemy.stunTimer = 3.5;
+            enemy.state = "stunned";
+            enemy.stateTimer = 3.5;
+            enemy.hitFlashTimer = 0.35;
+            enemy.hp -= 1;
+            bushBursts.push({
+              id: `wyrm-unearth-${enemy.id}-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: enemy.x,
+              z: enemy.z,
+              timer: 0.9,
+              maxTimer: 0.9,
+              seed: Math.floor(Math.abs(enemy.x * 59 + enemy.z * 97) + stats.elapsedSeconds * 130),
+              isDirt: true,
+            });
+            if (enemy.hp <= 0) {
+              enemy.hp = 1; // Let the player finish it off above ground or kill if already at 1
+            }
+          }
+        }
+        if (unearthedWyrm) {
+          soundEngine.playShovelDig(true);
+          soundEngine.playBossWallCrash();
+          pushBanner(
+            "Shovel Unearthed the Tunnel Wyrm! (Stunned for 3.5s!)",
+            "You dug the Subterranean Wyrm right out of the earth — slash it with your Sword [Space] while stunned!",
+            4.2
+          );
+        } else {
+          soundEngine.playShovelDig(false);
+        }
       }
     } else if (
       canUseWeapon &&
@@ -4212,12 +4356,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let mx = isKnockbackLocked ? 0 : input.moveX;
     let mz = isKnockbackLocked ? 0 : input.moveZ;
     const mag = Math.hypot(mx, mz);
+    const chillMultiplier = (hero.chillTimer ?? 0) > 0 ? 0.68 : 1.0;
     const bootsMultiplier =
-      hero.equippedBoots === "swift_boots"
+      (hero.equippedBoots === "swift_boots"
         ? 1.25
         : hero.equippedBoots === "titan_greaves"
         ? 1.12
-        : 1.0;
+        : 1.0) * chillMultiplier;
 
     if (mag > 0.01) {
       mx /= mag;
@@ -4896,6 +5041,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
+      if (
+        !flags.cavernBossAwakened &&
+        !flags.cavernBossDefeated &&
+        hero.x > 13.5 &&
+        hero.z > 5.5
+      ) {
+        flags.cavernBossAwakened = true;
+        flags.bossState = "ARMORED";
+        flags.bossArmorTimer = 0;
+        soundEngine.playBossRoar();
+        pushBanner(
+          "Cryos, the Glacial Colossus Awakens!",
+          "Phase 1: Crack his Permafrost Shell with a Bomb [B] or Flame Rod [R] • Phase 2: Pierce Open Eye [E / Q] • Phase 3: Slash with Sword [Space]!",
+          6.5
+        );
+      }
+
       if (!flags.cavernCrestKeyPickedUp) {
         const distToCrestKey = Math.hypot(
           hero.x - CAVERN_CREST_KEY_POS.x,
@@ -4905,8 +5067,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
           (e) => e.questGroup === "cavern_wardens" && e.state !== "dead"
         );
         const canClaimCrestKey =
-          Boolean(flags.cavernEyeSolved || flags.cavernWardensCleared) ||
-          remainingWardens.length === 0;
+          Boolean(
+            flags.cavernEyeSolved ||
+              flags.cavernWardensCleared ||
+              flags.cavernBossDefeated
+          ) || remainingWardens.length === 0;
         if (distToCrestKey < 2.25) {
           if (canClaimCrestKey) {
             flags.cavernCrestKeyPickedUp = true;
@@ -4924,7 +5089,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             soundEngine.playGateLocked();
             pushBanner(
               "The Glacial Crest Key Pedestal is Ward-Sealed!",
-              `Melt the ${remainingWardens.length} Frost Warden${remainingWardens.length === 1 ? "" : "s"} with your Flame Rod [R / 3] OR shoot the North Cyclops Eye Statue with your Bow [E / 2]!`,
+              `Defeat Cryos & the ${remainingWardens.length} Frost Warden${remainingWardens.length === 1 ? "" : "s"} [B / R] OR shoot the North Cyclops Eye Statue with your Bow [E / 2]!`,
               4.5
             );
           }
@@ -5350,7 +5515,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             zone === "caverns" &&
             !flags.cavernCrestKeyPickedUp &&
             !boomerang.carryingGlacialKey &&
-            (flags.cavernEyeSolved || flags.cavernWardensCleared) &&
+            (flags.cavernEyeSolved || flags.cavernWardensCleared || flags.cavernBossDefeated) &&
             Math.hypot(CAVERN_CREST_KEY_POS.x - boomerang.x, CAVERN_CREST_KEY_POS.z - boomerang.z) < 1.85
           ) {
             boomerang.carryingGlacialKey = true;
@@ -5721,11 +5886,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     };
 
+    const getBossName = (z: ZoneId = zone): string =>
+      z === "citadel" ? "Vaelkor" : z === "caverns" ? "Cryos" : "Ignis";
+
     const isBossRoomSealed = (e: EnemyState): boolean =>
       (e.zone === "dungeon" && (e.kind === "boss" || e.spawnZ > 13) && !flags.bossAwakened) ||
-      (e.zone === "citadel" && (e.kind === "boss" || e.spawnZ > 13) && !flags.citadelBossAwakened);
+      (e.zone === "citadel" && (e.kind === "boss" || e.spawnZ > 13) && !flags.citadelBossAwakened) ||
+      (e.zone === "caverns" && e.kind === "boss" && !flags.cavernBossAwakened);
 
-    // 9. Update Arrows & Stone Spitter Turret Rock Projectiles
+    // 9. Update Arrows, Frost Bolts & Stone Spitter Turret Rock Projectiles
     const remainingArrows: ArrowProjectileState[] = [];
     for (const arrow of arrows) {
       if (arrow.zone !== zone) continue;
@@ -5786,7 +5955,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         dynamicObstacles
       );
       if (resA.hitObstacle) {
-        if (arrow.isRock) {
+        if (arrow.isRock || arrow.isFrost) {
           soundEngine.playPotSmash();
           bushBursts.push({
             id: `rock-shot-shatter-${arrow.id}`,
@@ -5814,9 +5983,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       let arrowConsumed = false;
       if (arrow.fromHero) {
-        // Hero arrow or Shield-deflected Turret Rock hits enemies!
+        // Hero arrow, Mirror-Shield reflected bolt, or Shield-deflected Turret Rock hits enemies!
         for (const enemy of enemies) {
           if (enemy.zone !== zone || enemy.state === "dead") continue;
+          if (enemy.kind === "burrower" && enemy.burrowed) continue; // Arrows fly over submerged Tunnel Wyrms!
           const eRad = enemy.kind === "boss" ? 1.55 : enemy.kind === "turret" ? 1.05 : 0.85;
           if (Math.hypot(enemy.x - arrow.x, enemy.z - arrow.z) <= eRad) {
             arrowConsumed = true;
@@ -5828,9 +5998,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
               if (armorNoticeCooldown <= 0) {
                 armorNoticeCooldown = 3.5;
                 pushBanner(
-                  zone === "citadel" ? "Enter the Sovereign's Throne!" : "Enter Room 5: Lair of Ignis!",
+                  zone === "citadel"
+                    ? "Enter the Sovereign's Throne!"
+                    : zone === "caverns"
+                    ? "Cross into the East Glacial Sanctum!"
+                    : "Enter Room 5: Lair of Ignis!",
                   zone === "citadel"
                     ? "Step through the Inner Sanctum Gate to challenge Vaelkor, the Obsidian Sovereign!"
+                    : zone === "caverns"
+                    ? "Step across the frozen bridge to challenge Cryos, the Glacial Colossus!"
                     : "Step through the North Boss Door to challenge Ignis, the Armored Eye-Golem!",
                   3.2
                 );
@@ -5881,21 +6057,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
               enemy.provoked = true;
               if (enemy.kind === "boss") {
                 // Boss 3-Step Vulnerability Loop:
-                // - ARMORED: Carapace deflects Arrows! Must burn with Flame Rod [R] first!
+                // - ARMORED: Carapace deflects normal Arrows, UNLESS it's a Mirror-Shield Reflected Bolt (`arrow.isReflected`), which shatters the carapace!
                 // - EXPOSED_EYE: Arrow pierces the giant glowing chest Eye and crashes Boss to the floor ("STUNNED") for 4.0s!
                 // - STUNNED: Arrow deals 2 damage while Boss is down!
-                const bossName = zone === "citadel" ? "Vaelkor" : "Ignis";
+                const bossName = getBossName(zone);
                 if (flags.bossState === "ARMORED") {
-                  soundEngine.playArmorDeflect();
-                  soundEngine.playArrowStick();
-                  enemy.hitFlashTimer = 0.16;
-                  if (armorNoticeCooldown <= 0) {
-                    armorNoticeCooldown = 2.8;
+                  if (arrow.isReflected) {
+                    flags.bossState = "EXPOSED_EYE";
+                    flags.bossArmorTimer = 8.0;
+                    enemy.hitFlashTimer = 0.35;
+                    soundEngine.playBurnBarrier();
                     pushBanner(
-                      `${bossName}'s Outer Carapace Deflects Arrows!`,
-                      `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] first to burn away its outer shell!`,
-                      3.6
+                      `Mirror Shield Reflection Cracked ${bossName}'s Shell! (8s)`,
+                      `Phase 2: ${bossName}'s Giant Chest Eye is OPEN — shoot it with your Bow [E / 2] to stun him!`,
+                      4.5
                     );
+                  } else {
+                    soundEngine.playArmorDeflect();
+                    soundEngine.playArrowStick();
+                    enemy.hitFlashTimer = 0.16;
+                    if (armorNoticeCooldown <= 0) {
+                      armorNoticeCooldown = 2.8;
+                      pushBanner(
+                        `${bossName}'s Outer Carapace Deflects Arrows!`,
+                        `Phase 1: Crack ${bossName}'s shell with Flame Rod [R], a Bomb [B], or a Mirror-Shield Reflected Bolt!`,
+                        3.6
+                      );
+                    }
                   }
                 } else if (flags.bossState === "EXPOSED_EYE") {
                   flags.bossState = "STUNNED";
@@ -5964,7 +6152,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             }
 
             // Embed arrow into the enemy's body in local enemy coordinates so it moves & rotates with them!
-            if (enemy.hp > 0 && !arrow.isRock) {
+            if (enemy.hp > 0 && !arrow.isRock && !arrow.isFrost) {
               const dirX = Math.sin(arrow.angle);
               const dirZ = Math.cos(arrow.angle);
               const perpX = dirZ;
@@ -6009,7 +6197,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
         }
       } else {
-        // Enemy Arrow or Stone Spitter Turret Rock hits Hero!
+        // Enemy Arrow, Frost Wraith Bolt, or Stone Spitter Turret Rock hits Hero!
         if (Math.hypot(hero.x - arrow.x, hero.z - arrow.z) <= 0.95) {
           arrowConsumed = true;
           const arrowFromAngle = arrow.angle + Math.PI;
@@ -6076,11 +6264,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
               if (armorNoticeCooldown <= 0) {
                 armorNoticeCooldown = 3.2;
                 pushBanner(
-                  "Pelted by the Stone Turret!",
-                  "Hold Shield [RMB / Shift] facing the Turret to block and deflect its shots!",
+                  "Pelted by Stone Projectile!",
+                  "Hold Shield [RMB / Shift] facing the attacker to block and deflect shots!",
                   3.8
                 );
               }
+            }
+          } else if (canBlockArrow && hero.equippedOffhand === "mirror_shield") {
+            // AEGIS MIRROR SHIELD REFLECTS ENEMY ARROWS & FROST BOLTS 180° BACK AT THE ATTACKER!
+            soundEngine.playShieldBlock();
+            soundEngine.playCrystalSwitch(true);
+            hero.knockbackVx = Math.sin(arrow.angle) * 1.2;
+            hero.knockbackVz = Math.cos(arrow.angle) * 1.2;
+            hero.invulnerableTimer = Math.max(hero.invulnerableTimer, 0.22);
+
+            arrow.fromHero = true;
+            arrow.isReflected = true;
+            arrow.angle = hero.facing;
+            arrow.speed = 19.5;
+            arrow.damage = 2;
+            arrow.lifeTimer = 1.65;
+            arrow.x = hero.x + Math.sin(hero.facing) * 0.88;
+            arrow.z = hero.z + Math.cos(hero.facing) * 0.88;
+            remainingArrows.push(arrow);
+
+            if (armorNoticeCooldown <= 0) {
+              armorNoticeCooldown = 3.0;
+              pushBanner(
+                arrow.isFrost
+                  ? "Aegis Mirror Shield Reflected the Frost Bolt!"
+                  : "Aegis Mirror Shield Reflected the Projectile!",
+                "Your Mirror Shield bounces enemy bolts right back at them (and cracks Boss armor)!",
+                3.2
+              );
             }
           } else {
             const hitRes = damageHero(
@@ -6090,36 +6306,49 @@ export const useGameStore = create<GameStore>((set, get) => ({
               false,
               false,
               arrowFromAngle,
-              0.65
+              0.65,
+              Boolean(arrow.isFrost)
             );
 
             if (canBlockArrow) {
               if (!hitRes.triggered) {
                 soundEngine.playShieldBlock();
               }
-              soundEngine.playArrowStick();
+              if (!arrow.isFrost) {
+                soundEngine.playArrowStick();
 
-              const rightX = Math.cos(hero.facing);
-              const rightZ = -Math.sin(hero.facing);
-              const dx = arrow.x - hero.x;
-              const dz = arrow.z - hero.z;
-              const rawLat = dx * rightX + dz * rightZ;
-              const clampedZ = Math.max(-0.22, Math.min(0.22, rawLat));
-              const randY = Math.sin(stats.elapsedSeconds * 37.3 + arrow.x * 13.7) * 0.16;
-              const relYaw = Math.max(
-                -0.38,
-                Math.min(0.38, normalizeAngleDiff(arrow.angle, hero.facing + Math.PI))
-              );
+                const rightX = Math.cos(hero.facing);
+                const rightZ = -Math.sin(hero.facing);
+                const dx = arrow.x - hero.x;
+                const dz = arrow.z - hero.z;
+                const rawLat = dx * rightX + dz * rightZ;
+                const clampedZ = Math.max(-0.22, Math.min(0.22, rawLat));
+                const randY = Math.sin(stats.elapsedSeconds * 37.3 + arrow.x * 13.7) * 0.16;
+                const relYaw = Math.max(
+                  -0.38,
+                  Math.min(0.38, normalizeAngleDiff(arrow.angle, hero.facing + Math.PI))
+                );
 
-              arrow.stuck = true;
-              arrow.stuckTimer = 4.5;
-              arrow.stuckInShield = true;
-              arrow.stuckShieldY = randY;
-              arrow.stuckShieldZ = clampedZ;
-              arrow.stuckShieldYaw = relYaw;
-              arrow.x = hero.x + Math.sin(hero.facing) * 0.56;
-              arrow.z = hero.z + Math.cos(hero.facing) * 0.56;
-              remainingArrows.push(arrow);
+                arrow.stuck = true;
+                arrow.stuckTimer = 4.5;
+                arrow.stuckInShield = true;
+                arrow.stuckShieldY = randY;
+                arrow.stuckShieldZ = clampedZ;
+                arrow.stuckShieldYaw = relYaw;
+                arrow.x = hero.x + Math.sin(hero.facing) * 0.56;
+                arrow.z = hero.z + Math.cos(hero.facing) * 0.56;
+                remainingArrows.push(arrow);
+              }
+            } else if (arrow.isFrost && hitRes.triggered) {
+              hero.chillTimer = 2.5;
+              if (armorNoticeCooldown <= 0) {
+                armorNoticeCooldown = 3.2;
+                pushBanner(
+                  "Chilled by Frost Wraith Bolt! (-32% Speed for 2.5s)",
+                  "Block with your Shield [RMB] or vaporize Frost Wraiths with your Flame Rod [R] for 2x damage!",
+                  3.6
+                );
+              }
             }
           }
         }
@@ -6524,8 +6753,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return true;
     };
 
-    // Helper: Burn away Boss Ignis's outer Ice/Bramble Carapace with the Flame Rod (`R`) -> transitions `bossState` from `"ARMORED"` to `"EXPOSED_EYE"` for 8.0s!
+    // Helper: Burn away Boss Carapace with the Flame Rod (`R`) -> transitions `bossState` from `"ARMORED"` to `"EXPOSED_EYE"` for 8.0s!
     const burnBossIgnisCarapace = (bossEnemy: EnemyState) => {
+      const bName = getBossName(zone);
       if (flags.bossState === "ARMORED" || !flags.bossState) {
         flags.bossState = "EXPOSED_EYE";
         flags.bossArmorTimer = 8.0;
@@ -6542,7 +6772,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           isDirt: true,
         });
         pushBanner(
-          "Phase 1 Complete: Ignis's Carapace Burned Away! (8s)",
+          `Phase 1 Complete: ${bName}'s Carapace Burned Away! (8s)`,
           "Phase 2: Its Giant Chest Eye is OPEN — shoot it with your Bow [E / 2] (or Boomerang [Q]) to knock it down!",
           4.5
         );
@@ -6653,7 +6883,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           igniteBurnableBarrier(pIdx);
         }
       }
-      // Immediate splash damage on explosion (also melts Ice Armor, burns Wooden Shields, & burns Boss Carapace)!
+      // Immediate splash damage on explosion (also melts Ice Armor, burns Wooden Shields, unearths Tunnel Wyrms, & burns Boss Carapace)!
       for (const enemy of enemies) {
         if (enemy.zone !== zone || enemy.state === "dead") continue;
         const eRad = enemy.kind === "boss" ? 1.5 : 0.9;
@@ -6664,7 +6894,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
           if (enemy.kind === "boss") {
             burnBossIgnisCarapace(enemy);
           } else {
-            enemy.hp -= 2;
+            if (enemy.kind === "burrower" && enemy.burrowed) {
+              enemy.burrowed = false;
+              enemy.stunTimer = 3.0;
+              enemy.state = "stunned";
+              enemy.stateTimer = 3.0;
+            }
+            const fireSplashDmg = enemy.kind === "wraith" ? 4 : 2;
+            enemy.hp -= fireSplashDmg;
             enemy.hitFlashTimer = 0.26;
             if (enemy.kind !== "turret" && (enemy.state === "idle" || enemy.state === "recover")) {
               enemy.state = "aggro";
@@ -6785,6 +7022,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       let fbConsumed = false;
       for (const enemy of enemies) {
         if (enemy.zone !== zone || enemy.state === "dead") continue;
+        if (!fb.isCharged && enemy.kind === "burrower" && enemy.burrowed) continue;
         const eRad = enemy.kind === "boss" ? 1.45 : 0.88;
         if (Math.hypot(enemy.x - fb.x, enemy.z - fb.z) <= eRad + fb.radius) {
           fbConsumed = true;
@@ -6799,8 +7037,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
               if (enemy.kind === "boss") {
                 burnBossIgnisCarapace(enemy);
               } else {
-                enemy.hp -= fb.damage;
+                const fireDmg = enemy.kind === "wraith" ? fb.damage * 2 : fb.damage;
+                enemy.hp -= fireDmg;
                 enemy.hitFlashTimer = 0.24;
+                if (enemy.kind === "wraith" && armorNoticeCooldown <= 0) {
+                  armorNoticeCooldown = 3.0;
+                  pushBanner(
+                    "Frost Wraith Scorched by Flame Rod! (2x Fire Damage!)",
+                    "Glacial Specters take double damage from fire magic!",
+                    3.0
+                  );
+                }
                 if (enemy.kind !== "turret" && (enemy.state === "idle" || enemy.state === "recover")) {
                   enemy.state = "aggro";
                 }
@@ -6851,6 +7098,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         fz.tickTimer = 0.55;
         for (const enemy of enemies) {
           if (enemy.zone !== zone || enemy.state === "dead") continue;
+          if (enemy.kind === "burrower" && enemy.burrowed) continue;
           const eRad = enemy.kind === "boss" ? 1.35 : 0.75;
           if (Math.hypot(enemy.x - fz.x, enemy.z - fz.z) <= fz.radius + eRad * 0.5) {
             if (isBossRoomSealed(enemy)) continue;
@@ -6859,7 +7107,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             if (enemy.kind === "boss") {
               burnBossIgnisCarapace(enemy);
             } else {
-              enemy.hp -= 1;
+              enemy.hp -= enemy.kind === "wraith" ? 2 : 1;
               enemy.hitFlashTimer = 0.2;
               if (enemy.kind !== "turret" && enemy.state === "idle") {
                 enemy.state = "aggro";
@@ -6889,6 +7137,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       let nearestDist = 16.0;
       for (const enemy of enemies) {
         if (enemy.zone !== zone || enemy.state === "dead") continue;
+        if (enemy.kind === "burrower" && enemy.burrowed) continue;
         if (isBossRoomSealed(enemy)) continue;
         const d = Math.hypot(enemy.x - bee.x, enemy.z - bee.z);
         if (d < nearestDist) {
@@ -6972,6 +7221,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (!shouldSmash) {
         for (const enemy of enemies) {
           if (enemy.zone !== zone || enemy.state === "dead") continue;
+          if (enemy.kind === "burrower" && enemy.burrowed) continue;
           const eRad = enemy.kind === "boss" ? 1.45 : 0.85;
           if (Math.hypot(enemy.x - nextX, enemy.z - nextZ) <= eRad + 0.55) {
             shouldSmash = true;
@@ -7188,7 +7438,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           dynamicObstacles = buildObstaclesFromMapProps(mapProps);
         }
 
-        // 2. Deal 3 Heavy Blast Damage to Enemies in blast radius (and crack/stagger Boss!)
+        // 2. Deal 3 Heavy Blast Damage to Enemies in blast radius (and crack/stagger Boss or unearth Tunnel Wyrms!)
         for (const enemy of enemies) {
           if (enemy.zone !== zone || enemy.state === "dead") continue;
           const eRad = enemy.kind === "boss" ? 1.5 : 0.85;
@@ -7202,7 +7452,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               if (flags.bossState === "ARMORED") {
                 burnBossIgnisCarapace(enemy);
               } else {
-                const bossName = zone === "citadel" ? "Vaelkor" : "Ignis";
+                const bossName = getBossName(zone);
                 soundEngine.playBossWallCrash();
                 flags.bossState = "STUNNED";
                 flags.bossArmorTimer = 3.8;
@@ -7218,6 +7468,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
             } else {
               if (enemy.shieldArmor) {
                 enemy.shieldArmor = undefined;
+              }
+              if (enemy.kind === "burrower" && enemy.burrowed) {
+                enemy.burrowed = false;
+                enemy.stunTimer = 3.5;
+                enemy.state = "stunned";
+                enemy.stateTimer = 3.5;
+                pushBanner(
+                  "Bomb Blast Unearthed & Stunned the Tunnel Wyrm! (3.5s)",
+                  "The explosion blew it out of the ground — slash it while it's dazed!",
+                  3.6
+                );
               }
               enemy.hp -= 3;
               enemy.hitFlashTimer = 0.28;
@@ -7276,10 +7537,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
           boomerang.returning = true;
           if (isBossRoomSealed(enemy)) {
             soundEngine.playArmorDeflect();
+          } else if (enemy.kind === "burrower" && enemy.burrowed) {
+            soundEngine.playArmorDeflect();
+            if (armorNoticeCooldown <= 0) {
+              armorNoticeCooldown = 3.0;
+              pushBanner(
+                "Tunnel Wyrm is Burrowed Underground!",
+                "Dig near it with your Iron Shovel [G] or blast it with a Bomb [B] to unearth it!",
+                3.4
+              );
+            }
           } else {
             enemy.provoked = true;
             if (enemy.kind === "boss") {
-              const bossName = zone === "citadel" ? "Vaelkor" : "Ignis";
+              const bossName = getBossName(zone);
               if (flags.bossState === "EXPOSED_EYE") {
                 // Phase 2 -> Phase 3: Stunning Boss's Open Eye with the Boomerang!
                 flags.bossState = "STUNNED";
@@ -7309,7 +7580,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   armorNoticeCooldown = 3.2;
                   pushBanner(
                     `${bossName}'s Outer Carapace Deflects Boomerang!`,
-                    `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] to burn away his outer shell first!`,
+                    `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] or Bomb [B / 4] to crack his outer shell first!`,
                     3.4
                   );
                 }
@@ -7363,9 +7634,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
               enemy.hitFlashTimer = 0.22;
               // Short stagger on ranged/heavy enemies so Goblin Archers & Knights immediately fight back!
               enemy.stunTimer =
-                enemy.kind === "archer" || enemy.kind === "turret"
+                enemy.kind === "archer" ||
+                enemy.kind === "turret" ||
+                enemy.kind === "wraith" ||
+                enemy.kind === "bomber"
                   ? 0.35
-                  : enemy.kind === "knight"
+                  : enemy.kind === "knight" || enemy.kind === "burrower"
                   ? 0.2
                   : 0.75;
               if (enemy.state !== "stunned") {
@@ -7400,54 +7674,65 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const angleDiff = Math.abs(normalizeAngleDiff(angleToEnemy, hero.facing));
           if (isSpin || angleDiff <= 1.35 || dist <= 1.35) {
             enemy.lastHitSwingId = hero.swingId;
-            enemy.provoked = true;
-            const strikeDamage = (hero.swordDamage || 1) * (isSpin ? 2 : 1);
-
-            if (enemy.kind === "boss") {
-              // Boss 3-Step Vulnerability Loop: Phase 3 Melee Punish when STUNNED!
-              const bossName = zone === "citadel" ? "Vaelkor" : "Ignis";
-              enemy.knockbackVx = 0;
-              enemy.knockbackVz = 0;
-              if (flags.bossState === "STUNNED" || enemy.state === "stunned") {
-                const bossPunishDamage = strikeDamage * 3;
-                enemy.hp -= bossPunishDamage;
-                enemy.hitFlashTimer = 0.3;
-                if (enemy.hp <= 0) {
-                  flags.bossState = "DEAD";
-                  handleEnemyDeath(enemy);
-                  continue;
-                } else {
-                  soundEngine.playEnemyHit(true);
-                  pushBanner(
-                    isSpin
-                      ? `Spin Attack Punish on ${bossName}! (-${bossPunishDamage} HP!)`
-                      : `Sword Punish on Stunned ${bossName}! (-${bossPunishDamage} HP!)`,
-                    "Keep slashing with your Sword before his outer carapace regenerates!",
-                    2.8
-                  );
-                }
-              } else if (flags.bossState === "EXPOSED_EYE") {
-                soundEngine.playArmorDeflect();
-                if (armorNoticeCooldown <= 0) {
-                  armorNoticeCooldown = 3.0;
-                  pushBanner(
-                    `${bossName}'s Chest Eye is Open — Shoot to Stun Him First!`,
-                    "Phase 2: Shoot his glowing Open Eye with your Bow [E / 2] or Boomerang [Q / 1] to knock him down!",
-                    3.5
-                  );
-                }
-              } else {
-                soundEngine.playArmorDeflect();
-                if (armorNoticeCooldown <= 0) {
-                  armorNoticeCooldown = 3.2;
-                  pushBanner(
-                    `${bossName}'s Outer Carapace Deflects Your Sword!`,
-                    `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] to burn away his outer shell first!`,
-                    3.6
-                  );
-                }
+            if (enemy.kind === "burrower" && enemy.burrowed) {
+              soundEngine.playArmorDeflect();
+              if (armorNoticeCooldown <= 0) {
+                armorNoticeCooldown = 3.0;
+                pushBanner(
+                  "Tunnel Wyrm is Burrowed Underground!",
+                  "Wait for it to surface OR unearth & stun it with your Iron Shovel [G] or a Bomb [B]!",
+                  3.5
+                );
               }
-            } else if (enemy.shockArmor && enemy.stunTimer <= 0) {
+            } else {
+              enemy.provoked = true;
+              const strikeDamage = (hero.swordDamage || 1) * (isSpin ? 2 : 1);
+
+              if (enemy.kind === "boss") {
+                // Boss 3-Step Vulnerability Loop: Phase 3 Melee Punish when STUNNED!
+                const bossName = getBossName(zone);
+                enemy.knockbackVx = 0;
+                enemy.knockbackVz = 0;
+                if (flags.bossState === "STUNNED" || enemy.state === "stunned") {
+                  const bossPunishDamage = strikeDamage * 3;
+                  enemy.hp -= bossPunishDamage;
+                  enemy.hitFlashTimer = 0.3;
+                  if (enemy.hp <= 0) {
+                    flags.bossState = "DEAD";
+                    handleEnemyDeath(enemy);
+                    continue;
+                  } else {
+                    soundEngine.playEnemyHit(true);
+                    pushBanner(
+                      isSpin
+                        ? `Spin Attack Punish on ${bossName}! (-${bossPunishDamage} HP!)`
+                        : `Sword Punish on Stunned ${bossName}! (-${bossPunishDamage} HP!)`,
+                      "Keep slashing with your Sword before his outer carapace regenerates!",
+                      2.8
+                    );
+                  }
+                } else if (flags.bossState === "EXPOSED_EYE") {
+                  soundEngine.playArmorDeflect();
+                  if (armorNoticeCooldown <= 0) {
+                    armorNoticeCooldown = 3.0;
+                    pushBanner(
+                      `${bossName}'s Chest Eye is Open — Shoot to Stun Him First!`,
+                      "Phase 2: Shoot his glowing Open Eye with your Bow [E / 2] or Boomerang [Q / 1] to knock him down!",
+                      3.5
+                    );
+                  }
+                } else {
+                  soundEngine.playArmorDeflect();
+                  if (armorNoticeCooldown <= 0) {
+                    armorNoticeCooldown = 3.2;
+                    pushBanner(
+                      `${bossName}'s Outer Carapace Deflects Your Sword!`,
+                      `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] or Bomb [B / 4] to crack his outer shell first!`,
+                      3.6
+                    );
+                  }
+                }
+              } else if (enemy.shockArmor && enemy.stunTimer <= 0) {
               // Slashing an active Electrified / Spiked Enemy without stunning it with the Boomerang shocks the Hero!
               soundEngine.playElectricShock();
               enemy.hitFlashTimer = 0.18;
@@ -7575,34 +7860,48 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
         }
       }
+      }
 
-      // Boss Rage Phase at 50% HP (spawns 2 Shadow Skeletons & intensifies Ignis / Vaelkor!)
+      // Boss Rage Phase at 50% HP (spawns 2 Guards & intensifies Ignis / Cryos / Vaelkor!)
       if (
         enemy.kind === "boss" &&
         enemy.hp <= Math.ceil(enemy.maxHp / 2) &&
         ((zone === "dungeon" && !flags.bossPhase2) ||
+          (zone === "caverns" && !flags.cavernBossPhase2) ||
           (zone === "citadel" && !flags.citadelBossPhase2))
       ) {
         if (zone === "citadel") {
           flags.citadelBossPhase2 = true;
+        } else if (zone === "caverns") {
+          flags.cavernBossPhase2 = true;
         } else {
           flags.bossPhase2 = true;
         }
-        const bossName = zone === "citadel" ? "Vaelkor" : "Ignis";
+        const bossName = getBossName(zone);
         soundEngine.playBossRoar();
         pushBanner(
-          `${bossName} Enters His Molten Rage Phase!`,
-          "Two Shadow Guards rise in the corners — keep burning his shell [R], stunning his Eye [E], and slashing [Space]!",
+          zone === "caverns"
+            ? `${bossName} Enters His Blizzard Rage Phase!`
+            : `${bossName} Enters His Molten Rage Phase!`,
+          zone === "caverns"
+            ? "Two Frost Wraiths materialize in the sanctum — melt his ice shell [R / B], stun his Eye [E], and slash [Space]!"
+            : "Two Shadow Guards rise in the corners — keep burning his shell [R], stunning his Eye [E], and slashing [Space]!",
           4.2
         );
-        const wave2Coords = [
-          { id: `${zone}-minion-wave2-1`, x: -8.5, z: 28.5 },
-          { id: `${zone}-minion-wave2-2`, x: 8.5, z: 28.5 },
-        ];
+        const wave2Coords =
+          zone === "caverns"
+            ? [
+                { id: `${zone}-wraith-wave2-1`, x: 18.5, z: 24.5, kind: "wraith" as EnemyKind },
+                { id: `${zone}-wraith-wave2-2`, x: 29.5, z: 24.5, kind: "wraith" as EnemyKind },
+              ]
+            : [
+                { id: `${zone}-minion-wave2-1`, x: -8.5, z: 28.5, kind: "minion" as EnemyKind },
+                { id: `${zone}-minion-wave2-2`, x: 8.5, z: 28.5, kind: "minion" as EnemyKind },
+              ];
         wave2Coords.forEach((wc) => {
           enemies.push({
             id: wc.id,
-            kind: "minion",
+            kind: wc.kind,
             zone,
             x: wc.x,
             z: wc.z,
@@ -7611,7 +7910,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             facing: Math.PI,
             hp: 4,
             maxHp: 4,
-            weight: 2.2,
+            weight: getDefaultEnemyWeight(wc.kind),
             state: "aggro",
             stateTimer: 0,
             hitFlashTimer: 0.2,
@@ -7621,7 +7920,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             knockbackVx: 0,
             knockbackVz: 0,
             aggroRadius: 15,
-            speed: 5.5,
+            speed: wc.kind === "wraith" ? 5.2 : 5.5,
             damage: 1,
             rupeeDrop: "blue",
             provoked: true,
@@ -7629,7 +7928,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             chargePathLength: 0,
             chargeDistanceTraveled: 0,
             actionCounter: 0,
-            actionCooldown: 0,
+            actionCooldown: 0.4,
           });
         });
       }
@@ -7638,18 +7937,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const toHeroZ = hero.z - enemy.z;
       const distToHero = Math.hypot(toHeroX, toHeroZ);
       const isSanctumEnemy =
-        (enemy.zone === "dungeon" || enemy.zone === "citadel") && enemy.spawnZ > 13;
+        ((enemy.zone === "dungeon" || enemy.zone === "citadel") && enemy.spawnZ > 13) ||
+        (enemy.zone === "caverns" && enemy.spawnX > 13.5 && enemy.spawnZ > 5.5);
       const enemyWeight = enemy.weight ?? getDefaultEnemyWeight(enemy.kind);
 
       // =====================================================
-      // DEDICATED BOSS AI STATE MACHINE ("IGNIS" & "VAELKOR")
+      // DEDICATED BOSS AI STATE MACHINE ("IGNIS", "CRYOS", & "VAELKOR")
       // =====================================================
       if (enemy.kind === "boss") {
-        const bossName = zone === "citadel" ? "Vaelkor" : "Ignis";
+        const bossName = getBossName(zone);
         const isCurrentBossAwakened =
-          zone === "citadel" ? Boolean(flags.citadelBossAwakened) : Boolean(flags.bossAwakened);
+          zone === "citadel"
+            ? Boolean(flags.citadelBossAwakened)
+            : zone === "caverns"
+            ? Boolean(flags.cavernBossAwakened)
+            : Boolean(flags.bossAwakened);
         const isCurrentBossPhase2 =
-          zone === "citadel" ? Boolean(flags.citadelBossPhase2) : Boolean(flags.bossPhase2);
+          zone === "citadel"
+            ? Boolean(flags.citadelBossPhase2)
+            : zone === "caverns"
+            ? Boolean(flags.cavernBossPhase2)
+            : Boolean(flags.bossPhase2);
+        const bossMinX = zone === "caverns" ? 13.8 : -14.5;
+        const bossMaxX = zone === "caverns" ? 31.5 : 14.5;
+        const bossMinZ = zone === "caverns" ? 6.5 : 14.5;
+        const bossMaxZ = zone === "caverns" ? 29.5 : 33.5;
 
         // Tick Phase 2 Exposed Eye countdown -> regenerates carapace if not stunned in time!
         if (flags.bossState === "EXPOSED_EYE" && enemy.state !== "stunned") {
@@ -7659,7 +7971,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             soundEngine.playArmorDeflect();
             pushBanner(
               `${bossName}'s Outer Carapace Regenerated!`,
-              `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] to burn off his shell again!`,
+              `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] or Bomb [B / 4] to crack his shell again!`,
               3.4
             );
           }
@@ -7691,8 +8003,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             enemy.facing = Math.atan2(toHeroX, toHeroZ);
           }
 
-          const nextBx = enemy.x + stalkVx * dt;
-          const nextBz = Math.max(14.5, enemy.z + stalkVz * dt);
+          const nextBx = Math.max(bossMinX, Math.min(bossMaxX, enemy.x + stalkVx * dt));
+          const nextBz = Math.max(bossMinZ, Math.min(bossMaxZ, enemy.z + stalkVz * dt));
           const resolvedB = resolveWorldCollisions(
             nextBx,
             nextBz,
@@ -7747,8 +8059,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
           if (enemy.stateTimer <= 0) {
             soundEngine.playBossLob();
-            const targetX = Math.max(-14.5, Math.min(14.5, hero.x));
-            const targetZ = Math.max(15.0, Math.min(33.5, hero.z));
+            const targetX = Math.max(bossMinX, Math.min(bossMaxX, hero.x));
+            const targetZ = Math.max(bossMinZ + 0.5, Math.min(bossMaxZ, hero.z));
             projectiles.push({
               id: `proj-${stats.elapsedSeconds.toFixed(3)}-1`,
               zone,
@@ -7762,15 +8074,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
               directHitRadius: 1.45,
             });
 
+            // Cryos (Map 4) & Vaelkor (Map 5) also fire a direct Frost / Sovereign Arcane Bolt that can be blocked or Mirror-Shield Reflected!
+            if (zone === "caverns" || zone === "citadel") {
+              arrows.push({
+                id: `boss-bolt-${enemy.id}-${stats.elapsedSeconds.toFixed(3)}`,
+                zone,
+                fromHero: false,
+                isFrost: zone === "caverns",
+                x: enemy.x + Math.sin(enemy.facing) * 1.35,
+                z: enemy.z + Math.cos(enemy.facing) * 1.35,
+                angle: enemy.facing,
+                speed: 13.5,
+                damage: enemy.damage,
+                lifeTimer: 2.2,
+              });
+            }
+
             if (isCurrentBossPhase2) {
               const offsetAngle = enemy.facing + 0.45;
               const tX2 = Math.max(
-                -14.5,
-                Math.min(14.5, hero.x + Math.sin(offsetAngle) * 3.8)
+                bossMinX,
+                Math.min(bossMaxX, hero.x + Math.sin(offsetAngle) * 3.8)
               );
               const tZ2 = Math.max(
-                15.0,
-                Math.min(33.5, hero.z + Math.cos(offsetAngle) * 3.8)
+                bossMinZ + 0.5,
+                Math.min(bossMaxZ, hero.z + Math.cos(offsetAngle) * 3.8)
               );
               projectiles.push({
                 id: `proj-${stats.elapsedSeconds.toFixed(3)}-2`,
@@ -7868,10 +8196,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
             }
           }
 
-          const hitSouthBarrier = nextBz - enemyRadius < 12.85;
+          const minBarrierZ = zone === "caverns" ? 6.0 : 12.85;
+          const hitArenaBoundary =
+            nextBz - enemyRadius < minBarrierZ ||
+            (zone === "caverns" && nextBx - enemyRadius < bossMinX);
           const resolvedB = resolveWorldCollisions(
-            nextBx,
-            Math.max(12.85 + enemyRadius, nextBz),
+            zone === "caverns" ? Math.max(bossMinX + enemyRadius, nextBx) : nextBx,
+            Math.max(minBarrierZ + enemyRadius, nextBz),
             enemyRadius,
             zone,
             gatePassable,
@@ -7881,7 +8212,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           enemy.x = resolvedB.x;
           enemy.z = resolvedB.z;
 
-          if (resolvedB.hitObstacle || hitSouthBarrier) {
+          if (resolvedB.hitObstacle || hitArenaBoundary) {
             soundEngine.playBossWallCrash();
             enemy.actionCounter += 1;
             enemy.actionCooldown = 1.1;
@@ -7900,7 +8231,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               enemy.stateTimer = 0.85;
               pushBanner(
                 `${bossName} Slammed into the Wall! (Carapace Still Intact)`,
-                "Phase 1: Burn his shell with the Flame Rod [R / 3], then shoot his Open Eye with Bow [E]!",
+                "Phase 1: Burn his shell with the Flame Rod [R / 3] or Bomb [B / 4], then shoot his Open Eye with Bow [E]!",
                 3.5
               );
             }
@@ -7924,7 +8255,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             soundEngine.playArmorDeflect();
             pushBanner(
               `${bossName} Recovered & Regenerated His Carapace!`,
-              `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] to burn off his shell again!`,
+              `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] or Bomb [B / 4] to crack his shell again!`,
               3.5
             );
           }
@@ -7943,8 +8274,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const pushOutX = bDist > 0.01 ? bDx / bDist : -Math.sin(hero.facing);
           const pushOutZ = bDist > 0.01 ? bDz / bDist : -Math.cos(hero.facing);
           const sepB = resolveWorldCollisions(
-            hero.x + pushOutX * minBossSep,
-            Math.max(14.5, hero.z + pushOutZ * minBossSep),
+            Math.max(bossMinX, hero.x + pushOutX * minBossSep),
+            Math.max(bossMinZ, hero.z + pushOutZ * minBossSep),
             enemyRadius,
             zone,
             gatePassable,
@@ -7958,8 +8289,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         continue;
       }
 
-      // If stunned by Hero's Boomerang, hold position briefly then resume aggro
+      // If stunned by Hero's Boomerang, Shovel, or Bomb, hold position briefly then resume aggro
       if (enemy.stunTimer > 0) {
+        if (enemy.kind === "burrower") {
+          enemy.burrowed = false;
+        }
         if (enemy.kind === "turret") {
           enemy.x = enemy.spawnX;
           enemy.z = enemy.spawnZ;
@@ -8159,6 +8493,320 @@ export const useGameStore = create<GameStore>((set, get) => ({
         );
         enemy.x = resolvedArcher.x;
         enemy.z = resolvedArcher.z;
+        continue;
+      }
+
+      // =====================================================
+      // FROST WRAITH AI STATE MACHINE (Glides & Fires Chilling Frost Bolts!)
+      // =====================================================
+      if (enemy.kind === "wraith") {
+        let moveVx = 0;
+        let moveVz = 0;
+
+        if (enemy.state === "idle") {
+          const hoverAngle = stats.elapsedSeconds * 1.4 + i * 2.1;
+          moveVx = Math.cos(hoverAngle) * (enemy.speed * 0.35);
+          moveVz = Math.sin(hoverAngle) * (enemy.speed * 0.35);
+          enemy.facing = Math.atan2(moveVx, moveVz);
+          if (enemy.provoked || (!isBossRoomSealed(enemy) && distToHero <= enemy.aggroRadius)) {
+            enemy.state = "aggro";
+            enemy.actionCooldown = 0.4;
+          }
+        } else if (enemy.state === "aggro") {
+          if (distToHero > 0.05) {
+            enemy.facing = Math.atan2(toHeroX, toHeroZ);
+          }
+          // Orbit & maintain 4.2..8.0 range while strafing
+          const strafeSign = i % 2 === 0 ? 1 : -1;
+          const perpX = distToHero > 0.05 ? (toHeroZ / distToHero) * strafeSign : 0;
+          const perpZ = distToHero > 0.05 ? (-toHeroX / distToHero) * strafeSign : 0;
+          if (distToHero < 4.2 && distToHero > 0.05) {
+            moveVx = (-toHeroX / distToHero) * (enemy.speed * 0.85) + perpX * (enemy.speed * 0.45);
+            moveVz = (-toHeroZ / distToHero) * (enemy.speed * 0.85) + perpZ * (enemy.speed * 0.45);
+          } else if (distToHero > 8.0 && distToHero > 0.05) {
+            moveVx = (toHeroX / distToHero) * (enemy.speed * 0.9) + perpX * (enemy.speed * 0.4);
+            moveVz = (toHeroZ / distToHero) * (enemy.speed * 0.9) + perpZ * (enemy.speed * 0.4);
+          } else {
+            moveVx = perpX * (enemy.speed * 0.65);
+            moveVz = perpZ * (enemy.speed * 0.65);
+          }
+
+          if (enemy.actionCooldown <= 0 && (distToHero <= 15.5 || enemy.provoked)) {
+            enemy.state = "windup";
+            enemy.stateTimer = 0.48;
+            enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+            enemy.facing = enemy.chargeAngle;
+          }
+        } else if (enemy.state === "windup") {
+          if (distToHero > 0.05) {
+            enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+            enemy.facing = enemy.chargeAngle;
+          }
+          if (enemy.stateTimer <= 0) {
+            soundEngine.playFireballShoot(false);
+            arrows.push({
+              id: `wraith-frost-${enemy.id}-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              fromHero: false,
+              isFrost: true,
+              x: enemy.x + Math.sin(enemy.facing) * 0.85,
+              z: enemy.z + Math.cos(enemy.facing) * 0.85,
+              angle: enemy.facing,
+              speed: 12.6,
+              damage: enemy.damage,
+              lifeTimer: 1.9,
+            });
+            enemy.state = "recover";
+            enemy.stateTimer = 0.4;
+            enemy.actionCooldown = 1.45;
+          }
+        } else if (enemy.state === "recover") {
+          if (enemy.stateTimer <= 0) {
+            enemy.state = "aggro";
+          }
+        }
+
+        const nextEx = enemy.x + (moveVx + enemy.knockbackVx) * dt;
+        const nextEz = enemy.z + (moveVz + enemy.knockbackVz) * dt;
+        enemy.knockbackVx *= Math.exp(-10 * dt);
+        enemy.knockbackVz *= Math.exp(-10 * dt);
+        const resolvedWraith = resolveWorldCollisions(
+          nextEx,
+          nextEz,
+          enemyRadius,
+          zone,
+          gatePassable,
+          dynamicObstacles,
+          bossExitOpen
+        );
+        enemy.x = resolvedWraith.x;
+        enemy.z = resolvedWraith.z;
+        continue;
+      }
+
+      // =====================================================
+      // SAPPER GREMLIN ("bomber") AI STATE MACHINE (Lobs Live Catchable Bombs!)
+      // =====================================================
+      if (enemy.kind === "bomber") {
+        let moveVx = 0;
+        let moveVz = 0;
+
+        if (enemy.state === "idle") {
+          if (enemy.provoked || (!isBossRoomSealed(enemy) && distToHero <= enemy.aggroRadius)) {
+            enemy.state = "aggro";
+            enemy.actionCooldown = 0.55;
+          }
+        } else if (enemy.state === "aggro") {
+          if (distToHero > 0.05) {
+            enemy.facing = Math.atan2(toHeroX, toHeroZ);
+          }
+          if (distToHero < 5.0 && distToHero > 0.05) {
+            const kiteX = enemy.x - (toHeroX / distToHero) * 4.5;
+            const kiteZ = enemy.z - (toHeroZ / distToHero) * 4.5;
+            const nav = computePathfindingMoveDir(
+              enemy.x,
+              enemy.z,
+              kiteX,
+              kiteZ,
+              enemyRadius,
+              zone,
+              gatePassable,
+              dynamicObstacles
+            );
+            moveVx = nav.dirX * (enemy.speed * 0.92);
+            moveVz = nav.dirZ * (enemy.speed * 0.92);
+          } else if (distToHero > 9.5) {
+            const nav = computePathfindingMoveDir(
+              enemy.x,
+              enemy.z,
+              hero.x,
+              hero.z,
+              enemyRadius,
+              zone,
+              gatePassable,
+              dynamicObstacles
+            );
+            moveVx = nav.dirX * enemy.speed;
+            moveVz = nav.dirZ * enemy.speed;
+          }
+
+          if (enemy.actionCooldown <= 0 && distToHero <= 12.5) {
+            enemy.state = "windup";
+            enemy.stateTimer = 0.62;
+            enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+            enemy.facing = enemy.chargeAngle;
+          }
+        } else if (enemy.state === "windup") {
+          if (distToHero > 0.05) {
+            enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+            enemy.facing = enemy.chargeAngle;
+          }
+          if (enemy.stateTimer <= 0) {
+            soundEngine.playBombPlace();
+            const throwDist = Math.min(8.5, Math.max(2.8, distToHero * 0.88));
+            const flightTime = 0.72;
+            const dirX = Math.sin(enemy.facing);
+            const dirZ = Math.cos(enemy.facing);
+            activeBombs.push({
+              id: `sapper-bomb-${enemy.id}-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: enemy.x + dirX * 0.65,
+              z: enemy.z + dirZ * 0.65,
+              y: 1.05,
+              vx: (dirX * throwDist) / flightTime,
+              vz: (dirZ * throwDist) / flightTime,
+              vy: 6.4,
+              fuseTimer: 2.25,
+              maxFuseTimer: 2.25,
+              exploded: false,
+            });
+            enemy.state = "recover";
+            enemy.stateTimer = 0.65;
+            enemy.actionCooldown = 2.65;
+          }
+        } else if (enemy.state === "recover") {
+          if (enemy.stateTimer <= 0) {
+            enemy.state = "aggro";
+          }
+        }
+
+        const nextEx = enemy.x + (moveVx + enemy.knockbackVx) * dt;
+        const nextEz = enemy.z + (moveVz + enemy.knockbackVz) * dt;
+        enemy.knockbackVx *= Math.exp(-10 * dt);
+        enemy.knockbackVz *= Math.exp(-10 * dt);
+        const resolvedBomber = resolveWorldCollisions(
+          nextEx,
+          nextEz,
+          enemyRadius,
+          zone,
+          gatePassable,
+          dynamicObstacles,
+          bossExitOpen
+        );
+        enemy.x = resolvedBomber.x;
+        enemy.z = resolvedBomber.z;
+        continue;
+      }
+
+      // =====================================================
+      // SUBTERRANEAN TUNNEL WYRM ("burrower") AI STATE MACHINE
+      // =====================================================
+      if (enemy.kind === "burrower") {
+        let moveVx = 0;
+        let moveVz = 0;
+
+        if (enemy.state === "idle") {
+          enemy.burrowed = true;
+          if (enemy.provoked || (!isBossRoomSealed(enemy) && distToHero <= enemy.aggroRadius)) {
+            enemy.state = "aggro";
+            enemy.actionCooldown = 0.85;
+          }
+        } else if (enemy.state === "aggro") {
+          enemy.burrowed = true;
+          if (distToHero > 0.05) {
+            enemy.facing = Math.atan2(toHeroX, toHeroZ);
+          }
+          if (distToHero > 4.2) {
+            const nav = computePathfindingMoveDir(
+              enemy.x,
+              enemy.z,
+              hero.x,
+              hero.z,
+              enemyRadius,
+              zone,
+              gatePassable,
+              dynamicObstacles
+            );
+            moveVx = nav.dirX * enemy.speed;
+            moveVz = nav.dirZ * enemy.speed;
+          } else if (distToHero < 2.6 && distToHero > 0.05) {
+            moveVx = (-toHeroX / distToHero) * (enemy.speed * 0.75);
+            moveVz = (-toHeroZ / distToHero) * (enemy.speed * 0.75);
+          }
+
+          if (enemy.actionCooldown <= 0 && distToHero <= 11.5) {
+            // Pop up from underground!
+            enemy.burrowed = false;
+            enemy.state = "windup";
+            enemy.stateTimer = 0.75;
+            enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+            enemy.facing = enemy.chargeAngle;
+            soundEngine.playShovelDig(false);
+            bushBursts.push({
+              id: `wyrm-surface-${enemy.id}-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: enemy.x,
+              z: enemy.z,
+              timer: 0.65,
+              maxTimer: 0.65,
+              seed: Math.floor(stats.elapsedSeconds * 130),
+              isDirt: true,
+            });
+          }
+        } else if (enemy.state === "windup") {
+          enemy.burrowed = false;
+          if (distToHero > 0.05) {
+            enemy.chargeAngle = Math.atan2(toHeroX, toHeroZ);
+            enemy.facing = enemy.chargeAngle;
+          }
+          if (enemy.stateTimer <= 0) {
+            enemy.state = "attack";
+            enemy.stateTimer = 0.25;
+            soundEngine.playRockSpit();
+            const spreadOffsets = [-0.26, 0, 0.26];
+            for (const angleOff of spreadOffsets) {
+              const shotAngle = enemy.facing + angleOff;
+              arrows.push({
+                id: `wyrm-rock-${enemy.id}-${angleOff}-${stats.elapsedSeconds.toFixed(3)}`,
+                zone,
+                fromHero: false,
+                isRock: true,
+                x: enemy.x + Math.sin(shotAngle) * 0.85,
+                z: enemy.z + Math.cos(shotAngle) * 0.85,
+                angle: shotAngle,
+                speed: 11.8,
+                damage: enemy.damage,
+                lifeTimer: 1.75,
+              });
+            }
+          }
+        } else if (enemy.state === "attack") {
+          enemy.burrowed = false;
+          if (enemy.stateTimer <= 0) {
+            enemy.state = "recover";
+            enemy.stateTimer = 1.15;
+            enemy.actionCooldown = 1.75;
+          }
+        } else if (enemy.state === "recover") {
+          enemy.burrowed = false;
+          if (enemy.stateTimer <= 0) {
+            enemy.state = "aggro";
+            enemy.burrowed = true;
+            soundEngine.playShovelDig(false);
+          }
+        } else if (enemy.state === "stunned") {
+          enemy.burrowed = false;
+          if (enemy.stateTimer <= 0) {
+            enemy.state = "aggro";
+            enemy.actionCooldown = 1.1;
+          }
+        }
+
+        const nextEx = enemy.x + (moveVx + enemy.knockbackVx) * dt;
+        const nextEz = enemy.z + (moveVz + enemy.knockbackVz) * dt;
+        enemy.knockbackVx *= Math.exp(-10 * dt);
+        enemy.knockbackVz *= Math.exp(-10 * dt);
+        const resolvedWyrm = resolveWorldCollisions(
+          nextEx,
+          nextEz,
+          enemyRadius,
+          zone,
+          gatePassable,
+          dynamicObstacles,
+          bossExitOpen
+        );
+        enemy.x = resolvedWyrm.x;
+        enemy.z = resolvedWyrm.z;
         continue;
       }
 
@@ -8531,7 +9179,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return true;
     });
 
-    // 11. Check if Boss Ignis (Map 2) or Boss Vaelkor (Map 5) and all Sanctum Minions (spawnZ > 13) are defeated!
+    // 11. Check if Boss Ignis (Map 2), Boss Cryos (Map 4), or Boss Vaelkor (Map 5) are defeated!
     if (zone === "dungeon" && !flags.bossDefeated) {
       const bossEnemy = enemies.find((e) => e.zone === "dungeon" && e.kind === "boss");
       const aliveSanctumMinions = enemies.filter(
@@ -8553,6 +9201,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
         pushBanner(
           "Ignis, the Armored Eye-Golem Vanquished! (+1 Full Heart Container!)",
           "Max HP permanently increased! Claim the Sanctum Relic Chest and step through the North Sanctuary Door into Map 3: Elderwood Highlands!",
+          7.0
+        );
+      }
+    }
+
+    if (zone === "caverns" && !flags.cavernBossDefeated) {
+      const cavernBossEnemy = enemies.find((e) => e.zone === "caverns" && e.kind === "boss");
+      if (cavernBossEnemy && cavernBossEnemy.state === "dead") {
+        flags.cavernBossDefeated = true;
+        flags.cavernWardensCleared = true;
+        flags.bossState = "DEAD";
+        flags.bossArmorTimer = 0;
+        if (!flags.cavernBossHeartAwarded) {
+          flags.cavernBossHeartAwarded = true;
+          hero.maxHp += 2;
+          hero.hp = hero.maxHp;
+          hero.damageFractionAcc = 0;
+        }
+        soundEngine.playVictoryFanfare();
+        soundEngine.playGateUnlock();
+        pushBanner(
+          "Cryos, the Glacial Colossus Vanquished! (+1 Full Heart Container!)",
+          "Max HP permanently increased & the Glacial Crest Key Pedestal is unsealed! Claim the key at the East Sanctum Pedestal!",
           7.0
         );
       }

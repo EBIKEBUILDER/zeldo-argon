@@ -14,6 +14,9 @@ export type EnemyKind =
   | "knight"
   | "minion"
   | "turret"
+  | "wraith"
+  | "bomber"
+  | "burrower"
   | "boss";
 export type RupeeTier = "green" | "blue" | "red" | "heart";
 
@@ -191,10 +194,16 @@ export function getDefaultEnemyWeight(kind: EnemyKind): number {
       return 0.5; // Lightweight: easy to knock back & juggle with sword spam
     case "archer":
       return 0.6; // Lightweight: easy to knock back repeatedly once reached
+    case "wraith":
+      return 1.2; // Floating ice specter
+    case "bomber":
+      return 1.4; // Agile bomb-lobber gremlin
     case "goblin":
       return 2.0; // Medium weight: moderate knockback resistance
     case "minion":
       return 2.2; // Medium-heavy weight
+    case "burrower":
+      return 3.5; // Subterranean armored wyrm
     case "knight":
       return 12.0; // Heavy juggernaut armor: shrugs off sword spam
     case "turret":
@@ -1358,6 +1367,62 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
   },
 
   // =========================================================
+  // MAP 3 EXTRA ENCOUNTERS: QUARRY BOMBERS, HIGHLAND BURROWER & FROST WRAITH
+  // =========================================================
+  {
+    id: "fr-quarry-bomber-1",
+    kind: "bomber",
+    zone: "frontier",
+    x: 23.5,
+    z: -6.2,
+    hp: 4,
+    weight: 1.4,
+    aggroRadius: 11.5,
+    speed: 4.8,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  {
+    id: "fr-quarry-bomber-2",
+    kind: "bomber",
+    zone: "frontier",
+    x: 23.5,
+    z: 1.2,
+    hp: 4,
+    weight: 1.4,
+    aggroRadius: 11.5,
+    speed: 4.8,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "fr-highland-burrower-1",
+    kind: "burrower",
+    zone: "frontier",
+    x: -14.5,
+    z: 12.5,
+    hp: 5,
+    weight: 3.5,
+    aggroRadius: 10.5,
+    speed: 4.6,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "fr-highland-wraith-1",
+    kind: "wraith",
+    zone: "frontier",
+    x: 0,
+    z: 23.5,
+    hp: 5,
+    weight: 1.2,
+    aggroRadius: 12.0,
+    speed: 5.2,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+
+  // =========================================================
   // MAP 4: FROSTPEAK CAVERNS & GLACIAL RELIQUARY (`zone: "caverns"`)
   // =========================================================
   {
@@ -1389,6 +1454,32 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     shockArmor: true,
   },
   {
+    id: "cv-entry-burrower-1",
+    kind: "burrower",
+    zone: "caverns",
+    x: -10.5,
+    z: -8.5,
+    hp: 5,
+    weight: 3.5,
+    aggroRadius: 10.5,
+    speed: 4.6,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  {
+    id: "cv-entry-wraith-1",
+    kind: "wraith",
+    zone: "caverns",
+    x: -6.5,
+    z: 5.5,
+    hp: 5,
+    weight: 1.2,
+    aggroRadius: 11.5,
+    speed: 5.2,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  {
     id: "cv-entry-goblin-1",
     kind: "goblin",
     zone: "caverns",
@@ -1417,50 +1508,47 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     rupeeDrop: "red",
     shieldArmor: "ice",
   },
-  // East Glacial Sanctum Wardens (`questGroup: "cavern_wardens"` — defeat them & shoot the Cyclops Eye Statue for the Glacial Crest Key!)
+  // East Glacial Sanctum Wardens & Boss Cryos (`questGroup: "cavern_wardens"` — defeat Cryos & his wardens or pierce the Cyclops Eye Statue for the Glacial Crest Key + Heart Container!)
   {
-    id: "cv-warden-knight-1",
-    kind: "knight",
+    id: "cv-warden-wraith-1",
+    kind: "wraith",
     zone: "caverns",
     x: 19.5,
     z: 5.5,
-    hp: 8,
-    weight: 12.0,
-    aggroRadius: 9.2,
-    speed: 5.1,
+    hp: 6,
+    weight: 1.2,
+    aggroRadius: 11.5,
+    speed: 5.3,
     damage: 1,
     rupeeDrop: "red",
-    shieldArmor: "ice",
     questGroup: "cavern_wardens",
   },
   {
-    id: "cv-warden-knight-2",
-    kind: "knight",
+    id: "cv-warden-bomber-1",
+    kind: "bomber",
     zone: "caverns",
     x: 28.5,
     z: 5.5,
-    hp: 8,
-    weight: 12.0,
-    aggroRadius: 9.2,
-    speed: 5.1,
+    hp: 5,
+    weight: 1.4,
+    aggroRadius: 11.5,
+    speed: 4.9,
     damage: 1,
     rupeeDrop: "red",
-    shieldArmor: "ice",
     questGroup: "cavern_wardens",
   },
   {
-    id: "cv-warden-archer",
-    kind: "archer",
+    id: "cv-boss",
+    kind: "boss",
     zone: "caverns",
     x: 24.0,
-    z: 19.5,
-    hp: 5,
-    weight: 0.8,
-    aggroRadius: 12.5,
-    speed: 4.8,
+    z: 19.0,
+    hp: 26,
+    weight: 100.0,
+    aggroRadius: 13.5,
+    speed: 3.9,
     damage: 1,
-    rupeeDrop: "red",
-    isBounty: true,
+    rupeeDrop: "boss",
     questGroup: "cavern_wardens",
   },
 
@@ -1522,6 +1610,45 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     shockArmor: true,
   },
   {
+    id: "ct-courtyard-bomber",
+    kind: "bomber",
+    zone: "citadel",
+    x: 0,
+    z: -9.5,
+    hp: 5,
+    weight: 1.4,
+    aggroRadius: 11.5,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ct-courtyard-wraith-w",
+    kind: "wraith",
+    zone: "citadel",
+    x: -11.5,
+    z: -4.5,
+    hp: 6,
+    weight: 1.2,
+    aggroRadius: 12.0,
+    speed: 5.4,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ct-courtyard-wraith-e",
+    kind: "wraith",
+    zone: "citadel",
+    x: 11.5,
+    z: -4.5,
+    hp: 6,
+    weight: 1.2,
+    aggroRadius: 12.0,
+    speed: 5.4,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
     id: "ct-armory-guard",
     kind: "knight",
     zone: "citadel",
@@ -1534,6 +1661,19 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     damage: 1,
     rupeeDrop: "red",
     shieldArmor: "wood",
+  },
+  {
+    id: "ct-east-burrower",
+    kind: "burrower",
+    zone: "citadel",
+    x: 22.0,
+    z: 2.5,
+    hp: 6,
+    weight: 3.5,
+    aggroRadius: 11.0,
+    speed: 4.8,
+    damage: 1,
+    rupeeDrop: "red",
   },
   {
     id: "ct-east-guard",

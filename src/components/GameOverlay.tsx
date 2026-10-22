@@ -157,10 +157,13 @@ const MONSTER_PALETTE: Array<{
   { prefab: "enemy:turret", label: "Stone Spitter Turret", weightLabel: "Heavy (18.0)" },
   { prefab: "enemy:slime", label: "Poring Blob Slime", weightLabel: "Light (0.5)" },
   { prefab: "enemy:archer", label: "Goblin Bowman Archer", weightLabel: "Light (0.6)" },
+  { prefab: "enemy:wraith", label: "Frost Wraith (Glacial Specter)", weightLabel: "Light (0.8)" },
+  { prefab: "enemy:bomber", label: "Sapper Gremlin (Bomb-Lobber)", weightLabel: "Medium (1.4)" },
   { prefab: "enemy:goblin", label: "Goblin Fighter", weightLabel: "Medium (2.0)" },
   { prefab: "enemy:minion", label: "Shadow Minion", weightLabel: "Medium (2.2)" },
+  { prefab: "enemy:burrower", label: "Tunnel Wyrm (Unearth w/ Shovel/Bomb)", weightLabel: "Heavy (3.6)" },
   { prefab: "enemy:knight", label: "Sentinel Knight", weightLabel: "Heavy (12.0)" },
-  { prefab: "enemy:boss", label: "Boss: Ignis (Eye-Golem)", weightLabel: "Immovable (100)" },
+  { prefab: "enemy:boss", label: "Boss: Ignis / Cryos / Vaelkor", weightLabel: "Immovable (100)" },
 ];
 
 const TERRAIN_SWATCHES = [
@@ -394,9 +397,9 @@ export default function GameOverlay() {
     } else if (flags.citadelBossAwakened) {
       currentObjective =
         flags.bossState === "ARMORED"
-          ? "Boss Vaelkor (Phase 1): Burn Vaelkor's Obsidian-Flame Carapace with Flame Rod (R)!"
+          ? "Boss Vaelkor (Phase 1): Reflect Vaelkor's Arcane Bolts with Mirror Shield (RMB) OR burn its shell with Flame Rod (R)!"
           : flags.bossState === "EXPOSED_EYE"
-          ? "Boss Vaelkor (Phase 2): Vaelkor's Eye is OPEN! Shoot it with Bow (E) or Boomerang (Q)!"
+          ? "Boss Vaelkor (Phase 2): Vaelkor's Eye is OPEN! Shoot it with Bow (E), Boomerang (Q), or Reflect a Bolt (RMB)!"
           : "Boss Vaelkor (Phase 3): VAELKOR IS STUNNED! Slash with Sword (Space / LMB) for 3x Damage!";
     } else if (!flags.citadelArmoryChestOpened) {
       currentObjective =
@@ -409,12 +412,22 @@ export default function GameOverlay() {
         "Act V (Obsidian Citadel): Step North into the Sovereign's Throne to confront Vaelkor!";
     }
   } else if (zone === "caverns") {
-    if (!flags.cavernShovelChestOpened) {
+    if (flags.cavernBossAwakened && !flags.cavernBossDefeated) {
+      currentObjective =
+        flags.bossState === "ARMORED"
+          ? "Boss Cryos (Phase 1): Melt Cryos's Glacial Carapace with Flame Rod (R) or Bombs (B)!"
+          : flags.bossState === "EXPOSED_EYE"
+          ? "Boss Cryos (Phase 2): Cryos's Eye is OPEN! Shoot it with Bow (E) or Boomerang (Q) to crash it!"
+          : "Boss Cryos (Phase 3): CRYOS IS STUNNED! Slash with Sword (Space / LMB) for 3x Melee Damage!";
+    } else if (!flags.cavernShovelChestOpened) {
       currentObjective =
         "Act IV (Frostpeak Caverns): Blast the NW Cracked Wall (-22, 11.5) with a Bomb (B) to unlock the Shovel (G) & Sapphire Mail!";
+    } else if (!flags.cavernBossDefeated) {
+      currentObjective =
+        "Act IV (Frostpeak Caverns): Throw Boomerang (Q) at the East Crystal Orb (15.5, 4.5) & defeat Cryos, the Glacial Colossus (24, 19)!";
     } else if (!flags.cavernCrestKeyPickedUp) {
       currentObjective =
-        "Act IV (Frostpeak Caverns): Throw Boomerang (Q) at the East Crystal Orb (15.5, 4.5), melt the 3 Frost Wardens (R) & claim the Glacial Crest Key!";
+        "Cryos Defeated (+1 Heart Container)! Claim the unsealed Glacial Crest Key from the East Pedestal (24, 14)!";
     } else {
       currentObjective =
         "Glacial Crest Key Acquired! Take the NE Shortcut Portal (24, 29.5) or West Exit back to Map 3 to unlock the North Citadel Gate!";
@@ -872,6 +885,9 @@ export default function GameOverlay() {
           {!editorMode &&
             phase === "playing" &&
             ((zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated) ||
+              (zone === "caverns" &&
+                flags.cavernBossAwakened &&
+                !flags.cavernBossDefeated) ||
               (zone === "citadel" &&
                 flags.citadelBossAwakened &&
                 !flags.citadelBossDefeated)) &&
@@ -881,6 +897,8 @@ export default function GameOverlay() {
                   <span className="boss-name">
                     {zone === "citadel"
                       ? "VAELKOR, THE OBSIDIAN SOVEREIGN"
+                      : zone === "caverns"
+                      ? "CRYOS, THE GLACIAL COLOSSUS"
                       : "IGNIS, THE ARMORED EYE-GOLEM"}
                   </span>
                   <span className="minion-tag">
@@ -889,10 +907,12 @@ export default function GameOverlay() {
                       : flags.bossState === "EXPOSED_EYE"
                       ? `PHASE 2: EYE OPEN (${(flags.bossArmorTimer ?? 0).toFixed(1)}s) — SHOOT WITH BOW (E) OR BOOMERANG (Q)!`
                       : activeMinions > 0
-                      ? `PHASE 1: ELEMENTAL SHELL — BURN WITH FLAME ROD (R)! • +${activeMinions} Minion${
-                          activeMinions > 1 ? "s" : ""
-                        }`
-                      : "PHASE 1: ELEMENTAL SHELL — BURN WITH FLAME ROD (R)!"}
+                      ? `PHASE 1: ELEMENTAL SHELL — BURN WITH FLAME ROD (R)${
+                          zone === "citadel" ? " OR REFLECT BOLTS (RMB)" : ""
+                        }! • +${activeMinions} Minion${activeMinions > 1 ? "s" : ""}`
+                      : `PHASE 1: ELEMENTAL SHELL — BURN WITH FLAME ROD (R)${
+                          zone === "citadel" ? " OR REFLECT BOLTS (RMB)" : ""
+                        }!`}
                   </span>
                 </div>
                 <div className="boss-hp-track">
@@ -1865,10 +1885,13 @@ export default function GameOverlay() {
                     <option value="turret">Stone Spitter Turret (Shoots Rocks)</option>
                     <option value="slime">Poring Blob Slime</option>
                     <option value="archer">Goblin Bowman Archer</option>
+                    <option value="wraith">Frost Wraith (Glacial Specter)</option>
+                    <option value="bomber">Sapper Gremlin (Lobs Live Bombs)</option>
                     <option value="goblin">Moss Goblin Fighter</option>
                     <option value="minion">Shadow Minion</option>
+                    <option value="burrower">Tunnel Wyrm (Unearth w/ Shovel/Bomb)</option>
                     <option value="knight">Sentinel Knight</option>
-                    <option value="boss">Boss: Malakor</option>
+                    <option value="boss">Boss: Ignis / Cryos / Vaelkor</option>
                   </select>
                 </label>
 
