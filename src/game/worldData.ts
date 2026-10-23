@@ -35,6 +35,7 @@ export type PropPrefabId =
   | "spiderweb_barrier"
   | "eye_statue"
   | "grapple_post"
+  | "rusted_peg"
   | "boulder"
   | "ruin_pillar"
   | "dungeon_pillar"
@@ -115,6 +116,8 @@ export interface MapPropInstance {
   buriedReward?: BuriedRewardKind;
   // Liftable Pots, Light Rocks & Explodable Cracked Rocks
   smashed?: boolean;
+  // Rusted Iron Floor Pegs / Barrier Stakes (Pound flat into the ground with Titan War-Hammer [T / 8]!)
+  pounded?: boolean;
   potReward?: PotRewardKind;
   // Pushable Blocks (1.0s walk-against slide + block puzzle target)
   puzzleTargetX?: number;
@@ -375,6 +378,12 @@ export const FRONTIER_CITADEL_GATE_POS = {
 export const CAVERN_SHOVEL_CHEST_POS = {
   x: -22.0,
   z: 20.0,
+};
+
+// Map 4 (Frostpeak Caverns) South-West Glacial Forge Chest (Unlocks Titan War-Hammer [T / 8]!)
+export const CAVERN_HAMMER_CHEST_POS = {
+  x: -24.5,
+  z: -18.5,
 };
 
 // Map 4 (Frostpeak Caverns) East Glacial Sanctum Pedestal (Rewards the Glacial Crest Key to unlock Map 5!)
@@ -1521,6 +1530,21 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     zone: "caverns",
     x: -22.0,
     z: 15.5,
+    hp: 8,
+    weight: 12.0,
+    aggroRadius: 8.8,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "red",
+    shieldArmor: "ice",
+  },
+  // SW Glacial Forge Guardian (guards the Titan War-Hammer Chest at -24.5, -18.5!)
+  {
+    id: "cv-hammer-guard",
+    kind: "knight",
+    zone: "caverns",
+    x: -21.0,
+    z: -15.5,
     hp: 8,
     weight: 12.0,
     aggroRadius: 8.8,
@@ -4746,6 +4770,144 @@ export function buildInitialMapProps(): MapPropInstance[] {
     });
   });
 
+  // 23. RUSTED IRON FLOOR PEGS ("rusted_peg") ACROSS MAPS 1-5 (Pound Flat into the Ground with Titan War-Hammer [T / 8]!)
+  const rustedPegs: Array<{
+    id: string;
+    name: string;
+    zone: ZoneId;
+    x: number;
+    z: number;
+  }> = [
+    // Map 1 (Overworld): NE Lake Alcove Rusted Stakes guarding a Red Rupee Supply Pot!
+    {
+      id: "prop-ow-rusted-peg-1",
+      name: "Overworld Lake Stake W (Pound with War-Hammer [T]!)",
+      zone: "overworld",
+      x: 24.5,
+      z: 18.0,
+    },
+    {
+      id: "prop-ow-rusted-peg-2",
+      name: "Overworld Lake Stake E (Pound with War-Hammer [T]!)",
+      zone: "overworld",
+      x: 26.2,
+      z: 18.0,
+    },
+    // Map 2 (Dungeon Room 1): South-West Hub Corner Stake
+    {
+      id: "prop-dg-rusted-peg-1",
+      name: "Sanctum Hub Rusted Stake (Pound with War-Hammer [T]!)",
+      zone: "dungeon",
+      x: -9.5,
+      z: -10.5,
+    },
+    // Map 3 (Elderwood Highlands): Central Ruin Shortcut Stakes
+    {
+      id: "prop-fr-rusted-peg-1",
+      name: "Highland Ruin Stake N (Pound with War-Hammer [T]!)",
+      zone: "frontier",
+      x: -9.5,
+      z: -2.0,
+    },
+    {
+      id: "prop-fr-rusted-peg-2",
+      name: "Highland Ruin Stake S (Pound with War-Hammer [T]!)",
+      zone: "frontier",
+      x: -9.5,
+      z: -3.8,
+    },
+    // Map 4 (Frostpeak Caverns): SW Glacial Forge Trial Stakes right beside the War-Hammer Chest!
+    {
+      id: "prop-cv-rusted-peg-1",
+      name: "Glacial Forge Stake W (Test Your War-Hammer [T]!)",
+      zone: "caverns",
+      x: -28.5,
+      z: -21.5,
+    },
+    {
+      id: "prop-cv-rusted-peg-2",
+      name: "Glacial Forge Stake E (Test Your War-Hammer [T]!)",
+      zone: "caverns",
+      x: -26.8,
+      z: -21.5,
+    },
+    // Map 5 (Obsidian Citadel): East Courtyard Reliquary Guard Stakes
+    {
+      id: "prop-ct-rusted-peg-1",
+      name: "Citadel Courtyard Stake N (Pound with War-Hammer [T]!)",
+      zone: "citadel",
+      x: 16.5,
+      z: -4.8,
+    },
+    {
+      id: "prop-ct-rusted-peg-2",
+      name: "Citadel Courtyard Stake S (Pound with War-Hammer [T]!)",
+      zone: "citadel",
+      x: 16.5,
+      z: -7.2,
+    },
+  ];
+  rustedPegs.forEach((rp) => {
+    props.push({
+      id: rp.id,
+      prefab: "rusted_peg",
+      name: rp.name,
+      zone: rp.zone,
+      x: rp.x,
+      y: 0,
+      z: rp.z,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.35,
+      colliderDepth: 1.35,
+      colliderKind: "pillar",
+      pounded: false,
+    });
+  });
+
+  // Bonus Supply Pots behind the Rusted Iron Floor Pegs in Overworld & Frostpeak Caverns
+  props.push(
+    {
+      id: "prop-ow-peg-reward-pot",
+      prefab: "clay_pot",
+      name: "Lake Alcove Treasure Pot (20 Rupees)",
+      zone: "overworld",
+      x: 25.35,
+      y: 0,
+      z: 20.2,
+      rotY: 0.3,
+      scaleX: 1.05,
+      scaleY: 1.05,
+      scaleZ: 1.05,
+      hasCollider: true,
+      colliderWidth: 1.0,
+      colliderDepth: 1.0,
+      colliderKind: "ruin",
+      potReward: "red_rupee",
+    },
+    {
+      id: "prop-cv-forge-reward-pot",
+      prefab: "clay_pot",
+      name: "Glacial Forge Treasure Pot (20 Rupees)",
+      zone: "caverns",
+      x: -27.65,
+      y: 0,
+      z: -23.8,
+      rotY: 0.5,
+      scaleX: 1.05,
+      scaleY: 1.05,
+      scaleZ: 1.05,
+      hasCollider: true,
+      colliderWidth: 1.0,
+      colliderDepth: 1.0,
+      colliderKind: "ruin",
+      potReward: "red_rupee",
+    }
+  );
+
   return props;
 }
 
@@ -4856,7 +5018,7 @@ export function buildObstaclesFromMapProps(mapProps: MapPropInstance[]): RectObs
   ];
 
   for (const prop of mapProps) {
-    if (!prop.hasCollider || prop.smashed) continue;
+    if (!prop.hasCollider || prop.smashed || prop.pounded) continue;
     const isScaledBox =
       prop.prefab === "stone_wall" ||
       prop.prefab === "cliff_block" ||

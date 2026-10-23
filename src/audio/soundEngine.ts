@@ -1421,7 +1421,61 @@ class SoundEngine {
       osc.stop(t + 0.13);
     });
   }
+
+  public playHammerSlam(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Deep sub-bass seismic thump + crisp metallic shockwave
+    const subOsc = ctx.createOscillator();
+    const subGain = ctx.createGain();
+    subOsc.type = "sine";
+    subOsc.frequency.setValueAtTime(145, now);
+    subOsc.frequency.exponentialRampToValueAtTime(34, now + 0.34);
+    subGain.gain.setValueAtTime(0.38, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+    subOsc.connect(subGain);
+    subGain.connect(ctx.destination);
+    subOsc.start(now);
+    subOsc.stop(now + 0.37);
+
+    const crunchOsc = ctx.createOscillator();
+    const crunchGain = ctx.createGain();
+    crunchOsc.type = "sawtooth";
+    crunchOsc.frequency.setValueAtTime(220, now);
+    crunchOsc.frequency.exponentialRampToValueAtTime(62, now + 0.18);
+    crunchGain.gain.setValueAtTime(0.2, now);
+    crunchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    crunchOsc.connect(crunchGain);
+    crunchGain.connect(ctx.destination);
+    crunchOsc.start(now);
+    crunchOsc.stop(now + 0.21);
+  }
+
+  public playPegPound(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Heavy blacksmith anvil clang + timber drive
+    [480, 720, 310].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const t = now + i * 0.025;
+      osc.type = i === 2 ? "sawtooth" : "triangle";
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.65, t + 0.15);
+      gain.gain.setValueAtTime(0.24, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.17);
+    });
+  }
 }
 
 export const soundEngine = new SoundEngine();
+
 

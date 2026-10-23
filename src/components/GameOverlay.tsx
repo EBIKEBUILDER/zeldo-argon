@@ -123,6 +123,7 @@ function formatTime(seconds: number): string {
 }
 
 const PROP_PALETTE: Array<{ id: PropPrefabId; label: string; tag: string }> = [
+  { id: "rusted_peg", label: "Rusted Iron Peg (Pound w/ Hammer)", tag: "Puzzle" },
   { id: "grapple_post", label: "Grapple Anchor Post (Hookshot)", tag: "Puzzle" },
   { id: "eye_statue", label: "Wall Eye Statue (Shoot w/ Bow)", tag: "Puzzle" },
   { id: "clay_pot", label: "Clay Pot (Lift & Throw)", tag: "Interact" },
@@ -721,6 +722,30 @@ export default function GameOverlay() {
                         : "Hookshot..."
                       : "Hookshot"
                     : "Hookshot (Map 3)"}
+                </span>
+              </div>
+
+              <div
+                className={`gear-slot ${
+                  hero.hasHammer
+                    ? (hero.hammerAnimTimer ?? 0) > 0
+                      ? "gear-slot-active"
+                      : (hero.hammerCooldown ?? 0) > 0
+                      ? "gear-slot-warn"
+                      : "gear-slot-owned"
+                    : "gear-slot-locked"
+                }`}
+                title="Press T or 8 to slam the Titan War-Hammer — pounds Rusted Iron Pegs flat, shatters Cracked Boulders & Ice/Wood Shields in 1 blow, flips Spiked Beetles, and unearths Burrowed Wyrms!"
+              >
+                <span className="gear-key">T</span>
+                <span className="gear-name">
+                  {hero.hasHammer
+                    ? (hero.hammerAnimTimer ?? 0) > 0
+                      ? "Slamming!"
+                      : (hero.hammerCooldown ?? 0) > 0
+                      ? `Hammer (${(hero.hammerCooldown ?? 0).toFixed(1)}s)`
+                      : "War-Hammer"
+                    : "Hammer (Map 4)"}
                 </span>
               </div>
 
@@ -3063,6 +3088,31 @@ export default function GameOverlay() {
                     : hero.rupees >= 180
                     ? "Unlock Hookshot — 180 Rupees"
                     : `Need 180 Rupees (Or Map 3 NW)`}
+                </button>
+              </div>
+
+              {/* TITAN WAR-HAMMER (220 RUPEES — OR FREE IN MAP 4 SW FORGE) */}
+              <div className={`shop-item-card ${hero.hasHammer ? "shop-item-owned" : ""}`}>
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Titan War-Hammer</span>
+                  <span className="shop-item-hotkey">220 Rupees • Key: T / 8</span>
+                </div>
+                <p className="shop-item-desc">
+                  Slams a radial seismic shockwave that <strong>pounds Rusted Iron Pegs flat</strong>,
+                  shatters Cracked Boulders &amp; Ice/Wood Shields in 1 blow, flips Spiked Beetles,
+                  and unearths Burrowed Wyrms! <em>(Or find in Map 4 SW!)</em>
+                </p>
+                <button
+                  type="button"
+                  disabled={hero.hasHammer || hero.rupees < 220}
+                  onClick={() => buyShopItem("hammer")}
+                  className="shop-buy-btn"
+                >
+                  {hero.hasHammer
+                    ? "Owned ✓"
+                    : hero.rupees >= 220
+                    ? "Unlock War-Hammer — 220 Rupees"
+                    : `Need 220 Rupees (Or Map 4 SW)`}
                 </button>
               </div>
 

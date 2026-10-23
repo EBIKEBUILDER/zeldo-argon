@@ -29,6 +29,7 @@ import {
   BOSS_CHEST_POS,
   BOSS_EXIT_GATE_POS,
   CAVERN_CREST_KEY_POS,
+  CAVERN_HAMMER_CHEST_POS,
   CAVERN_SHOVEL_CHEST_POS,
   CITADEL_ARMORY_CHEST_POS,
   CITADEL_BOSS_GATE_POS,
@@ -2015,6 +2016,91 @@ export default function BabylonCanvas() {
       shBlade.parent = cavernShovelRelicNode;
     }
 
+    // SW Glacial Forge War-Hammer Chest (`CAVERN_HAMMER_CHEST_POS = -24.5, -18.5`)
+    const cavernHammerChestRoot = new TransformNode("cavernHammerChestRoot", scene);
+    cavernHammerChestRoot.parent = cavernsRoot;
+    cavernHammerChestRoot.position.set(CAVERN_HAMMER_CHEST_POS.x, 0, CAVERN_HAMMER_CHEST_POS.z);
+
+    const cvHammerDais = MeshBuilder.CreateBox(
+      "cvHammerDais",
+      { width: 3.6, height: 0.36, depth: 2.8 },
+      scene
+    );
+    cvHammerDais.position.set(0, 0.18, 0);
+    cvHammerDais.material = dgPillarMat;
+    cvHammerDais.parent = cavernHammerChestRoot;
+
+    const cvHammerBase = MeshBuilder.CreateBox(
+      "cvHammerBase",
+      { width: 1.85, height: 0.92, depth: 1.25 },
+      scene
+    );
+    cvHammerBase.position.set(0, 0.82, 0);
+    cvHammerBase.material = darkObsidianMat;
+    cvHammerBase.parent = cavernHammerChestRoot;
+
+    const cvHammerTrim = MeshBuilder.CreateBox(
+      "cvHammerTrim",
+      { width: 1.94, height: 0.22, depth: 1.32 },
+      scene
+    );
+    cvHammerTrim.position.set(0, 1.2, 0);
+    cvHammerTrim.material = goldKeyMat;
+    cvHammerTrim.parent = cavernHammerChestRoot;
+
+    const cavernHammerChestLid = MeshBuilder.CreateCylinder(
+      "cavernHammerChestLid",
+      { diameter: 1.25, height: 1.88, tessellation: 16 },
+      scene
+    );
+    cavernHammerChestLid.rotation.z = Math.PI / 2;
+    cavernHammerChestLid.position.set(0, 1.32, 0);
+    cavernHammerChestLid.material = goldKeyMat;
+    cavernHammerChestLid.parent = cavernHammerChestRoot;
+
+    const cavernHammerChestRing = MeshBuilder.CreateTorus(
+      "cavernHammerChestRing",
+      { diameter: 2.9, thickness: 0.13, tessellation: 24 },
+      scene
+    );
+    cavernHammerChestRing.position.set(0, 0.45, 0);
+    cavernHammerChestRing.material = goldKeyMat;
+    cavernHammerChestRing.parent = cavernHammerChestRoot;
+
+    const cavernHammerRelicNode = new TransformNode("cavernHammerRelicNode", scene);
+    cavernHammerRelicNode.parent = cavernHammerChestRoot;
+    cavernHammerRelicNode.position.set(0, 2.28, 0);
+    {
+      const hmShaft = MeshBuilder.CreateCylinder(
+        "cvHammerRelicShaft",
+        { diameter: 0.12, height: 1.05, tessellation: 10 },
+        scene
+      );
+      hmShaft.rotation.z = -0.32;
+      hmShaft.material = woodMat;
+      hmShaft.parent = cavernHammerRelicNode;
+
+      const hmHead = MeshBuilder.CreateBox(
+        "cvHammerRelicHead",
+        { width: 0.68, height: 0.38, depth: 0.42 },
+        scene
+      );
+      hmHead.position.set(0.16, 0.42, 0);
+      hmHead.rotation.z = -0.32;
+      hmHead.material = ironGateMat;
+      hmHead.parent = cavernHammerRelicNode;
+
+      const hmFaces = MeshBuilder.CreateCylinder(
+        "cvHammerRelicFaces",
+        { diameter: 0.36, height: 0.74, tessellation: 12 },
+        scene
+      );
+      hmFaces.position.set(0.16, 0.42, 0);
+      hmFaces.rotation.z = Math.PI / 2 - 0.32;
+      hmFaces.material = goldKeyMat;
+      hmFaces.parent = cavernHammerRelicNode;
+    }
+
     // East Glacial Sanctum Pedestal & Floating Glacial Crest Key (`CAVERN_CREST_KEY_POS = 24.0, 14.0`)
     const cvKeyPedestal = MeshBuilder.CreateCylinder(
       "cvKeyPedestal",
@@ -3488,6 +3574,43 @@ export default function BabylonCanvas() {
         goldParts.push(topLatchRing);
 
         mergeGroupWithMaterial(`grappleGoldMerged-${prop.id}`, goldParts, goldKeyMat, root, meta);
+      } else if (prop.prefab === "rusted_peg") {
+        // Rusted Iron Floor Peg / Barrier Stake (Pound flat into the ground with Titan War-Hammer T / 8!)
+        const socketRing = MeshBuilder.CreateCylinder(
+          `pegSocket-${prop.id}`,
+          { diameterTop: 0.94, diameterBottom: 1.12, height: 0.18, tessellation: 12 },
+          scene
+        );
+        socketRing.position.set(0, 0.09, 0);
+        socketRing.material = dgPillarMat;
+        socketRing.parent = root;
+
+        const ironParts: Mesh[] = [];
+        const stakeShaft = MeshBuilder.CreateCylinder(
+          `pegShaft-${prop.id}`,
+          { diameterTop: 0.64, diameterBottom: 0.54, height: 1.42, tessellation: 8 },
+          scene
+        );
+        stakeShaft.position.set(0, 0.78, 0);
+        ironParts.push(stakeShaft);
+
+        const stakeHead = MeshBuilder.CreateCylinder(
+          `pegHead-${prop.id}`,
+          { diameterTop: 0.82, diameterBottom: 0.9, height: 0.32, tessellation: 8 },
+          scene
+        );
+        stakeHead.position.set(0, 1.56, 0);
+        ironParts.push(stakeHead);
+        mergeGroupWithMaterial(`pegIronMerged-${prop.id}`, ironParts, ironGateMat, root, meta);
+
+        const strikeRuneRing = MeshBuilder.CreateTorus(
+          `pegRuneRing-${prop.id}`,
+          { diameter: 0.58, thickness: 0.09, tessellation: 16 },
+          scene
+        );
+        strikeRuneRing.position.set(0, 1.73, 0);
+        strikeRuneRing.material = goldKeyMat;
+        strikeRuneRing.parent = root;
       } else if (prop.prefab === "custom_model") {
         const asset = customModels.find((m) => m.id === prop.customModelId);
         const customMesh = new Mesh(`customMesh-${prop.id}`, scene);
@@ -3976,6 +4099,45 @@ export default function BabylonCanvas() {
     shovelScoop.material = bladeMat;
     shovelScoop.parent = heroShovelNode;
     heroShovelNode.setEnabled(false);
+
+    // --- 3D TITAN WAR-HAMMER ON HERO (SHOWN WHEN SLAMMING T / 8) ---
+    const heroHammerNode = new TransformNode("heroHammerNode", scene);
+    heroHammerNode.position.set(0.32, 1.15, 0.25);
+    heroHammerNode.parent = heroRoot;
+    {
+      const hmHandle = MeshBuilder.CreateCylinder(
+        "heroHammerHandle",
+        { diameter: 0.11, height: 1.48, tessellation: 10 },
+        scene
+      );
+      hmHandle.position.set(0, 0.62, 0);
+      hmHandle.material = woodMat;
+      hmHandle.isPickable = false;
+      hmHandle.parent = heroHammerNode;
+
+      const hmHeadCore = MeshBuilder.CreateBox(
+        "heroHammerHeadCore",
+        { width: 0.74, height: 0.44, depth: 0.48 },
+        scene
+      );
+      hmHeadCore.position.set(0, 1.32, 0);
+      hmHeadCore.rotation.y = Math.PI / 2;
+      hmHeadCore.material = ironGateMat;
+      hmHeadCore.isPickable = false;
+      hmHeadCore.parent = heroHammerNode;
+
+      const hmImpactFaces = MeshBuilder.CreateCylinder(
+        "heroHammerImpactFaces",
+        { diameter: 0.42, height: 0.84, tessellation: 12 },
+        scene
+      );
+      hmImpactFaces.position.set(0, 1.32, 0);
+      hmImpactFaces.rotation.x = Math.PI / 2;
+      hmImpactFaces.material = goldKeyMat;
+      hmImpactFaces.isPickable = false;
+      hmImpactFaces.parent = heroHammerNode;
+    }
+    heroHammerNode.setEnabled(false);
 
     // --- 3D RANGER'S BOW ON HERO (SHOWN WHEN SHOOTING ARROWS) ---
     const heroBowNode = new TransformNode("heroBowNode", scene);
@@ -6857,6 +7019,54 @@ export default function BabylonCanvas() {
       return { root, bodyNode, bodyMat, spark, blastSphere, blastRing };
     };
 
+    const hammerShockwaveRigs = new Map<
+      string,
+      { root: TransformNode; outerRing: Mesh; innerRing: Mesh; groundDisc: Mesh }
+    >();
+    const hammerShockDiscMat = makeMat(
+      "hammerShockDiscMat",
+      new Color3(1.0, 0.72, 0.22),
+      new Color3(0.95, 0.58, 0.14),
+      new Color3(0, 0, 0),
+      0.32
+    );
+
+    const buildHammerShockwaveRig = (id: string) => {
+      const root = new TransformNode(`hammerShockRoot-${id}`, scene);
+
+      const outerRing = MeshBuilder.CreateTorus(
+        `hammerShockOuter-${id}`,
+        { diameter: 2.0, thickness: 0.14, tessellation: 32 },
+        scene
+      );
+      outerRing.position.set(0, 0.14, 0);
+      outerRing.material = fireballCoreMat;
+      outerRing.isPickable = false;
+      outerRing.parent = root;
+
+      const innerRing = MeshBuilder.CreateTorus(
+        `hammerShockInner-${id}`,
+        { diameter: 1.35, thickness: 0.1, tessellation: 28 },
+        scene
+      );
+      innerRing.position.set(0, 0.12, 0);
+      innerRing.material = goldKeyMat;
+      innerRing.isPickable = false;
+      innerRing.parent = root;
+
+      const groundDisc = MeshBuilder.CreateCylinder(
+        `hammerShockDisc-${id}`,
+        { diameter: 2.0, height: 0.03, tessellation: 28 },
+        scene
+      );
+      groundDisc.position.set(0, 0.05, 0);
+      groundDisc.material = hammerShockDiscMat;
+      groundDisc.isPickable = false;
+      groundDisc.parent = root;
+
+      return { root, outerRing, innerRing, groundDisc };
+    };
+
     // =========================================================
     // 3D BUSH CHOP LEAF, SHOVEL DIRT, CERAMIC POT & ROCK SHARD BURSTS
     // =========================================================
@@ -6990,6 +7200,7 @@ export default function BabylonCanvas() {
     let interactTriggeredOnce = false;
     let boomerangTriggeredOnce = false;
     let hookshotTriggeredOnce = false;
+    let hammerTriggeredOnce = false;
     let bowTriggeredOnce = false;
     let fireRodTriggeredOnce = false;
     let shovelTriggeredOnce = false;
@@ -7121,6 +7332,9 @@ export default function BabylonCanvas() {
       }
       if ((code === "KeyH" || code === "Digit7") && !pressedKeys.has(code)) {
         hookshotTriggeredOnce = true;
+      }
+      if ((code === "KeyT" || code === "Digit8") && !pressedKeys.has(code)) {
+        hammerTriggeredOnce = true;
       }
       pressedKeys.add(code);
     };
@@ -7286,6 +7500,7 @@ export default function BabylonCanvas() {
         interactTriggeredOnce = false;
         boomerangTriggeredOnce = false;
         hookshotTriggeredOnce = false;
+        hammerTriggeredOnce = false;
         bowTriggeredOnce = false;
         fireRodTriggeredOnce = false;
         shovelTriggeredOnce = false;
@@ -7306,6 +7521,7 @@ export default function BabylonCanvas() {
         const interactPressed = interactTriggeredOnce;
         const boomerangPressed = boomerangTriggeredOnce;
         const hookshotPressed = hookshotTriggeredOnce;
+        const hammerPressed = hammerTriggeredOnce;
         const bowPressed = bowTriggeredOnce;
         const fireRodPressed = fireRodTriggeredOnce;
         const fireRodHeld =
@@ -7318,6 +7534,7 @@ export default function BabylonCanvas() {
         interactTriggeredOnce = false;
         boomerangTriggeredOnce = false;
         hookshotTriggeredOnce = false;
+        hammerTriggeredOnce = false;
         bowTriggeredOnce = false;
         fireRodTriggeredOnce = false;
         shovelTriggeredOnce = false;
@@ -7334,6 +7551,7 @@ export default function BabylonCanvas() {
             interactPressed,
             boomerangPressed,
             hookshotPressed,
+            hammerPressed,
             bowPressed,
             fireRodPressed,
             fireRodHeld,
@@ -7515,6 +7733,8 @@ export default function BabylonCanvas() {
               prop.scaleY * burnProg,
               prop.scaleZ * (burnProg - jitter)
             );
+          } else if (prop.prefab === "rusted_peg" && !snap.editorMode && prop.pounded) {
+            pRig.root.scaling.set(prop.scaleX * 1.08, prop.scaleY * 0.16, prop.scaleZ * 1.08);
           } else {
             pRig.root.scaling.set(prop.scaleX, prop.scaleY, prop.scaleZ);
           }
@@ -7697,6 +7917,7 @@ export default function BabylonCanvas() {
       const isFireRodPose =
         (snap.hero.fireRodCooldown ?? 0) > 0.12 || (snap.hero.fireRodChargeTimer ?? 0) > 0;
       const isShovelPose = (snap.hero.digAnimTimer ?? 0) > 0;
+      const isHammerPose = (snap.hero.hammerAnimTimer ?? 0) > 0;
       const heldObj = snap.hero.heldObject;
 
       heroBowNode.setEnabled(isBowPose);
@@ -7705,6 +7926,16 @@ export default function BabylonCanvas() {
       if (isShovelPose) {
         const digProg = 1 - (snap.hero.digAnimTimer ?? 0) / 0.34;
         heroShovelNode.rotation.x = 0.35 + Math.sin(digProg * Math.PI) * 0.85;
+      }
+
+      heroHammerNode.setEnabled(isHammerPose);
+      if (isHammerPose) {
+        const hmProg = 1 - (snap.hero.hammerAnimTimer ?? 0) / 0.42;
+        const slamArc =
+          hmProg < 0.38
+            ? -0.95 + (hmProg / 0.38) * 2.55
+            : 1.6 - ((hmProg - 0.38) / 0.62) * 0.35;
+        heroHammerNode.rotation.x = slamArc;
       }
 
       heroHeldNode.setEnabled(Boolean(heldObj));
@@ -7733,6 +7964,7 @@ export default function BabylonCanvas() {
         !isThrowPose &&
         !isFireRodPose &&
         !isShovelPose &&
+        !isHammerPose &&
         !heldObj;
       swordPivot.setEnabled(showSword);
 
@@ -8049,6 +8281,19 @@ export default function BabylonCanvas() {
         cavernShovelRelicNode.setEnabled(true);
         cavernShovelRelicNode.rotation.y = t * 2.5;
         cavernShovelRelicNode.position.y = 2.25 + Math.sin(t * 3.3) * 0.16;
+      }
+
+      if (snap.flags.cavernHammerChestOpened) {
+        cavernHammerChestLid.position.set(0, 1.65, 0.42);
+        cavernHammerChestRing.setEnabled(false);
+        cavernHammerRelicNode.setEnabled(false);
+      } else {
+        cavernHammerChestLid.position.set(0, 1.32, 0);
+        cavernHammerChestRing.setEnabled(true);
+        cavernHammerChestRing.rotation.y = -t * 2.1;
+        cavernHammerRelicNode.setEnabled(true);
+        cavernHammerRelicNode.rotation.y = t * 2.6;
+        cavernHammerRelicNode.position.y = 2.28 + Math.sin(t * 3.5) * 0.16;
       }
 
       const showGlacialKey = isCaverns && !snap.flags.cavernCrestKeyPickedUp;
@@ -8623,6 +8868,38 @@ export default function BabylonCanvas() {
         if (!activeBombIds.has(id)) {
           bmRig.root.dispose();
           bombRigs.delete(id);
+        }
+      });
+
+      // 7h. Sync Titan War-Hammer Radial Seismic Shockwaves (`snap.hammerShockwaves`)
+      const activeShockwaveIds = new Set<string>();
+      for (const sw of snap.hammerShockwaves) {
+        activeShockwaveIds.add(sw.id);
+        let swRig = hammerShockwaveRigs.get(sw.id);
+        if (!swRig) {
+          swRig = buildHammerShockwaveRig(sw.id);
+          hammerShockwaveRigs.set(sw.id, swRig);
+        }
+        const showSw = sw.zone === snap.zone && sw.timer > 0;
+        swRig.root.setEnabled(showSw);
+        if (!showSw) continue;
+
+        const swGroundY = sampleTerrainHeight(activeCells, sw.x, sw.z);
+        swRig.root.position.set(sw.x, swGroundY, sw.z);
+
+        const prog = 1 - Math.max(0, sw.timer) / Math.max(0.01, sw.maxTimer);
+        const radScale = (0.28 + prog * 0.84) * sw.maxRadius;
+        const fadeY = Math.max(0.2, 1 - prog * 0.72);
+        swRig.outerRing.scaling.set(radScale, fadeY, radScale);
+        swRig.innerRing.scaling.set(radScale * 0.78, fadeY, radScale * 0.78);
+        swRig.groundDisc.scaling.set(radScale * 0.92, 1, radScale * 0.92);
+        swRig.outerRing.rotation.y = t * 8.0;
+        swRig.innerRing.rotation.y = -t * 10.0;
+      }
+      hammerShockwaveRigs.forEach((swRig, id) => {
+        if (!activeShockwaveIds.has(id)) {
+          swRig.root.dispose();
+          hammerShockwaveRigs.delete(id);
         }
       });
 

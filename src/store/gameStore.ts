@@ -9,6 +9,7 @@ import {
   buildObstaclesFromMapProps,
   BuriedRewardKind,
   CAVERN_CREST_KEY_POS,
+  CAVERN_HAMMER_CHEST_POS,
   CAVERN_SHOVEL_CHEST_POS,
   CITADEL_ARMORY_CHEST_POS,
   CITADEL_BOSS_GATE_POS,
@@ -66,6 +67,7 @@ export type ShopItemId =
   | "shovel"
   | "fire_rod"
   | "hookshot"
+  | "hammer"
   | "swift_boots"
   | "titan_greaves"
   | "mirror_shield"
@@ -135,6 +137,16 @@ export interface BombProjectileState {
   explosionTimer?: number;
 }
 
+export interface HammerShockwaveState {
+  id: string;
+  zone: ZoneId;
+  x: number;
+  z: number;
+  timer: number;
+  maxTimer: number;
+  maxRadius: number;
+}
+
 export interface EditorSelection {
   kind: EditorEntityKind;
   id: string;
@@ -174,6 +186,7 @@ export interface HeroState {
   hasFireRod: boolean;
   hasShovel: boolean;
   hasHookshot?: boolean;
+  hasHammer?: boolean;
   arrows: number;
   bombs: number;
   maxBombs: number;
@@ -203,6 +216,8 @@ export interface HeroState {
   fireRodChargeTimer: number;
   fireRodCooldown: number;
   hookshotCooldown?: number;
+  hammerCooldown?: number;
+  hammerAnimTimer?: number;
   digAnimTimer: number;
   attackCooldown: number;
   boomerangCooldown: number;
@@ -454,6 +469,7 @@ export interface GameFlags {
   cavernWardensCleared?: boolean;
   cavernEyeSolved?: boolean;
   cavernShovelChestOpened?: boolean;
+  cavernHammerChestOpened?: boolean;
   cavernCrestKeyPickedUp?: boolean;
   hasGlacialKey?: boolean;
   cavernBossAwakened?: boolean;
@@ -496,6 +512,7 @@ export interface FrameInput {
   fireRodHeld?: boolean;
   shovelPressed?: boolean;
   hookshotPressed?: boolean;
+  hammerPressed?: boolean;
   bottlePressed?: boolean;
   interactPressed?: boolean;
   bombPressed?: boolean;
@@ -509,6 +526,7 @@ export interface SerializableGameState {
   enemies: EnemyState[];
   boomerang: BoomerangState | null;
   hookshot: HookshotState | null;
+  hammerShockwaves: HammerShockwaveState[];
   arrows: ArrowProjectileState[];
   fireballs: FireballProjectileState[];
   fireZones: FireZoneState[];
@@ -851,6 +869,7 @@ function createInitialState(
       hasFireRod: false,
       hasShovel: false,
       hasHookshot: false,
+      hasHammer: false,
       arrows: 20,
       bombs: 0,
       maxBombs: 0,
@@ -879,6 +898,8 @@ function createInitialState(
       fireRodChargeTimer: 0,
       fireRodCooldown: 0,
       hookshotCooldown: 0,
+      hammerCooldown: 0,
+      hammerAnimTimer: 0,
       digAnimTimer: 0,
       attackCooldown: 0,
       boomerangCooldown: 0,
@@ -899,6 +920,7 @@ function createInitialState(
     enemies: createInitialEnemies(),
     boomerang: null,
     hookshot: null,
+    hammerShockwaves: [],
     arrows: [],
     fireballs: [],
     fireZones: [],
@@ -988,6 +1010,7 @@ function createInitialState(
       cavernWardensCleared: false,
       cavernEyeSolved: false,
       cavernShovelChestOpened: false,
+      cavernHammerChestOpened: false,
       cavernCrestKeyPickedUp: false,
       hasGlacialKey: false,
       cavernBossAwakened: false,
@@ -1015,7 +1038,7 @@ function createInitialState(
             id: 1,
             text: "Map 1: Whispering Crossroads (Act I — The Adventure Begins)",
             subtext:
-              "West Exit -> Map 1B Grove (Sanctum Key) • North -> Map 2 Dungeon (Flame Rod) • East -> Map 3 Frontier (Bombs & Hookshot) • Map 4 Caverns (Shovel) • Map 5 Citadel!",
+              "West Exit -> Map 1B Grove (Sanctum Key) • North -> Map 2 Dungeon (Flame Rod) • East -> Map 3 Frontier (Bombs & Hookshot) • Map 4 Caverns (Shovel & War-Hammer) • Map 5 Citadel!",
             timer: 6.5,
           }
         : null,
@@ -1040,7 +1063,7 @@ function createInitialState(
   };
 }
 
-const MAP_STORAGE_KEY = "zeldo-authored-map-v11";
+const MAP_STORAGE_KEY = "zeldo-authored-map-v12";
 
 function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   if (p.prefab === "dirt_patch") {
@@ -1048,6 +1071,9 @@ function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   }
   if (p.prefab === "clay_pot" || p.prefab === "light_rock" || p.prefab === "cracked_rock") {
     return { ...p, smashed: false, hasCollider: true };
+  }
+  if (p.prefab === "rusted_peg") {
+    return { ...p, pounded: false, hasCollider: true };
   }
   if (p.prefab === "briar_barrier" || p.prefab === "spiderweb_barrier") {
     return { ...p, smashed: false, hasCollider: true, burningTimer: 0 };
@@ -1182,6 +1208,7 @@ const DEFAULT_PROP_META: Record<
   spiderweb_barrier: { label: "Thick Spiderweb Barrier (Burnable)", hasCollider: true, w: 5.0, d: 1.6, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "wall" },
   eye_statue: { label: "Sanctum Eye Statue (Bow Target)", hasCollider: true, w: 1.6, d: 1.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "wall" },
   grapple_post: { label: "Grapple Anchor Post (Hookshot [H])", hasCollider: true, w: 1.1, d: 1.1, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
+  rusted_peg: { label: "Rusted Iron Floor Peg (War-Hammer [T])", hasCollider: true, w: 1.35, d: 1.35, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   boulder: { label: "Mossy Boulder", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
   ruin_pillar: { label: "Watchtower Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   dungeon_pillar: { label: "Sanctum Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
@@ -2202,6 +2229,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ],
       boomerang: null,
       hookshot: null,
+      hammerShockwaves: [],
       flags: {
         ...state.flags,
         keyPickedUp: false,
@@ -2247,6 +2275,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         cavernWardensCleared: false,
         cavernEyeSolved: false,
         cavernShovelChestOpened: false,
+        cavernHammerChestOpened: false,
         cavernCrestKeyPickedUp: false,
         hasGlacialKey: false,
         cavernBossAwakened: false,
@@ -2281,6 +2310,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         fireRodChargeTimer: 0,
         fireRodCooldown: 0,
         hookshotCooldown: 0,
+        hammerCooldown: 0,
+        hammerAnimTimer: 0,
         digAnimTimer: 0,
         attackCooldown: 0,
         boomerangCooldown: 0,
@@ -2546,14 +2577,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.equippedPrimary = "tempered_blade";
       hero.swordDamage = 2;
       hero.hasHookshot = true;
+      hero.hasHammer = true;
       hero.maxBombs = Math.max(hero.maxBombs || 0, 30);
       hero.bombs = hero.maxBombs;
       hero.mp = hero.maxMp;
 
       soundEngine.playVictoryFanfare();
       pushNotice(
-        "Champion's Progression Set Unlocked! (+1 Heart, Mirror Shield, Master Blade, Hookshot & 30 Bombs)",
-        "Your Max HP increased, Aegis Mirror Shield, Tempered Blade & Hookshot [H] are equipped, and your Bomb Bag holds 30 Bombs!"
+        "Champion's Progression Set Unlocked! (+1 Heart, Mirror Shield, Master Blade, Hookshot, War-Hammer & 30 Bombs)",
+        "Your Max HP increased, Aegis Mirror Shield, Tempered Blade, Hookshot [H] & War-Hammer [T] are equipped, and your Bomb Bag holds 30 Bombs!"
       );
       return;
     }
@@ -2615,6 +2647,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
       pushNotice(
         "Unlocked the Grappling Hookshot! (Key: H / 7)",
         "Press H or 7 to grapple across chasms onto Wooden Grapple Posts & Trees, rip shields off Goblins, or snag distant Rupees & Keys!"
+      );
+      return;
+    }
+
+    if (item === "hammer") {
+      if (hero.hasHammer) return;
+      if (hero.rupees < 220) {
+        soundEngine.playGateLocked();
+        pushNotice(
+          "Not Enough Rupees!",
+          "The Titan War-Hammer costs 220 Rupees (or claim it free inside Map 4's SW Glacial Forge Chest!)."
+        );
+        return;
+      }
+      hero.rupees -= 220;
+      hero.hasHammer = true;
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        "Unlocked the Titan War-Hammer! (Key: T / 8)",
+        "Press T or 8 to slam the ground with a seismic shockwave — pound Rusted Stakes flat, smash Cracked Boulders & Pots, and shatter Ice/Wood Armor!"
       );
       return;
     }
@@ -3141,12 +3193,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let chestNoticeCooldown = Math.max(0, state.chestNoticeCooldown - dt);
     let armorNoticeCooldown = Math.max(0, state.armorNoticeCooldown - dt);
 
-    // 1. Update Hero Timers, Charged Spin Attack, Shield Block, Boomerang, Hookshot, Bow, Flame Rod & Shovel
+    // 1. Update Hero Timers, Charged Spin Attack, Shield Block, Boomerang, Hookshot, War-Hammer, Bow, Flame Rod & Shovel
     hero.attackTimer = Math.max(0, hero.attackTimer - dt);
     hero.spinAttackTimer = Math.max(0, (hero.spinAttackTimer ?? 0) - dt);
     hero.attackCooldown = Math.max(0, hero.attackCooldown - dt);
     hero.boomerangCooldown = Math.max(0, (hero.boomerangCooldown ?? 0) - dt);
     hero.hookshotCooldown = Math.max(0, (hero.hookshotCooldown ?? 0) - dt);
+    hero.hammerCooldown = Math.max(0, (hero.hammerCooldown ?? 0) - dt);
+    hero.hammerAnimTimer = Math.max(0, (hero.hammerAnimTimer ?? 0) - dt);
     hero.bowCooldown = Math.max(0, hero.bowCooldown - dt);
     hero.fireRodCooldown = Math.max(0, (hero.fireRodCooldown ?? 0) - dt);
     hero.bowAnimTimer = Math.max(0, (hero.bowAnimTimer ?? 0) - dt);
@@ -3180,6 +3234,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           carryingGlacialKey: state.hookshot.carryingGlacialKey ?? false,
         }
       : null;
+    const hammerShockwaves: HammerShockwaveState[] = (state.hammerShockwaves ?? [])
+      .map((sw) => ({ ...sw, timer: sw.timer - dt }))
+      .filter((sw) => sw.timer > 0);
     let arrows: ArrowProjectileState[] = state.arrows.map((a) => ({ ...a }));
     let fireballs: FireballProjectileState[] = (state.fireballs ?? []).map((f) => ({ ...f }));
     let fireZones: FireZoneState[] = (state.fireZones ?? []).map((fz) => ({ ...fz }));
@@ -4064,7 +4121,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.isAttacking &&
       hero.bowAnimTimer <= 0 &&
       hero.throwAnimTimer <= 0 &&
-      hero.digAnimTimer <= 0;
+      hero.digAnimTimer <= 0 &&
+      (hero.hammerAnimTimer ?? 0) <= 0;
+    let hammerSlamImpactPos: { x: number; z: number } | null = null;
 
     // Shovel Digging Action (Press G or 4)
     if (canUseWeapon && input.shovelPressed && !hero.hasShovel) {
@@ -4324,6 +4383,49 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     } else if (
       canUseWeapon &&
+      input.hammerPressed &&
+      (hero.hammerCooldown ?? 0) <= 0
+    ) {
+      // Trigger Titan War-Hammer Overhead Slam + Radial Seismic Shockwave (T or 8)
+      if (!hero.hasHammer) {
+        soundEngine.playGateLocked();
+        pushBanner(
+          "No Titan War-Hammer Equipped!",
+          "Claim the Titan War-Hammer in the SW Glacial Forge of Map 4 (Frostpeak Caverns) or buy it at Bramble's Shop!",
+          3.2
+        );
+        hero.hammerCooldown = 0.4;
+      } else {
+        hero.isBlocking = false;
+        hero.hammerAnimTimer = 0.42;
+        hero.weaponLockTimer = 0.42;
+        hero.hammerCooldown = 0.72;
+        const slamX = hero.x + Math.sin(hero.facing) * 1.3;
+        const slamZ = hero.z + Math.cos(hero.facing) * 1.3;
+        hammerSlamImpactPos = { x: slamX, z: slamZ };
+        soundEngine.playHammerSlam();
+        hammerShockwaves.push({
+          id: `hammer-sw-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+          zone,
+          x: slamX,
+          z: slamZ,
+          timer: 0.48,
+          maxTimer: 0.48,
+          maxRadius: 3.8,
+        });
+        bushBursts.push({
+          id: `hammer-burst-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+          zone,
+          x: slamX,
+          z: slamZ,
+          timer: 0.75,
+          maxTimer: 0.75,
+          seed: Math.floor(Math.abs(slamX * 67 + slamZ * 103) + stats.elapsedSeconds * 140),
+          isRock: true,
+        });
+      }
+    } else if (
+      canUseWeapon &&
       input.hookshotPressed &&
       !hookshot &&
       (hero.hookshotCooldown ?? 0) <= 0
@@ -4442,6 +4544,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.bowAnimTimer > 0 ||
       hero.throwAnimTimer > 0 ||
       hero.digAnimTimer > 0 ||
+      (hero.hammerAnimTimer ?? 0) > 0 ||
       Boolean(hookshot);
 
     // Right-click Shield Block (disabled while holding a pot/rock/bomb overhead)
@@ -5197,6 +5300,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // 4f. Map 4 (`caverns` — Frostpeak Caverns & Glacial Reliquary):
     // - NW Reliquary Vault Chest (`CAVERN_SHOVEL_CHEST_POS = -22.0, 20.0`): Unlocks Explorer's Iron Shovel (`G`) + Sapphire Mail (`blue_mail`)!
+    // - SW Glacial Forge Chest (`CAVERN_HAMMER_CHEST_POS = -24.5, -18.5`): Unlocks Titan War-Hammer (`T / 8`)!
     // - East Glacial Sanctum Pedestal (`CAVERN_CREST_KEY_POS = 24.0, 14.0`): Unlocks Glacial Crest Key once the 3 Frost Wardens OR Cyclops Eye are cleared!
     if (zone === "caverns") {
       if (!flags.cavernShovelChestOpened) {
@@ -5220,6 +5324,37 @@ export const useGameStore = create<GameStore>((set, get) => ({
             "Dig the Soft Dirt Patches nearby with [G] for an Empty Bottle & Fairy, then cross the East Frozen Stream to win the Glacial Crest Key!",
             6.8
           );
+        }
+      }
+
+      if (!flags.cavernHammerChestOpened) {
+        const distToHammerChest = Math.hypot(
+          hero.x - CAVERN_HAMMER_CHEST_POS.x,
+          hero.z - CAVERN_HAMMER_CHEST_POS.z
+        );
+        const hammerGuard = enemies.find(
+          (e) => e.id === "cv-hammer-guard" && e.state !== "dead"
+        );
+        if (distToHammerChest < 2.65) {
+          if (!hammerGuard) {
+            flags.cavernHammerChestOpened = true;
+            hero.hasHammer = true;
+            hero.rupees += 20;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Acquired the Titan War-Hammer [T / 8]! (+20 Rupees!)",
+              "Press T [or 8] to slam the earth — pound Rusted Iron Stakes flat, smash Cracked Boulders & Pots, and shatter Ice/Wood Armor in one blow!",
+              7.0
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Glacial Forge Chest is Guarded!",
+              "Melt the SW Forge Sentinel's Ice Armor with your Flame Rod [R / 3] and defeat him to claim the Titan War-Hammer!",
+              4.4
+            );
+          }
         }
       }
 
@@ -6075,6 +6210,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
           5.5
         );
       }
+
+      if (enemy.id === "cv-hammer-guard" && !flags.cavernHammerChestOpened) {
+        soundEngine.playSecretSolve();
+        pushBanner(
+          "Glacial Forge Sentinel Vanquished! (War-Hammer Chest Unsealed!)",
+          "Walk up to the SW Glacial Forge Chest to claim the Titan War-Hammer [T / 8]!",
+          5.5
+        );
+      }
     };
 
     const getBossName = (z: ZoneId = zone): string =>
@@ -6084,6 +6228,224 @@ export const useGameStore = create<GameStore>((set, get) => ({
       (e.zone === "dungeon" && (e.kind === "boss" || e.spawnZ > 13) && !flags.bossAwakened) ||
       (e.zone === "citadel" && (e.kind === "boss" || e.spawnZ > 13) && !flags.citadelBossAwakened) ||
       (e.zone === "caverns" && e.kind === "boss" && !flags.cavernBossAwakened);
+
+    // 8c-2. Resolve Titan War-Hammer Overhead Slam + Radial Seismic Shockwave (`hammerSlamImpactPos`)
+    if (hammerSlamImpactPos) {
+      const { x: sx, z: sz } = hammerSlamImpactPos;
+      let poundedPegCount = 0;
+      let smashedBoulderCount = 0;
+
+      // 1) Environmental Props: Pound `rusted_peg` stakes flat, smash `cracked_rock` / `clay_pot` / `light_rock`, and toggle `crystal_switch`!
+      for (let i = 0; i < mapProps.length; i++) {
+        const prop = mapProps[i];
+        if (prop.zone !== zone) continue;
+        const dist = Math.hypot(prop.x - sx, prop.z - sz);
+
+        if (prop.prefab === "rusted_peg" && !prop.pounded && dist <= 2.95) {
+          ensureMutableMapProps();
+          mapProps[i].pounded = true;
+          mapProps[i].hasCollider = false;
+          poundedPegCount++;
+          soundEngine.playPegPound();
+          bushBursts.push({
+            id: `peg-pound-${prop.id}-${stats.elapsedSeconds.toFixed(3)}`,
+            zone,
+            x: prop.x,
+            z: prop.z,
+            timer: 0.65,
+            maxTimer: 0.65,
+            seed: Math.floor(Math.abs(prop.x * 73 + prop.z * 89) + stats.elapsedSeconds * 110),
+            isRock: true,
+          });
+        } else if (prop.prefab === "cracked_rock" && !prop.smashed && dist <= 3.15) {
+          ensureMutableMapProps();
+          mapProps[i].smashed = true;
+          mapProps[i].hasCollider = false;
+          smashedBoulderCount++;
+          soundEngine.playBombExplode();
+          soundEngine.playSecretSolve();
+          bushBursts.push({
+            id: `hammer-rock-${prop.id}-${stats.elapsedSeconds.toFixed(3)}`,
+            zone,
+            x: prop.x,
+            z: prop.z,
+            timer: 0.9,
+            maxTimer: 0.9,
+            seed: Math.floor(Math.abs(prop.x * 59 + prop.z * 97) + stats.elapsedSeconds * 130),
+            isRock: true,
+          });
+        } else if (
+          (prop.prefab === "clay_pot" || prop.prefab === "light_rock") &&
+          !prop.smashed &&
+          dist <= 2.95
+        ) {
+          ensureMutableMapProps();
+          mapProps[i].smashed = true;
+          mapProps[i].hasCollider = false;
+          smashPotOrRock(prop.x, prop.z, prop.prefab, prop.potReward, prop.id);
+        } else if (
+          prop.prefab === "crystal_switch" &&
+          (prop.hitCooldown ?? 0) <= 0 &&
+          dist <= 3.6
+        ) {
+          toggleCrystalSwitch(prop.id);
+        }
+      }
+
+      if (poundedPegCount > 0 || smashedBoulderCount > 0) {
+        dynamicObstacles = getActiveObstacles(mapProps);
+      }
+      if (poundedPegCount > 0) {
+        soundEngine.playSecretSolve();
+        pushBanner(
+          poundedPegCount > 1
+            ? `Pounded ${poundedPegCount} Rusted Iron Stakes Flat!`
+            : "Pounded the Rusted Iron Stake Flat!",
+          "The barrier stake was driven flush into the earth — the path is clear!",
+          3.8
+        );
+      } else if (smashedBoulderCount > 0) {
+        pushBanner(
+          "War-Hammer Shattered the Cracked Boulder!",
+          "Your Titan War-Hammer pulverized the stone seal without using a single Bomb!",
+          4.0
+        );
+      }
+
+      // 2) Enemy Combat Impact: Unearth burrowed Wyrms, shatter Ice/Wood Armor, flip Spiked Beetles, crack Boss Carapace, & deal 3 Damage!
+      for (const enemy of enemies) {
+        if (enemy.zone !== zone || enemy.state === "dead") continue;
+        if (isBossRoomSealed(enemy)) continue;
+        const dx = enemy.x - sx;
+        const dz = enemy.z - sz;
+        const dist = Math.hypot(dx, dz);
+
+        // Unearth Burrowed Tunnel Wyrms within 3.8m seismic shockwave!
+        if (enemy.kind === "burrower" && enemy.burrowed) {
+          if (dist <= 3.8) {
+            enemy.burrowed = false;
+            enemy.provoked = true;
+            enemy.stunTimer = 3.8;
+            enemy.state = "stunned";
+            enemy.stateTimer = 3.8;
+            enemy.hp -= 2;
+            enemy.hitFlashTimer = 0.45;
+            soundEngine.playBossWallCrash();
+            bushBursts.push({
+              id: `hammer-wyrm-${enemy.id}-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: enemy.x,
+              z: enemy.z,
+              timer: 0.85,
+              maxTimer: 0.85,
+              seed: Math.floor(Math.abs(enemy.x * 59 + enemy.z * 97) + stats.elapsedSeconds * 130),
+              isDirt: true,
+            });
+            if (enemy.hp <= 0) {
+              handleEnemyDeath(enemy);
+            } else {
+              pushBanner(
+                "Seismic Slam Unearthed the Tunnel Wyrm! (-2 HP & Stunned!)",
+                "The War-Hammer's shockwave blasted the burrowed Wyrm out of the ground!",
+                4.0
+              );
+            }
+          }
+          continue;
+        }
+
+        const hitRadius = enemy.kind === "boss" ? 3.8 : 3.45;
+        if (dist > hitRadius) continue;
+
+        enemy.provoked = true;
+        if (enemy.kind === "boss") {
+          const bossName = getBossName(zone);
+          if (flags.bossState === "ARMORED") {
+            flags.bossState = "EXPOSED_EYE";
+            flags.bossArmorTimer = 8.0;
+            enemy.hitFlashTimer = 0.45;
+            soundEngine.playPegPound();
+            soundEngine.playBossWallCrash();
+            pushBanner(
+              `War-Hammer Cracked ${bossName}'s Outer Carapace! (Eye Exposed!)`,
+              `Shoot ${bossName}'s Open Eye with Bow [E], Boomerang [Q], or Hookshot [H] to stun him!`,
+              4.8
+            );
+          } else if (flags.bossState === "EXPOSED_EYE") {
+            flags.bossState = "STUNNED";
+            enemy.state = "stunned";
+            enemy.stateTimer = 4.5;
+            enemy.hp -= 3;
+            enemy.hitFlashTimer = 0.42;
+            soundEngine.playBossWallCrash();
+            if (enemy.hp <= 0) {
+              handleEnemyDeath(enemy);
+            } else {
+              soundEngine.playEnemyHit(true);
+              pushBanner(
+                `War-Hammer Crushed ${bossName}! (-3 HP & Stunned!)`,
+                `Follow up while ${bossName} is stunned on the floor!`,
+                4.2
+              );
+            }
+          } else if (flags.bossState === "STUNNED") {
+            enemy.hp -= 3;
+            enemy.hitFlashTimer = 0.4;
+            if (enemy.hp <= 0) {
+              handleEnemyDeath(enemy);
+            } else {
+              soundEngine.playEnemyHit(true);
+            }
+          }
+          continue;
+        }
+
+        // Shatter Wooden Shield or Glacial Ice Armor in one blow!
+        const hadArmor = enemy.shieldArmor && enemy.shieldArmor !== "none" ? enemy.shieldArmor : null;
+        if (hadArmor) {
+          enemy.shieldArmor = "none";
+          soundEngine.playPegPound();
+          soundEngine.playPotSmash();
+        }
+
+        // Flip Spiked Electric Beetles onto their backs without shocking the Hero!
+        if (enemy.shockArmor) {
+          enemy.stunTimer = Math.max(enemy.stunTimer, 3.2);
+        }
+
+        enemy.hp -= 3;
+        enemy.hitFlashTimer = 0.38;
+        enemy.stunTimer = Math.max(enemy.stunTimer, 1.85);
+        if (enemy.kind !== "turret") {
+          enemy.state = "stunned";
+          enemy.stateTimer = Math.max(enemy.stateTimer, 1.85);
+          const pushDirX = dist > 0.05 ? dx / dist : Math.sin(hero.facing);
+          const pushDirZ = dist > 0.05 ? dz / dist : Math.cos(hero.facing);
+          const kb = 16.5 / Math.max(0.6, Math.sqrt(enemy.weight || 1));
+          enemy.knockbackVx = pushDirX * kb;
+          enemy.knockbackVz = pushDirZ * kb;
+        }
+
+        if (enemy.hp <= 0) {
+          handleEnemyDeath(enemy);
+        } else {
+          soundEngine.playEnemyHit(true);
+          if (hadArmor === "ice") {
+            pushBanner(
+              "War-Hammer Shattered the Glacial Ice Armor! (-3 HP)",
+              "Your Titan War-Hammer pulverized their frozen armor in a single blow!",
+              3.8
+            );
+          } else if (hadArmor === "wood") {
+            pushBanner(
+              "War-Hammer Splintered the Wooden Shield! (-3 HP)",
+              "The goblin's shield shattered into splinters under your War-Hammer!",
+              3.8
+            );
+          }
+        }
+      }
+    }
 
     // 8d. Update Grappling Hookshot Flight (`extending` / `retracting`)
     if (hookshot) {
@@ -10076,6 +10438,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
         zone === "frontier" &&
         !flags.frontierHookshotChestOpened &&
         Math.hypot(FRONTIER_HOOKSHOT_CHEST_POS.x - hero.x, FRONTIER_HOOKSHOT_CHEST_POS.z - hero.z) <= 5.5;
+      const nearHammerChest =
+        zone === "caverns" &&
+        !flags.cavernHammerChestOpened &&
+        Math.hypot(CAVERN_HAMMER_CHEST_POS.x - hero.x, CAVERN_HAMMER_CHEST_POS.z - hero.z) <= 5.5;
+      const nearRustedPeg = mapProps.find(
+        (p) =>
+          p.zone === zone &&
+          p.prefab === "rusted_peg" &&
+          !p.pounded &&
+          Math.hypot(p.x - hero.x, p.z - hero.z) <= 3.6
+      );
       const nearGrapplePost =
         hero.hasHookshot &&
         mapProps.find(
@@ -10096,6 +10469,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       } else if (nearHookshotChest) {
         hero.interactPrompt =
           "NW Cliffside Reliquary Chest (Grappling Hookshot) — Defeat Guard & Walk Up to Open!";
+      } else if (nearHammerChest) {
+        hero.interactPrompt =
+          "SW Glacial Forge Chest (Titan War-Hammer) — Defeat Sentinel & Walk Up to Open!";
+      } else if (nearRustedPeg) {
+        hero.interactPrompt = hero.hasHammer
+          ? "Rusted Iron Stake — Press [T] or [8] to Pound Flat with Titan War-Hammer!"
+          : "Rusted Iron Stake — Claim the Titan War-Hammer [T / 8] in Map 4 SW Forge to Pound Flat!";
       } else if (nearSecretStash) {
         hero.interactPrompt =
           "Secret Rupee Stash Chest (+50 Rupees) — Walk Up to Claim Treasure!";
@@ -10157,6 +10537,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         hero.interactPrompt =
           nearCrackedRock.id === "prop-ow-stash-cracked-rock"
             ? "Secret Rupee Stash Cave — Press [B] to Place Bomb & Unseal (+50 Rupees)!"
+            : hero.hasHammer
+            ? "Cracked Boulder — Press [T] (War-Hammer) or [B] (Bomb) to Shatter!"
             : "Cracked Boulder — Press [B] to Place Bomb!";
       } else if (nearBurnableBarrier) {
         hero.interactPrompt =
@@ -10190,6 +10572,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       enemies,
       boomerang,
       hookshot,
+      hammerShockwaves,
       arrows,
       fireballs,
       fireZones,
