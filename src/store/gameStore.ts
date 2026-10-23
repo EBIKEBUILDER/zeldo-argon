@@ -581,6 +581,9 @@ export interface SerializableGameState {
   nearShop: boolean;
   shopOpen: boolean;
   characterOpen: boolean;
+  questLogOpen: boolean;
+  wayfinderActive: boolean;
+  pinnedQuestId: string | null;
   shopDismissedOnRug: boolean;
   gateNoticeCooldown: number;
   chestNoticeCooldown: number;
@@ -606,6 +609,9 @@ export interface GameActions {
   setFps: (fps: number) => void;
   setShopOpen: (open: boolean) => void;
   setCharacterOpen: (open: boolean) => void;
+  setQuestLogOpen: (open: boolean) => void;
+  toggleWayfinder: () => void;
+  setPinnedQuestId: (questId: string | null) => void;
   buyShopItem: (item: ShopItemId) => void;
   equipHeroItem: (
     slot: "primary" | "offhand" | "tunic" | "boots",
@@ -1088,15 +1094,18 @@ function createInitialState(
       phase === "playing"
         ? {
             id: 1,
-            text: "Map 1: Whispering Crossroads (Act I — The Adventure Begins)",
+            text: "Chapter I: Whispers at the Crossroads",
             subtext:
-              "West Exit -> Map 1B Grove (Key) • North -> Map 2 Dungeon (Flame Rod) • East -> Map 3 Frontier (Bombs & Hookshot) • Map 4 Caverns • Map 5 Citadel • Map 6 Desert • Map 7 Caldera!",
+              "An ancient lock seals the northern gate. Press [N] anytime to summon the Golden Guiding Path or [L] to open your Quest Chronicle.",
             timer: 6.5,
           }
         : null,
     nearShop: false,
     shopOpen: false,
     characterOpen: false,
+    questLogOpen: false,
+    wayfinderActive: false,
+    pinnedQuestId: null,
     shopDismissedOnRug: false,
     gateNoticeCooldown: 0,
     chestNoticeCooldown: 0,
@@ -1396,6 +1405,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set((state) => ({
       shopOpen: open,
       characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
       shopDismissedOnRug: !open && state.nearShop,
     }));
   },
@@ -1404,7 +1414,45 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set((state) => ({
       characterOpen: open,
       shopOpen: open ? false : state.shopOpen,
+      questLogOpen: open ? false : state.questLogOpen,
     }));
+  },
+
+  setQuestLogOpen: (open: boolean) => {
+    set((state) => ({
+      questLogOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+    }));
+  },
+
+  toggleWayfinder: () => {
+    soundEngine.unlock();
+    const nextActive = !get().wayfinderActive;
+    if (nextActive) {
+      soundEngine.playHeartPickup();
+    }
+    set({
+      wayfinderActive: nextActive,
+      banner: nextActive
+        ? {
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            text: "Golden Wayfinder Summoned",
+            subtext:
+              "Follow the shimmering golden trail toward your next lead. Press [N] anytime to dismiss.",
+            timer: 3.2,
+          }
+        : null,
+    });
+  },
+
+  setPinnedQuestId: (questId: string | null) => {
+    soundEngine.unlock();
+    soundEngine.playHeartPickup();
+    set({
+      pinnedQuestId: questId,
+      wayfinderActive: true,
+    });
   },
 
   equipHeroItem: (slot, itemId) => {
@@ -11215,120 +11263,120 @@ export const useGameStore = create<GameStore>((set, get) => ({
             : "Press [F] to Lift Light Rock";
       } else if (nearHookshotChest) {
         hero.interactPrompt =
-          "NW Cliffside Reliquary Chest (Grappling Hookshot) — Defeat Guard & Walk Up to Open!";
+          "Cliffside Reliquary Chest — Defeat the Ridge Sentry & Walk Up to Open!";
       } else if (nearHammerChest) {
         hero.interactPrompt =
-          "SW Glacial Forge Chest (Titan War-Hammer) — Defeat Sentinel & Walk Up to Open!";
+          "Glacial Forge Reliquary Chest — Defeat the Ice Sentinel & Walk Up to Open!";
       } else if (nearDesertOasisChest) {
         hero.interactPrompt =
-          "SW Mirage Oasis Chest (+1 Heart Container & Fairy) — Unearth Wyrm [G / T / B] & Walk Up to Open!";
+          "Mirage Oasis Chest — Clear the Subterranean Guardian & Walk Up to Open!";
       } else if (nearDesertSolarKey) {
         hero.interactPrompt =
           flags.desertCrystalPuzzleSolved || flags.desertWardensCleared || flags.desertBossDefeated
-            ? "Solar Crest Key Pedestal — Walk Up or Snag with Boomerang [Q] / Hookshot [H]!"
-            : "Solar Crest Key Pedestal (Sealed) — Toggle 2 Solar Switches, Clear 3 Wardens, or Defeat Skorpius!";
+            ? "Solar Crest Key Pedestal — Walk Up or Snag from Afar!"
+            : "Solar Crest Key Pedestal (Sealed) — Solve the East Pyramid Trials to Unseal!";
       } else if (nearDesertCalderaGate) {
         hero.interactPrompt =
           flags.hasSolarKey || flags.desertSolarKeyPickedUp
-            ? "East Caldera Gate Ready — Walk Forward to Unlock Map 7: Skyward Caldera!"
-            : "East Caldera Gate (Locked) — Claim the Solar Crest Key at the East Sun Temple Pedestal!";
+            ? "Eastern Canyon Gate Ready — Walk Forward to Unlock!"
+            : "Eastern Canyon Gate (Locked) — Requires the Solar Crest Key from the Eastern Pyramid!";
       } else if (nearCalderaForgeChest) {
         hero.interactPrompt =
-          "NW Magma Forge Chest (Crimson Dragon Mail) — Defeat Sentinel & Walk Up to Open!";
+          "Magma Forge Reliquary Chest — Defeat the Forge Sentinel & Walk Up to Open!";
       } else if (nearCalderaBossGate) {
         hero.interactPrompt =
-          "Dragon's Peak Sanctum Gate — Pound 2 Rusted Stakes [T], Shoot 2 Eye Statues [E], OR Light 2 Braziers [R]!";
+          "Northern Peak Sanctum Gate — Complete the Central Caldera Trials to Unseal!";
       } else if (nearCalderaVictoryChest) {
         hero.interactPrompt = flags.calderaBossDefeated
-          ? "Dragon's Peak Relic Chest (Unsealed!) — Walk Up to Claim +1 Heart Container & 300 Rupees!"
-          : "Dragon's Peak Relic Chest (Sealed) — Defeat Pyrax, the Magma Wyrm to Unseal!";
+          ? "Northern Peak Reliquary Chest (Unsealed!) — Walk Up to Claim!"
+          : "Northern Peak Reliquary Chest (Sealed) — Overcome the Peak's Guardian to Unseal!";
       } else if (nearRustedPeg) {
         hero.interactPrompt = hero.hasHammer
-          ? "Rusted Iron Stake — Press [T] or [8] to Pound Flat with Titan War-Hammer!"
-          : "Rusted Iron Stake — Claim the Titan War-Hammer [T / 8] in Map 4 SW Forge to Pound Flat!";
+          ? "Rusted Iron Stake — Press [T] or [8] to Pound Flat!"
+          : "Rusted Iron Stake — Requires a Heavy Forged Relic to Pound Flat.";
       } else if (nearSecretStash) {
         hero.interactPrompt =
-          "Secret Rupee Stash Chest (+50 Rupees) — Walk Up to Claim Treasure!";
+          "Hidden Cliffside Chest — Walk Up to Claim Treasure!";
       } else if (nearElderRowan) {
         hero.interactPrompt = flags.heirloomQuestClaimed
-          ? "Elder Rowan — Press [F] to Chat (Heirloom Sub-Quest Completed!)"
+          ? "Elder Rowan — Press [F] to Chat (Heirloom Recovered!)"
           : flags.heirloomMonstersCleared
-          ? "Elder Rowan — Step Closer to Claim Your +50 Rupee Quest Reward!"
-          : "Elder Rowan (NPC Quest) — Clear the Eastern Bandit Cave for +50 Rupees! [Press F]";
+          ? "Elder Rowan — Step Closer to Return the Recovered Heirloom!"
+          : "Elder Rowan — Press [F] to Hear His Request";
       } else if (nearScoutLyra) {
         hero.interactPrompt =
-          "Scout Lyra (Crossroads Hub Guide) — Press [F] for West / North / East Exit Hints!";
+          "Scout Lyra (Wayfinder Guide) — Press [F] for Regional Rumors, or [N] for the Golden Path!";
       } else if (nearLockedEntryGate) {
         hero.interactPrompt =
           flags.keyPickedUp || hero.hasDungeonKey
-            ? "North Dungeon Entrance Gate — Walk Forward to Unlock Map 2!"
-            : "North Dungeon Entrance Gate (Locked) — Get the Key from West Exit (Map 1B: Forest Grove)!";
+            ? "Northern Sanctum Gate — Walk Forward to Unlock!"
+            : "Northern Sanctum Gate (Locked) — Seek the Key in the Western Forest Grove!";
       } else if (nearDgSmallKeyAcrossGap) {
         hero.interactPrompt =
-          "Small Key on Pedestal Across Chasm — Throw Boomerang [Q] or Grapple [H] Across the Gap!";
+          "Small Key on Pedestal Across Chasm — Use a Ranged Tool to Snag Across the Gap!";
       } else if (nearDgEastDoor) {
         hero.interactPrompt = flags.hasSmallKey
-          ? "Room 3 East Wing Key Door — Walk Forward to Unlock with Your Small Key!"
-          : "Room 3 East Wing (Locked Small Key Door) — Fetch the Small Key in Room 2 (West Wing) via Boomerang [Q]!";
+          ? "East Wing Door — Walk Forward to Unlock with Your Small Key!"
+          : "East Wing Door (Locked) — Requires a Small Key from the Western Gallery!";
       } else if (nearFireRodChest) {
         hero.interactPrompt =
-          "Ember Sanctum Chest (Flame Rod) — Defeat the 3 Shielded Goblins & Walk Up to Open!";
+          "Sealed Sanctum Reliquary — Defeat the Chamber's 3 Defenders & Walk Up to Open!";
       } else if (nearBigKeyChest) {
         hero.interactPrompt = flags.dungeonEyeStatuesSolved
-          ? "Big Boss Key Chest (Unsealed!) — Walk Up to Claim the Big Boss Key!"
-          : "Big Boss Key Chest (Sealed) — Light the 4 Crypt Lanterns [R] & Shoot the South Eye Statue with Bow [E]!";
+          ? "Ornate Vault Chest (Unsealed!) — Walk Up to Open!"
+          : "Ornate Vault Chest (Sealed) — Illuminate the Crypt & Pierce the Watchful Stone Eye!";
       } else if (nearNorthBossGate) {
         hero.interactPrompt =
           flags.dungeonTimedTorchSolved && flags.hasBigKey
-            ? "North Boss Gate Ready — Step Forward to Unlock & Face Ignis!"
-            : `North Boss Gate (Locked) — Requires 4 Hub Lanterns (${flags.dungeonTimedTorchSolved ? "DONE" : "Unlit"}) + Big Boss Key (${flags.hasBigKey ? "READY" : "In Room 4"})!`;
+            ? "Inner Sanctum Gate Ready — Step Forward to Unlock!"
+            : `Inner Sanctum Gate (Locked) — Requires 4 Hub Braziers (${flags.dungeonTimedTorchSolved ? "LIT" : "Unlit"}) + Ornate Sanctum Key (${flags.hasBigKey ? "READY" : "Missing"})!`;
       } else if (nearBridgeTurret) {
         hero.interactPrompt =
-          "Wall Stone Turret — Hold Shield [RMB / Shift] while crossing to deflect projectiles!";
+          "Stone Spitter Turret — Hold Shield [RMB / Shift] while crossing to deflect projectiles!";
       } else if (nearGroveKey) {
         hero.interactPrompt =
-          "Sanctum Entry Key Pedestal — Walk Up or Throw Boomerang [Q / 1] to Claim!";
+          "Shrine Key Pedestal — Walk Up or Snag from Afar to Claim!";
       } else if (nearGroveSwitch) {
         hero.interactPrompt =
-          "Grove Crystal Switch — Throw Boomerang [Q / 1] Across the Stream (or Clear 3 Ambush Monsters) to Open Shrine!";
+          "Grove Crystal Switch — Strike the Orb Across the Stream (or Clear the Ambush) to Open the Shrine!";
       } else if (nearWaterGapRupee) {
         hero.interactPrompt =
-          "Red Rupee (+20) Across Water — Throw Boomerang [Q / 1] or Hookshot [H / 7] to Snag It!";
+          "Gem Across the Water — Use a Ranged Tool to Snag It!";
       } else if (nearEyeStatue) {
         hero.interactPrompt =
-          "Cyclops Eye Statue — Shoot its Open Eye with your Bow & Arrow [E / 2]!";
+          "Watchful Stone Eye — Pierce its Open Gaze with a Ranged Shot [E / 2]!";
       } else if (nearShockEnemy) {
         hero.interactPrompt =
-          "Armored Spiked Beetle — Stun with Boomerang [Q] or Hookshot [H] Before Slashing!";
+          "Armored Spiked Beetle — Stun Before Slashing!";
       } else if (nearBountyEnemy) {
         hero.interactPrompt =
-          "Gold/Crimson Bounty Monster — Defeat for 5x Rupee Drops!";
+          "Golden Bounty Monster — Defeat for Rich Rupee Spoils!";
       } else if (nearCrackedRock) {
         hero.interactPrompt =
-          nearCrackedRock.id === "prop-ow-stash-cracked-rock"
-            ? "Secret Rupee Stash Cave — Press [B] to Place Bomb & Unseal (+50 Rupees)!"
-            : hero.hasHammer
-            ? "Cracked Boulder — Press [T] (War-Hammer) or [B] (Bomb) to Shatter!"
-            : "Cracked Boulder — Press [B] to Place Bomb!";
+          hero.hasHammer
+            ? "Cracked Boulder — Shatter with Heavy Impact [T] or Explosive [B]!"
+            : (hero.maxBombs ?? 0) > 0
+            ? "Cracked Boulder — Press [B] to Place an Explosive!"
+            : "Cracked Boulder — Fractured stone that could be shattered with explosives or heavy force.";
       } else if (nearBurnableBarrier) {
         hero.interactPrompt =
           nearBurnableBarrier.prefab === "spiderweb_barrier"
-            ? "Thick Spiderwebs (To Room 4 Crypt) — Shoot with Flame Rod [R] to Burn!"
-            : nearBurnableBarrier.id.startsWith("prop-ow-east-exit-briar")
-            ? "East Exit Dry Vines (Map 3: Burned Pass) — Burn with Flame Rod [R] or Light Both Torches!"
-            : nearBurnableBarrier.id === "prop-ow-ledge-briar"
-            ? "Locked Ledge Dry Vines — Return with Flame Rod [R] to Burn & Claim +40 Rupees!"
-            : "Dry Briar Thicket — Shoot with Flame Rod [R] to Burn!";
+            ? hero.hasFireRod
+              ? "Thick Cobwebs — Ignite with Fire [R] to Clear the Passage!"
+              : "Thick Cobwebs — Dry webs that could be burned away with fire."
+            : hero.hasFireRod
+            ? "Dry Briar Thicket — Ignite with Fire [R] to Clear!"
+            : "Dry Briar Thicket — Parched thorns that could be burned away with fire.";
       } else if (nearUnlitTorch) {
         hero.interactPrompt =
           (nearUnlitTorch.timedDuration ?? 0) > 0
-            ? `Timed Hub Lantern (${nearUnlitTorch.timedDuration}s) — Shoot with Flame Rod [R] to Light All 4!`
-            : nearUnlitTorch.id.startsWith("prop-ow-east-exit-torch")
-            ? "East Exit Gate Torch — Light Both Torches with Flame Rod [R] to Burn the East Barrier!"
-            : "Unlit Lantern — Shoot with Flame Rod [R] to Illuminate!";
+            ? `Timed Ritual Brazier (${nearUnlitTorch.timedDuration}s) — Ignite All 4 Before the Flames Fade!`
+            : hero.hasFireRod
+            ? "Unlit Brazier — Shoot with Fire [R] to Ignite!"
+            : "Unlit Brazier — Cold iron waiting for a spark of flame.";
       } else if (nearGrapplePost) {
         hero.interactPrompt =
-          "Grapple Anchor Post — Face Post & Press [H] or [7] to Grapple Across with Hookshot!";
+          "Anchor Post — Face Post & Press [H] or [7] to Grapple Across!";
       } else {
         hero.interactPrompt = null;
       }

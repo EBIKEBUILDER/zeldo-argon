@@ -20,6 +20,10 @@ import {
   RupeeTier,
   ZoneId,
 } from "@/game/worldData";
+import {
+  buildQuestChronicle,
+  resolveWayfinderRoute,
+} from "@/game/questSystem";
 
 function HeartIcon({ state, index }: { state: "full" | "half" | "empty"; index: number }) {
   const clipId = `half-heart-clip-${index}`;
@@ -236,6 +240,9 @@ export default function GameOverlay() {
   const nearShop = useGameStore((s) => s.nearShop);
   const shopOpen = useGameStore((s) => s.shopOpen);
   const characterOpen = useGameStore((s) => s.characterOpen);
+  const questLogOpen = useGameStore((s) => s.questLogOpen);
+  const wayfinderActive = useGameStore((s) => s.wayfinderActive);
+  const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
   const hookshot = useGameStore((s) => s.hookshot);
 
@@ -255,6 +262,9 @@ export default function GameOverlay() {
   const toggleMute = useGameStore((s) => s.toggleMute);
   const setShopOpen = useGameStore((s) => s.setShopOpen);
   const setCharacterOpen = useGameStore((s) => s.setCharacterOpen);
+  const setQuestLogOpen = useGameStore((s) => s.setQuestLogOpen);
+  const toggleWayfinder = useGameStore((s) => s.toggleWayfinder);
+  const setPinnedQuestId = useGameStore((s) => s.setPinnedQuestId);
   const equipHeroItem = useGameStore((s) => s.equipHeroItem);
   const useBottleSlot = useGameStore((s) => s.useBottleSlot);
   const fillBottleSlot = useGameStore((s) => s.fillBottleSlot);
@@ -283,17 +293,20 @@ export default function GameOverlay() {
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
   const [importColorHex, setImportColorHex] = useState("#4fd8ff");
   const [editorStatusMsg, setEditorStatusMsg] = useState<string | null>(null);
+  const [revealAllChapters, setRevealAllChapters] = useState(false);
+  const [expandedHintIds, setExpandedHintIds] = useState<string[]>([]);
 
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Escape") {
         if (shopOpen) setShopOpen(false);
         if (characterOpen) setCharacterOpen(false);
+        if (questLogOpen) setQuestLogOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [shopOpen, characterOpen, setShopOpen, setCharacterOpen]);
+  }, [shopOpen, characterOpen, questLogOpen, setShopOpen, setCharacterOpen, setQuestLogOpen]);
 
   const showEditorToast = (msg: string) => {
     setEditorStatusMsg(msg);
@@ -390,171 +403,25 @@ export default function GameOverlay() {
     99
   );
 
-  let currentObjective =
-    "Act I (Crossroads Hub): Take the West Path to Forest Grove (Map 1B) to earn the Sanctum Entry Key!";
-  if (zone === "caldera") {
-    if (flags.calderaVictoryChestOpened || flags.calderaBossDefeated) {
-      currentObjective = !flags.calderaVictoryChestOpened
-        ? "Act VII (Skyward Caldera): Open the Dragon Peak Victory Chest (-6.5, 32) for +1 Heart Container & +500 Rupees!"
-        : "Grand 7-Map Campaign Complete! Step into the North Golden Return Portal (0, 34.8) to return to the Crossroads Hub!";
-    } else if (flags.calderaBossAwakened) {
-      currentObjective =
-        flags.bossState === "ARMORED"
-          ? "Boss Pyrax (Phase 1): Shatter Pyrax's Molten Carapace with War-Hammer (T), Bombs (B), or Reflect Bolts with Mirror Shield (RMB)!"
-          : flags.bossState === "EXPOSED_EYE"
-          ? "Boss Pyrax (Phase 2): Pyrax's Core Eye is OPEN! Shoot it with Bow (E), Boomerang (Q), or Reflect a Bolt (RMB)!"
-          : "Boss Pyrax (Phase 3): PYRAX IS STUNNED! Slash with Tempered Sun-Blade (Space / LMB) for 3x Damage!";
-    } else if (!flags.calderaForgeChestOpened) {
-      currentObjective =
-        "Act VII (Skyward Caldera): Pound NW Rusted Pegs with War-Hammer (T) & Grapple across the Lava Rift (H) to claim the NW Dragon Forge Chest!";
-    } else if (!flags.calderaGateUnlocked) {
-      currentObjective =
-        "Act VII (Skyward Caldera): Light all 4 Center Braziers in 8s with Flame Rod (R) OR shoot both Eye Statues with Bow (E) to unseal Dragon's Peak!";
-    } else {
-      currentObjective =
-        "Act VII (Skyward Caldera): Step North into the Dragon's Peak Arena to confront Pyrax, the Magma Wyrm!";
-    }
-  } else if (zone === "desert") {
-    if (flags.desertBossAwakened && !flags.desertBossDefeated) {
-      currentObjective =
-        flags.bossState === "ARMORED"
-          ? "Boss Skorpius (Phase 1): Crack Skorpius's Solar Chitin Shell with War-Hammer (T), Bombs (B), or Flame Rod (R)!"
-          : flags.bossState === "EXPOSED_EYE"
-          ? "Boss Skorpius (Phase 2): Skorpius's Eye is OPEN! Shoot it with Bow (E) or Boomerang (Q) to topple it!"
-          : "Boss Skorpius (Phase 3): SKORPIUS IS STUNNED! Slash with Sword (Space / LMB) for 3x Melee Damage!";
-    } else if (!flags.desertOasisChestOpened) {
-      currentObjective =
-        "Act VI (Sunscorched Oasis): Grapple across the SW Quicksand Basin with Hookshot (H) & pound the Rusted Peg (T) to open the Oasis Spring Chest!";
-    } else if (!flags.desertBossDefeated) {
-      currentObjective =
-        "Act VI (Sunscorched Oasis): Shoot both East Sun-Pyramid Eye Statues with Bow (E) or hit the Crystal Orb (Q) & defeat Skorpius (22, 16)!";
-    } else if (!flags.desertSolarKeyPickedUp) {
-      currentObjective =
-        "Skorpius Defeated (+1 Heart Container)! Claim the unsealed Solar Crest Key from the East Pyramid Pedestal (22, 10.5)!";
-    } else if (!flags.desertCalderaGateUnlocked) {
-      currentObjective =
-        "Solar Crest Key Acquired! Approach the East Caldera Gate (31.8, 0) to unlock Map 7: Skyward Caldera!";
-    } else {
-      currentObjective =
-        "East Caldera Gate Open! Step East into Map 7: Skyward Caldera & Dragon's Peak!";
-    }
-  } else if (zone === "citadel") {
-    if (flags.citadelVictoryChestOpened || flags.citadelBossDefeated) {
-      currentObjective = !flags.citadelVictoryChestOpened
-        ? "Act V (Obsidian Citadel): Open the Sovereign's Victory Chest (-6.5, 32) for +1 Heart Container, Crimson Mail & +200 Rupees!"
-        : "Vaelkor Defeated! Step into the NE Sun-Portal (12, 34.8) to enter Map 6: Sunscorched Oasis (or North Portal to Crossroads Hub)!";
-    } else if (flags.citadelBossAwakened) {
-      currentObjective =
-        flags.bossState === "ARMORED"
-          ? "Boss Vaelkor (Phase 1): Reflect Vaelkor's Arcane Bolts with Mirror Shield (RMB) OR burn its shell with Flame Rod (R)!"
-          : flags.bossState === "EXPOSED_EYE"
-          ? "Boss Vaelkor (Phase 2): Vaelkor's Eye is OPEN! Shoot it with Bow (E), Boomerang (Q), or Reflect a Bolt (RMB)!"
-          : "Boss Vaelkor (Phase 3): VAELKOR IS STUNNED! Slash with Sword (Space / LMB) for 3x Damage!";
-    } else if (!flags.citadelArmoryChestOpened) {
-      currentObjective =
-        "Act V (Obsidian Citadel): Burn West Spiderwebs (R) & Bomb Cracked Wall (B) to claim Tempered Blade + Mirror Shield in West Armory!";
-    } else if (!flags.citadelGateUnlocked) {
-      currentObjective =
-        "Act V (Obsidian Citadel): Light all 4 Center Braziers in 8s with Flame Rod (R) OR shoot both Eye Statues with Bow (E) to unseal the Throne!";
-    } else {
-      currentObjective =
-        "Act V (Obsidian Citadel): Step North into the Sovereign's Throne to confront Vaelkor!";
-    }
-  } else if (zone === "caverns") {
-    if (flags.cavernBossAwakened && !flags.cavernBossDefeated) {
-      currentObjective =
-        flags.bossState === "ARMORED"
-          ? "Boss Cryos (Phase 1): Melt Cryos's Glacial Carapace with Flame Rod (R) or Bombs (B)!"
-          : flags.bossState === "EXPOSED_EYE"
-          ? "Boss Cryos (Phase 2): Cryos's Eye is OPEN! Shoot it with Bow (E) or Boomerang (Q) to crash it!"
-          : "Boss Cryos (Phase 3): CRYOS IS STUNNED! Slash with Sword (Space / LMB) for 3x Melee Damage!";
-    } else if (!flags.cavernShovelChestOpened) {
-      currentObjective =
-        "Act IV (Frostpeak Caverns): Blast the NW Cracked Wall (-22, 11.5) with a Bomb (B) to unlock the Shovel (G) & Sapphire Mail!";
-    } else if (!flags.cavernBossDefeated) {
-      currentObjective =
-        "Act IV (Frostpeak Caverns): Throw Boomerang (Q) at the East Crystal Orb (15.5, 4.5) & defeat Cryos, the Glacial Colossus (24, 19)!";
-    } else if (!flags.cavernCrestKeyPickedUp) {
-      currentObjective =
-        "Cryos Defeated (+1 Heart Container)! Claim the unsealed Glacial Crest Key from the East Pedestal (24, 14)!";
-    } else {
-      currentObjective =
-        "Glacial Crest Key Acquired! Take the NE Shortcut Portal (24, 29.5) or West Exit back to Map 3 to unlock the North Citadel Gate!";
-    }
-  } else if (zone === "frontier") {
-    if (!flags.frontierBombChestOpened) {
-      currentObjective = !flags.frontierSappersCleared
-        ? "Act III (Elderwood Highlands): Burn the SE Outpost Briars (17.5, -18.5) with Flame Rod (R) & defeat all 3 Raiders to unlock the Bomb Bag!"
-        : "Act III (Elderwood Highlands): Open the SE Sapper Outpost Chest (24.5, -18.5) to claim the Canvas Bomb Bag (B) + 50 Rupees!";
-    } else if (!flags.cavernCrestKeyPickedUp && !flags.frontierCitadelGateUnlocked) {
-      currentObjective =
-        "Act III (Elderwood Highlands): Blast the Cracked Boulder at the East Quarry Pass (31.2, -2.5) with a Bomb (B) to enter Map 4: Frostpeak Caverns!";
-    } else if (!flags.frontierCitadelGateUnlocked) {
-      currentObjective =
-        "Act III (Elderwood Highlands): Approach the North Glacial Gate (0, 31.8) to unlock Map 5: The Obsidian Citadel!";
-    } else {
-      currentObjective =
-        "North Citadel Gate Open! Step North into Map 5: The Obsidian Citadel (or travel South to Map 6: Sunscorched Oasis)!";
-    }
-  } else if (zone === "grove") {
-    currentObjective = !flags.grovePuzzleSolved
-      ? "Act I (Forest Grove): Hit the Crystal Orb Switch across the stream with Boomerang (Q) OR defeat all 3 Ambush Monsters!"
-      : !flags.keyPickedUp
-      ? "Claim the Sanctum Entry Key from the North Shrine Pedestal (or snag it with Boomerang Q)!"
-      : "Return East to the Crossroads Hub and unlock the North Dungeon Gate!";
-  } else if (flags.chestUnlocked || flags.bossDefeated) {
-    currentObjective = !flags.eastExitBurned
-      ? "Act II Complete (+1 Heart)! Take the North Sanctum Portal to Map 3 OR burn the East Vines in Map 1 with Flame Rod (R)!"
-      : "Explore Map 3 (Highlands), Map 4 (Caverns), Map 5 (Citadel), Map 6 (Oasis) & Map 7 (Caldera)!";
-  } else if (zone === "dungeon" && dungeonRoom === "sanctum") {
-    currentObjective =
-      flags.bossState === "ARMORED"
-        ? "Room 5 (Boss Lair): Ignis's Ice/Bramble Carapace deflects Swords & Arrows — burn it off with Flame Rod (R)!"
-        : flags.bossState === "EXPOSED_EYE"
-        ? "Room 5 (Boss Lair): Ignis's Eye is OPEN! Shoot it with Bow (E) or Boomerang (Q) to crash it to the floor!"
-        : "Room 5 (Boss Lair): IGNIS IS STUNNED! Rush in and slash with Sword (Space / LMB) for 3x Melee Damage!";
-  } else if (zone === "dungeon") {
-    if (dungeonRoom === "west_wing") {
-      currentObjective =
-        !flags.dgSmallKeyPickedUp
-          ? "Room 2 (The Chasm Gallery): Stun Spiked Beetles with Boomerang (Q), then throw Boomerang across the chasm to snag the Small Key!"
-          : "Small Key snagged! Return East to Room 1 (Central Hub) and unlock the East Wing Door!";
-    } else if (dungeonRoom === "east_wing") {
-      currentObjective =
-        !flags.fireRodChestOpened
-          ? "Room 3 (The Ember Sanctum): Defeat all 3 Shielded Goblins to unlock the Center Chest and claim the Flame Rod!"
-          : !flags.dungeonTorchPuzzleSolved || !flags.webBarrierBurned
-          ? "Flame Rod Tutorial: Shoot both Unlit South Lanterns with Flame Rod (R) and burn the Thick Spiderwebs to open Room 4!"
-          : "Head South into Room 4 (The Dark Archery Crypt)!";
-    } else if (dungeonRoom === "crypt") {
-      currentObjective =
-        !flags.dungeonEyeStatuesSolved
-          ? "Room 4 (Dark Archery Crypt): Light the 4 Corner Lanterns & melt Ice Knights with Flame Rod (R), then shoot the South Eye Statue with Bow (E)!"
-          : !flags.bigKeyChestOpened
-          ? "Open the Center Chest to claim the Big Boss Key, then take the West Shortcut back to Room 1!"
-          : "Return West to Room 1 (Central Hub), light all 4 Hub Lanterns within 8s, and unlock the North Boss Door!";
-    } else {
-      // Room 1: Central Hub
-      currentObjective =
-        !flags.dgSmallKeyPickedUp && !flags.eastWingDoorUnlocked
-          ? "Room 1 (Central Hub): Block North Turret fireballs with Shield (RMB) and take the Open West Door to Room 2!"
-          : flags.hasSmallKey && !flags.eastWingDoorUnlocked
-          ? "Room 1 (Central Hub): Approach the East Wing Door to unlock it with your Small Key!"
-          : !flags.fireRodChestOpened
-          ? "Room 1 (Central Hub): Enter the East Wing (Room 3) to find the Dungeon's signature Flame Rod!"
-          : !flags.bigKeyChestOpened
-          ? "Room 1 (Central Hub): Head through Room 3 South into Room 4 (Archery Crypt) to earn the Big Boss Key!"
-          : !flags.dungeonTimedTorchSolved
-          ? "Room 1 (Central Hub): Light all 4 Center Hub Lanterns within 8s using Flame Rod (R) to drop the North Iron Bars!"
-          : "Room 1 (Central Hub): Approach the North Boss Door to unlock it with your Big Boss Key!";
-    }
-  } else if (flags.keyPickedUp && !flags.dungeonEntryUnlocked) {
-    currentObjective =
-      "Sanctum Entry Key Acquired! Deflect the North Bridge Turret's rocks with Shield (RMB) and unlock the North Dungeon Gate!";
-  } else if (flags.dungeonEntryUnlocked) {
-    currentObjective =
-      "North Gate Unlocked! Step into the Sunken Sanctum Portal (Map 2)!";
-  }
+  const questChronicle = buildQuestChronicle({
+    zone,
+    dungeonRoom,
+    hero,
+    flags,
+    pinnedQuestId,
+  });
+  const wayfinderRoute = resolveWayfinderRoute({
+    zone,
+    dungeonRoom,
+    hero,
+    flags,
+    portals,
+    pinnedQuestId,
+  });
+  const activeQuest = questChronicle.activeQuest;
+  const currentObjective = `${
+    activeQuest.chapterNumber ? `${activeQuest.chapterNumber}: ` : "Rumor: "
+  }${activeQuest.title} — ${activeQuest.summary}`;
 
   const zoneLabel =
     zone === "overworld"
@@ -579,7 +446,9 @@ export default function GameOverlay() {
       ? "Map 2: Sunken Sanctum — Room 3: The Ember Sanctum (East)"
       : dungeonRoom === "crypt"
       ? "Map 2: Sunken Sanctum — Room 4: The Dark Archery Crypt"
-      : "Map 2: Sunken Sanctum — Room 5: Boss Lair (Ignis)";
+      : flags.bossAwakened || flags.bossDefeated
+      ? "Map 2: Sunken Sanctum — Room 5: Boss Lair (Ignis)"
+      : "Map 2: Sunken Sanctum — Room 5: Inner Sanctum";
 
   // Lookup currently selected entity for the Right Inspector Dock
   const selectedProp =
@@ -705,12 +574,16 @@ export default function GameOverlay() {
                     ? "gear-slot-owned"
                     : "gear-slot-warn"
                 }`}
-                title="Found in Dungeon Room 3 (The Ember Sanctum). Tap R or 3 for a fireball (lights lanterns, burns spiderwebs/vines, melts ice armor, burns Ignis's shell)."
+                title={
+                  hero.hasFireRod
+                    ? "Tap R or 3 for a fireball (lights braziers, burns cobwebs/briars, melts ice armor)."
+                    : "Undiscovered Relic — Sealed within an ancient sanctum."
+                }
               >
                 <span className="gear-key">R</span>
                 <span className="gear-name">
                   {!hero.hasFireRod
-                    ? "Flame Rod (Rm 3)"
+                    ? "??? Relic"
                     : (hero.fireRodChargeTimer ?? 0) >= 0.55
                     ? "FLAME MAX!"
                     : (hero.fireRodChargeTimer ?? 0) > 0.1
@@ -721,11 +594,15 @@ export default function GameOverlay() {
 
               <div
                 className={`gear-slot ${hero.hasShovel ? "gear-slot-owned" : "gear-slot-locked"}`}
-                title="Unlock at Bramble's Curio Shop (250 Rupees), then press G or 4 on soft dirt patches to dig up buried Rupees, Hearts, Bottles & Gear!"
+                title={
+                  hero.hasShovel
+                    ? "Press G or 4 on soft dirt patches to dig up buried treasures!"
+                    : "Undiscovered Tool — Can be found in the caverns or acquired from a merchant."
+                }
               >
                 <span className="gear-key">G</span>
                 <span className="gear-name">
-                  {hero.hasShovel ? "Shovel" : "Shovel (Shop)"}
+                  {hero.hasShovel ? "Shovel" : "??? Relic"}
                 </span>
               </div>
 
@@ -761,7 +638,11 @@ export default function GameOverlay() {
                       : "gear-slot-owned"
                     : "gear-slot-locked"
                 }`}
-                title="Press H or 7 to fire the Grappling Hookshot — latches onto Grapple Posts, Trees, Crates & Torches across chasms, rips off Wooden Shields, or snags distant Keys/Rupees!"
+                title={
+                  hero.hasHookshot
+                    ? "Press H or 7 to fire the Grappling Hookshot — latches onto Anchor Posts, Trees, Crates & Torches across chasms!"
+                    : "Undiscovered Relic — Hidden high in the frontier crags."
+                }
               >
                 <span className="gear-key">H</span>
                 <span className="gear-name">
@@ -771,7 +652,7 @@ export default function GameOverlay() {
                         ? "Grappling!"
                         : "Hookshot..."
                       : "Hookshot"
-                    : "Hookshot (Map 3)"}
+                    : "??? Relic"}
                 </span>
               </div>
 
@@ -785,7 +666,11 @@ export default function GameOverlay() {
                       : "gear-slot-owned"
                     : "gear-slot-locked"
                 }`}
-                title="Press T or 8 to slam the Titan War-Hammer — pounds Rusted Iron Pegs flat, shatters Cracked Boulders & Ice/Wood Shields in 1 blow, flips Spiked Beetles, and unearths Burrowed Wyrms!"
+                title={
+                  hero.hasHammer
+                    ? "Press T or 8 to slam the Titan War-Hammer — pounds Rusted Stakes flat and shatters Cracked Boulders & Ice Armor!"
+                    : "Undiscovered Relic — Forged in the frozen depths."
+                }
               >
                 <span className="gear-key">T</span>
                 <span className="gear-name">
@@ -795,7 +680,7 @@ export default function GameOverlay() {
                       : (hero.hammerCooldown ?? 0) > 0
                       ? `Hammer (${(hero.hammerCooldown ?? 0).toFixed(1)}s)`
                       : "War-Hammer"
-                    : "Hammer (Map 4)"}
+                    : "??? Relic"}
                 </span>
               </div>
 
@@ -833,12 +718,16 @@ export default function GameOverlay() {
                     ? "gear-slot-owned"
                     : "gear-slot-warn"
                 }`}
-                title="Unlock Bomb Bag at Bramble's Curio Shop (150 Rupees), then press B or 6 to place or throw a Bomb and blow up Cracked Boulders!"
+                title={
+                  (hero.maxBombs ?? 0) > 0
+                    ? "Press B or 6 to place or throw a Bomb and shatter Cracked Boulders!"
+                    : "Undiscovered Supply — Kept by sappers and merchants."
+                }
               >
                 <span className="gear-key">B</span>
                 <span className="gear-name">
                   {(hero.maxBombs ?? 0) <= 0
-                    ? "Bombs (Shop)"
+                    ? "??? Relic"
                     : `Bombs (${hero.bombs ?? 0}/${hero.maxBombs})`}
                 </span>
               </div>
@@ -1134,14 +1023,41 @@ export default function GameOverlay() {
             </div>
 
             {phase === "playing" && !editorMode && (
-              <button
-                type="button"
-                onClick={() => setCharacterOpen(!characterOpen)}
-                className={`char-toggle-btn ${characterOpen ? "active" : ""}`}
-                title="Open Character Equipment, Tunics, Boots & Glass Bottles (Shortcut: C or I)"
-              >
-                ⚔ Gear &amp; Bottles (C)
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={toggleWayfinder}
+                  className={`char-toggle-btn ${wayfinderActive ? "active" : ""}`}
+                  style={
+                    wayfinderActive
+                      ? {
+                          borderColor: "rgba(255, 214, 92, 0.85)",
+                          background: "rgba(64, 48, 12, 0.92)",
+                          color: "#ffe896",
+                        }
+                      : undefined
+                  }
+                  title="Toggle the 3D Golden Wayfinder Guiding Path toward your next lead (Shortcut: N)"
+                >
+                  {wayfinderActive ? "✦ Guide: ON (N)" : "✦ Guide Path (N)"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuestLogOpen(!questLogOpen)}
+                  className={`char-toggle-btn ${questLogOpen ? "active" : ""}`}
+                  title="Open the Spoiler-Free Quest Chronicle & Rumor Log (Shortcut: L)"
+                >
+                  📜 Quests (L)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCharacterOpen(!characterOpen)}
+                  className={`char-toggle-btn ${characterOpen ? "active" : ""}`}
+                  title="Open Character Equipment, Tunics, Boots & Glass Bottles (Shortcut: C or I)"
+                >
+                  ⚔ Gear (C)
+                </button>
+              </>
             )}
 
             {phase === "playing" && !editorMode && nearShop && (
@@ -1169,7 +1085,21 @@ export default function GameOverlay() {
             </button>
           </div>
 
-          <div className="objective-line">{currentObjective}</div>
+          <div className="objective-line">
+            {currentObjective}
+            {wayfinderActive && !editorMode && (
+              <span
+                style={{
+                  display: "inline-block",
+                  marginLeft: "8px",
+                  color: "#7ef4ff",
+                  fontWeight: 700,
+                }}
+              >
+                • ✦ Guiding to: {wayfinderRoute.destLabel}
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
@@ -2474,6 +2404,389 @@ export default function GameOverlay() {
               </div>
             )}
           </aside>
+        </div>
+      )}
+
+      {/* =========================================================
+          SPOILER-FREE QUEST CHRONICLE & WAYFINDER GUIDE MODAL (SHORTCUT: L)
+         ========================================================= */}
+      {phase === "playing" && !editorMode && questLogOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card char-sheet-card" style={{ maxWidth: "1020px" }}>
+            <div className="shop-header">
+              <div>
+                <div className="shop-pill">WAYFINDER JOURNAL • ZERO SPOILERS</div>
+                <h2 className="shop-title">QUEST CHRONICLE &amp; REGIONAL RUMORS</h2>
+              </div>
+              <div className="char-summary-badges" style={{ alignItems: "center", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={toggleWayfinder}
+                  className="shop-buy-btn"
+                  style={{
+                    padding: "6px 13px",
+                    fontSize: "0.78rem",
+                    background: wayfinderActive
+                      ? "linear-gradient(180deg, #ffe074 0%, #c98a14 100%)"
+                      : "rgba(38, 46, 68, 0.9)",
+                    color: wayfinderActive ? "#1a1306" : "#d8e6ff",
+                  }}
+                >
+                  {wayfinderActive ? "✦ 3D Golden Trail: ON (N)" : "✦ Summon Golden Trail (N)"}
+                </button>
+                {pinnedQuestId && (
+                  <button
+                    type="button"
+                    onClick={() => setPinnedQuestId(null)}
+                    className="shop-close-btn"
+                    style={{ padding: "6px 11px", fontSize: "0.75rem" }}
+                  >
+                    ↺ Auto-Track Main Story
+                  </button>
+                )}
+                <label
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    fontSize: "0.75rem",
+                    color: "#a8c0e0",
+                    cursor: "pointer",
+                    padding: "4px 9px",
+                    borderRadius: "8px",
+                    background: "rgba(20, 26, 42, 0.75)",
+                    border: "1px solid rgba(120, 150, 200, 0.25)",
+                  }}
+                  title="Unveil future chapters and enable 1-click Playtest Teleport to any objective"
+                >
+                  <input
+                    type="checkbox"
+                    checked={revealAllChapters}
+                    onChange={(e) => setRevealAllChapters(e.target.checked)}
+                  />
+                  <span>Playtest: Reveal All &amp; Teleport</span>
+                </label>
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginBottom: "12px",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                background: "rgba(255, 210, 86, 0.1)",
+                border: "1px solid rgba(255, 210, 86, 0.38)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: "0.72rem",
+                    fontWeight: 800,
+                    letterSpacing: "0.08em",
+                    color: "#ffd978",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Currently Guiding • {activeQuest.regionLabel}
+                </div>
+                <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#fff6d6" }}>
+                  {activeQuest.chapterNumber ? `${activeQuest.chapterNumber}: ` : "Rumor: "}
+                  {activeQuest.title}
+                </div>
+                <div style={{ fontSize: "0.82rem", color: "#d6e2f5", marginTop: "2px" }}>
+                  {activeQuest.summary}
+                </div>
+              </div>
+              <div style={{ textAlign: "right", fontSize: "0.78rem", color: "#8ceeff" }}>
+                <div>
+                  Next Waypoint: <strong>{wayfinderRoute.destLabel}</strong>
+                </div>
+                {wayfinderRoute.isPortalHop && (
+                  <div style={{ color: "#ffd978", fontSize: "0.73rem" }}>
+                    (Routes through connecting portal in current map)
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="char-equip-grid" style={{ gridTemplateColumns: "1.15fr 0.95fr" }}>
+              {/* COLUMN 1: MAIN STORY CHAPTERS (ACTS I - VII) */}
+              <div className="char-slot-panel">
+                <div className="char-slot-header">
+                  <span className="char-slot-title">MAIN CHRONICLE (CHAPTERS I – VII)</span>
+                  <span className="char-slot-sub">Spoiler-Free Story Progression</span>
+                </div>
+                <div
+                  className="char-options-col"
+                  style={{ maxHeight: "340px", overflowY: "auto", paddingRight: "4px" }}
+                >
+                  {questChronicle.chapters.map((ch) => {
+                    const isHiddenFuture = ch.status === "shrouded" && !revealAllChapters;
+                    const isTracked = activeQuest.id === ch.id;
+                    const hintExpanded = expandedHintIds.includes(ch.id);
+
+                    if (isHiddenFuture) {
+                      return (
+                        <div
+                          key={ch.id}
+                          className="char-option-card char-option-locked"
+                          style={{ opacity: 0.55 }}
+                        >
+                          <div className="char-option-top">
+                            <div>
+                              <div className="char-option-name">
+                                {ch.chapterNumber}: Unwritten Chapter
+                              </div>
+                              <div className="char-option-stats">
+                                Shrouded in Mystery • Follow current leads to unveil
+                              </div>
+                            </div>
+                            <span className="char-locked-pill">SHROUDED</span>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={ch.id}
+                        className={`char-option-card ${isTracked ? "char-option-equipped" : ""}`}
+                      >
+                        <div className="char-option-top">
+                          <div>
+                            <div className="char-option-name">
+                              {ch.chapterNumber}: {ch.title}
+                            </div>
+                            <div className="char-option-stats">{ch.regionLabel}</div>
+                          </div>
+                          {ch.status === "completed" ? (
+                            <span
+                              className="char-equipped-pill"
+                              style={{
+                                background: "rgba(46, 214, 118, 0.2)",
+                                color: "#7bffb5",
+                                borderColor: "rgba(46, 214, 118, 0.5)",
+                              }}
+                            >
+                              ✓ COMPLETED
+                            </span>
+                          ) : (
+                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPinnedQuestId(ch.id);
+                                  setQuestLogOpen(false);
+                                }}
+                                className="char-equip-btn"
+                              >
+                                {isTracked && wayfinderActive ? "✦ Guiding" : "✦ Guide Path"}
+                              </button>
+                              {revealAllChapters && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditorZone(ch.targetZone, true, ch.targetX, ch.targetZ);
+                                    setPinnedQuestId(ch.id);
+                                    setQuestLogOpen(false);
+                                  }}
+                                  className="char-equip-btn"
+                                  style={{
+                                    background: "rgba(92, 214, 255, 0.2)",
+                                    borderColor: "rgba(92, 214, 255, 0.55)",
+                                    color: "#9ef0ff",
+                                  }}
+                                  title="Playtest: Teleport Hero near this chapter's objective"
+                                >
+                                  ⚡ Jump
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <p className="char-option-desc">{ch.summary}</p>
+                        {ch.status !== "completed" && (
+                          <div style={{ marginTop: "6px" }}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedHintIds((prev) =>
+                                  prev.includes(ch.id)
+                                    ? prev.filter((x) => x !== ch.id)
+                                    : [...prev, ch.id]
+                                )
+                              }
+                              style={{
+                                background: "transparent",
+                                border: "none",
+                                color: "#ffd978",
+                                fontSize: "0.74rem",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                padding: 0,
+                              }}
+                            >
+                              {hintExpanded ? "▾ Hide Wayfinder Whisper" : "▸ Consult Wayfinder Whisper"}
+                            </button>
+                            {hintExpanded && (
+                              <div
+                                style={{
+                                  marginTop: "4px",
+                                  padding: "6px 9px",
+                                  borderRadius: "6px",
+                                  background: "rgba(14, 22, 36, 0.75)",
+                                  border: "1px solid rgba(255, 214, 102, 0.3)",
+                                  color: "#ffe8a3",
+                                  fontSize: "0.76rem",
+                                }}
+                              >
+                                {ch.wayfinderHint}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* COLUMN 2: REGIONAL RUMORS & SIDE MYSTERIES */}
+              <div className="char-slot-panel">
+                <div className="char-slot-header">
+                  <span className="char-slot-title">REGIONAL RUMORS &amp; MYSTERIES</span>
+                  <span className="char-slot-sub">Optional Lore Leads &amp; Hidden Vaults</span>
+                </div>
+                <div
+                  className="char-options-col"
+                  style={{ maxHeight: "340px", overflowY: "auto", paddingRight: "4px" }}
+                >
+                  {questChronicle.rumors.map((rm) => {
+                    const isTracked = activeQuest.id === rm.id;
+                    const hintExpanded = expandedHintIds.includes(rm.id);
+                    return (
+                      <div
+                        key={rm.id}
+                        className={`char-option-card ${isTracked ? "char-option-equipped" : ""}`}
+                      >
+                        <div className="char-option-top">
+                          <div>
+                            <div className="char-option-name">{rm.title}</div>
+                            <div className="char-option-stats">{rm.regionLabel}</div>
+                          </div>
+                          {rm.status === "completed" ? (
+                            <span
+                              className="char-equipped-pill"
+                              style={{
+                                background: "rgba(46, 214, 118, 0.2)",
+                                color: "#7bffb5",
+                                borderColor: "rgba(46, 214, 118, 0.5)",
+                              }}
+                            >
+                              ✓ DISCOVERED
+                            </span>
+                          ) : (
+                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPinnedQuestId(rm.id);
+                                  setQuestLogOpen(false);
+                                }}
+                                className="char-equip-btn"
+                              >
+                                {isTracked && wayfinderActive ? "✦ Guiding" : "✦ Guide Path"}
+                              </button>
+                              {revealAllChapters && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditorZone(rm.targetZone, true, rm.targetX, rm.targetZ);
+                                    setPinnedQuestId(rm.id);
+                                    setQuestLogOpen(false);
+                                  }}
+                                  className="char-equip-btn"
+                                  style={{
+                                    background: "rgba(92, 214, 255, 0.2)",
+                                    borderColor: "rgba(92, 214, 255, 0.55)",
+                                    color: "#9ef0ff",
+                                  }}
+                                  title="Playtest: Teleport Hero near this rumor"
+                                >
+                                  ⚡ Jump
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <p className="char-option-desc">{rm.summary}</p>
+                        {rm.status !== "completed" && (
+                          <div style={{ marginTop: "6px" }}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedHintIds((prev) =>
+                                  prev.includes(rm.id)
+                                    ? prev.filter((x) => x !== rm.id)
+                                    : [...prev, rm.id]
+                                )
+                              }
+                              style={{
+                                background: "transparent",
+                                border: "none",
+                                color: "#ffd978",
+                                fontSize: "0.74rem",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                padding: 0,
+                              }}
+                            >
+                              {hintExpanded ? "▾ Hide Whisper" : "▸ Consult Wayfinder Whisper"}
+                            </button>
+                            {hintExpanded && (
+                              <div
+                                style={{
+                                  marginTop: "4px",
+                                  padding: "6px 9px",
+                                  borderRadius: "6px",
+                                  background: "rgba(14, 22, 36, 0.75)",
+                                  border: "1px solid rgba(255, 214, 102, 0.3)",
+                                  color: "#ffe8a3",
+                                  fontSize: "0.76rem",
+                                }}
+                              >
+                                {rm.wayfinderHint}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>N</strong> anytime to toggle the 3D Golden Wayfinder Trail, or{" "}
+                <strong>L</strong> / <strong>Esc</strong> to close this Chronicle.
+              </span>
+              <button
+                type="button"
+                onClick={() => setQuestLogOpen(false)}
+                className="shop-close-btn"
+              >
+                Resume Adventure
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

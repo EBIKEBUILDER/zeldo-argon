@@ -25,6 +25,10 @@ import {
   useGameStore,
 } from "@/store/gameStore";
 import {
+  resolveWayfinderRoute,
+  sampleWayfinderPolyline,
+} from "@/game/questSystem";
+import {
   BIG_KEY_CHEST_POS,
   BOSS_CHEST_POS,
   BOSS_EXIT_GATE_POS,
@@ -4829,6 +4833,132 @@ export default function BabylonCanvas() {
       hookshotChainLinks.push(link);
     }
 
+    // --- 3D GOLDEN WAYFINDER TRAIL (FLOWING MOTES, CHEVRONS, FOOT COMPASS & BEACON) ---
+    const wayfinderGoldMat = makeMat(
+      "wayfinderGoldMat",
+      new Color3(1.0, 0.88, 0.34),
+      new Color3(1.0, 0.74, 0.22),
+      new Color3(1.0, 1.0, 0.9),
+      0.92
+    );
+    const wayfinderCyanMat = makeMat(
+      "wayfinderCyanMat",
+      new Color3(0.36, 0.94, 1.0),
+      new Color3(0.22, 0.78, 0.98),
+      new Color3(0.9, 1.0, 1.0),
+      0.78
+    );
+
+    const WAYFINDER_MOTE_COUNT = 18;
+    const wayfinderNodes: TransformNode[] = [];
+    for (let w = 0; w < WAYFINDER_MOTE_COUNT; w++) {
+      const wfNode = new TransformNode(`wayfinderMote-${w}`, scene);
+
+      const chevronL = MeshBuilder.CreateBox(
+        `wfChevronL-${w}`,
+        { width: 0.36, height: 0.055, depth: 0.11 },
+        scene
+      );
+      chevronL.position.set(-0.12, 0.04, 0.04);
+      chevronL.rotation.y = -0.62;
+      chevronL.material = wayfinderGoldMat;
+      chevronL.isPickable = false;
+      chevronL.parent = wfNode;
+
+      const chevronR = MeshBuilder.CreateBox(
+        `wfChevronR-${w}`,
+        { width: 0.36, height: 0.055, depth: 0.11 },
+        scene
+      );
+      chevronR.position.set(0.12, 0.04, 0.04);
+      chevronR.rotation.y = 0.62;
+      chevronR.material = wayfinderGoldMat;
+      chevronR.isPickable = false;
+      chevronR.parent = wfNode;
+
+      const moteGem = MeshBuilder.CreatePolyhedron(
+        `wfMoteGem-${w}`,
+        { type: 1, size: 0.13 },
+        scene
+      );
+      moteGem.position.set(0, 0.18, 0.12);
+      moteGem.scaling.set(0.85, 0.65, 1.45);
+      moteGem.material = w % 2 === 0 ? wayfinderGoldMat : wayfinderCyanMat;
+      moteGem.isPickable = false;
+      moteGem.parent = wfNode;
+
+      const moteHalo = MeshBuilder.CreateTorus(
+        `wfMoteHalo-${w}`,
+        { diameter: 0.56, thickness: 0.045, tessellation: 14 },
+        scene
+      );
+      moteHalo.position.set(0, 0.02, 0);
+      moteHalo.material = wayfinderCyanMat;
+      moteHalo.isPickable = false;
+      moteHalo.parent = wfNode;
+
+      wfNode.setEnabled(false);
+      wayfinderNodes.push(wfNode);
+    }
+
+    const wayfinderCompassNode = new TransformNode("wayfinderCompassNode", scene);
+    {
+      const compassRing = MeshBuilder.CreateTorus(
+        "wayfinderCompassRing",
+        { diameter: 1.75, thickness: 0.055, tessellation: 28 },
+        scene
+      );
+      compassRing.position.set(0, 0.07, 0);
+      compassRing.material = wayfinderCyanMat;
+      compassRing.isPickable = false;
+      compassRing.parent = wayfinderCompassNode;
+
+      const compassArrow = MeshBuilder.CreateCylinder(
+        "wayfinderCompassArrow",
+        { diameterTop: 0.02, diameterBottom: 0.38, height: 0.52, tessellation: 4 },
+        scene
+      );
+      compassArrow.rotation.x = Math.PI / 2;
+      compassArrow.position.set(0, 0.1, 1.08);
+      compassArrow.material = wayfinderGoldMat;
+      compassArrow.isPickable = false;
+      compassArrow.parent = wayfinderCompassNode;
+    }
+    wayfinderCompassNode.setEnabled(false);
+
+    const wayfinderBeaconNode = new TransformNode("wayfinderBeaconNode", scene);
+    const wayfinderBeaconOuterRing = MeshBuilder.CreateTorus(
+      "wayfinderBeaconOuterRing",
+      { diameter: 2.8, thickness: 0.11, tessellation: 28 },
+      scene
+    );
+    wayfinderBeaconOuterRing.position.set(0, 0.1, 0);
+    wayfinderBeaconOuterRing.material = wayfinderGoldMat;
+    wayfinderBeaconOuterRing.isPickable = false;
+    wayfinderBeaconOuterRing.parent = wayfinderBeaconNode;
+
+    const wayfinderBeaconInnerRing = MeshBuilder.CreateTorus(
+      "wayfinderBeaconInnerRing",
+      { diameter: 1.85, thickness: 0.085, tessellation: 24 },
+      scene
+    );
+    wayfinderBeaconInnerRing.position.set(0, 0.24, 0);
+    wayfinderBeaconInnerRing.material = wayfinderCyanMat;
+    wayfinderBeaconInnerRing.isPickable = false;
+    wayfinderBeaconInnerRing.parent = wayfinderBeaconNode;
+
+    const wayfinderBeaconCrest = MeshBuilder.CreatePolyhedron(
+      "wayfinderBeaconCrest",
+      { type: 1, size: 0.34 },
+      scene
+    );
+    wayfinderBeaconCrest.position.set(0, 2.35, 0);
+    wayfinderBeaconCrest.scaling.set(0.9, 1.45, 0.9);
+    wayfinderBeaconCrest.material = wayfinderGoldMat;
+    wayfinderBeaconCrest.isPickable = false;
+    wayfinderBeaconCrest.parent = wayfinderBeaconNode;
+    wayfinderBeaconNode.setEnabled(false);
+
     // =========================================================
     // DYNAMIC ENEMY, ARROW, PROJECTILE, HAZARD & RUPEE REGISTRIES
     // =========================================================
@@ -7795,6 +7925,20 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // L toggles Quest Chronicle Modal
+      if (code === "KeyL" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setQuestLogOpen(!store.questLogOpen);
+        return;
+      }
+
+      // N toggles 3D Golden Wayfinder Guiding Path
+      if (code === "KeyN" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.toggleWayfinder();
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -8576,6 +8720,58 @@ export default function BabylonCanvas() {
         hookshotClawNode.setEnabled(false);
         for (let c = 0; c < hookshotChainLinks.length; c++) {
           hookshotChainLinks[c].setEnabled(false);
+        }
+      }
+
+      // Sync 3D Golden Wayfinder Trail (`snap.wayfinderActive`)
+      const showWayfinder =
+        Boolean(snap.wayfinderActive) && !snap.editorMode && snap.phase === "playing";
+      if (showWayfinder) {
+        const route = resolveWayfinderRoute({
+          zone: snap.zone,
+          dungeonRoom: snap.dungeonRoom,
+          hero: snap.hero,
+          flags: snap.flags,
+          portals: snap.portals,
+          pinnedQuestId: snap.pinnedQuestId,
+        });
+
+        const firstStep = sampleWayfinderPolyline(route.waypoints, 0.08);
+        wayfinderCompassNode.setEnabled(true);
+        wayfinderCompassNode.position.set(snap.hero.x, heroGroundY + 0.04, snap.hero.z);
+        wayfinderCompassNode.rotation.y = firstStep.yaw;
+
+        const beaconGroundY = sampleTerrainHeight(activeCells, route.destX, route.destZ);
+        wayfinderBeaconNode.setEnabled(true);
+        wayfinderBeaconNode.position.set(route.destX, beaconGroundY, route.destZ);
+        wayfinderBeaconOuterRing.rotation.y = t * 1.9;
+        wayfinderBeaconInnerRing.rotation.y = -t * 2.6;
+        wayfinderBeaconCrest.rotation.y = t * 2.8;
+        wayfinderBeaconCrest.position.y = 2.35 + Math.sin(t * 3.8) * 0.22;
+
+        for (let w = 0; w < wayfinderNodes.length; w++) {
+          const wfNode = wayfinderNodes[w];
+          if (route.totalLength < 1.2) {
+            wfNode.setEnabled(false);
+            continue;
+          }
+          const u = ((w / wayfinderNodes.length) + t * 0.36) % 1;
+          const pt = sampleWayfinderPolyline(route.waypoints, u);
+          const groundY = sampleTerrainHeight(activeCells, pt.x, pt.z);
+          const edgeEnvelope = Math.sin(u * Math.PI);
+          const scale = Math.max(0.25, 0.55 + edgeEnvelope * 0.65);
+          const bobY = 0.22 + Math.sin(t * 5.2 + w * 0.65) * 0.08;
+
+          wfNode.setEnabled(true);
+          wfNode.position.set(pt.x, groundY + bobY, pt.z);
+          wfNode.rotation.y = pt.yaw;
+          wfNode.scaling.setAll(scale);
+        }
+      } else {
+        wayfinderCompassNode.setEnabled(false);
+        wayfinderBeaconNode.setEnabled(false);
+        for (let w = 0; w < wayfinderNodes.length; w++) {
+          wayfinderNodes[w].setEnabled(false);
         }
       }
 
