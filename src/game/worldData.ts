@@ -255,6 +255,12 @@ export const GUIDE_NPC_POS = {
   z: -5.2,
 };
 
+// Map 1 Master Blacksmith Forge & Runic Anvil (Master Smith Torvin — infuses weapons with Elemental Runes!)
+export const FORGE_ANVIL_POS = {
+  x: 6.2,
+  z: -13.5,
+};
+
 // Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,

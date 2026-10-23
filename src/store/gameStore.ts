@@ -35,6 +35,7 @@ import {
   EnemyKind,
   EnemyShieldArmor,
   FIRE_ROD_CHEST_POS,
+  FORGE_ANVIL_POS,
   FRONTIER_BOMB_CHEST_POS,
   FRONTIER_CITADEL_GATE_POS,
   FRONTIER_HOOKSHOT_CHEST_POS,
@@ -212,6 +213,10 @@ export interface HeroState {
   unlockedTunics: TunicId[];
   unlockedBoots: BootsId[];
   bottles: BottleContentId[];
+  monsterCores?: number;
+  swordRuneTier?: 0 | 1 | 2;
+  bowRuneTier?: 0 | 1 | 2;
+  hammerRuneTier?: 0 | 1 | 2;
   shieldBlock: number; // Physical damage blocked by current shield
   swordDamage: number; // Base sword damage (1 for Traveler's Sword, 2 for Tempered Blade)
   isAttacking: boolean;
@@ -339,6 +344,8 @@ export interface ArrowProjectileState {
   isRock?: boolean;
   isFrost?: boolean;
   isReflected?: boolean;
+  isPiercing?: boolean;
+  hitEnemyIds?: string[];
   deflectedRock?: boolean;
   stuck?: boolean;
   stuckTimer?: number;
@@ -385,6 +392,17 @@ export interface FriendlyBeeState {
   timer: number;
   maxTimer: number;
   stingCooldown: number;
+}
+
+export interface LightningArcState {
+  id: string;
+  zone: ZoneId;
+  x1: number;
+  z1: number;
+  x2: number;
+  z2: number;
+  timer: number;
+  maxTimer: number;
 }
 
 export interface BossProjectileState {
@@ -564,6 +582,7 @@ export interface SerializableGameState {
   fireballs: FireballProjectileState[];
   fireZones: FireZoneState[];
   friendlyBees: FriendlyBeeState[];
+  lightningArcs: LightningArcState[];
   thrownObjects: ThrownObjectState[];
   activeBombs: BombProjectileState[];
   projectiles: BossProjectileState[];
@@ -586,6 +605,7 @@ export interface SerializableGameState {
   characterOpen: boolean;
   questLogOpen: boolean;
   atlasOpen: boolean;
+  forgeOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -616,6 +636,9 @@ export interface GameActions {
   setCharacterOpen: (open: boolean) => void;
   setQuestLogOpen: (open: boolean) => void;
   setAtlasOpen: (open: boolean) => void;
+  setForgeOpen: (open: boolean) => void;
+  forgeEnchantWeapon: (slot: "sword" | "bow" | "hammer") => void;
+  grantForgePlaytestBundle: () => void;
   warpToZone: (targetZone: ZoneId, forceAllow?: boolean) => void;
   toggleWayfinder: () => void;
   setPinnedQuestId: (questId: string | null) => void;
@@ -929,6 +952,10 @@ function createInitialState(
       unlockedTunics: ["green_tunic"],
       unlockedBoots: ["leather_boots"],
       bottles: [],
+      monsterCores: 0,
+      swordRuneTier: 0,
+      bowRuneTier: 0,
+      hammerRuneTier: 0,
       shieldBlock: 1,
       swordDamage: 1,
       isAttacking: false,
@@ -968,6 +995,7 @@ function createInitialState(
     fireballs: [],
     fireZones: [],
     friendlyBees: [],
+    lightningArcs: [],
     thrownObjects: [],
     activeBombs: [],
     projectiles: [],
@@ -1114,6 +1142,7 @@ function createInitialState(
     characterOpen: false,
     questLogOpen: false,
     atlasOpen: false,
+    forgeOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -1446,7 +1475,165 @@ export const useGameStore = create<GameStore>((set, get) => ({
       shopOpen: open ? false : state.shopOpen,
       characterOpen: open ? false : state.characterOpen,
       questLogOpen: open ? false : state.questLogOpen,
+      forgeOpen: open ? false : state.forgeOpen,
     }));
+  },
+
+  setForgeOpen: (open: boolean) => {
+    set((state) => ({
+      forgeOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+    }));
+  },
+
+  grantForgePlaytestBundle: () => {
+    soundEngine.unlock();
+    soundEngine.playShopPurchase();
+    set((state) => ({
+      hero: {
+        ...state.hero,
+        monsterCores: (state.hero.monsterCores ?? 0) + 12,
+        rupees: state.hero.rupees + 600,
+        hasHammer: true,
+        hasBow: true,
+      },
+      banner: {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        text: "Playtest Forge Supply Granted! (+12 Cores & +600 Rupees)",
+        subtext: "Infuse your Sword, Bow, and War-Hammer with Tier I & Tier II Elemental Runes!",
+        timer: 3.8,
+      },
+    }));
+  },
+
+  forgeEnchantWeapon: (slot: "sword" | "bow" | "hammer") => {
+    const state = get();
+    const hero = { ...state.hero };
+    const cores = hero.monsterCores ?? 0;
+
+    if (slot === "sword") {
+      const cur = hero.swordRuneTier ?? 0;
+      if (cur >= 2) return;
+      const nextTier = (cur + 1) as 1 | 2;
+      const coreCost = nextTier === 1 ? 3 : 6;
+      const rupeeCost = nextTier === 1 ? 120 : 280;
+      if (cores < coreCost || hero.rupees < rupeeCost) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: "Insufficient Forge Materials!",
+            subtext: `Requires ${coreCost} Monster Cores and ${rupeeCost} Rupees.`,
+            timer: 3.2,
+          },
+        });
+        return;
+      }
+      hero.monsterCores = cores - coreCost;
+      hero.rupees -= rupeeCost;
+      hero.swordRuneTier = nextTier;
+      soundEngine.unlock();
+      soundEngine.playPegPound();
+      soundEngine.playVictoryFanfare();
+      set({
+        hero,
+        banner: {
+          id: Date.now(),
+          text:
+            nextTier === 1
+              ? "Forged Sword Rune I: Tempest Chain-Lightning!"
+              : "Forged Sword Rune II: Sovereign Thunder-Cleaver!",
+          subtext:
+            nextTier === 1
+              ? "Every Sword slash arcs Chain Lightning to 2 nearby monsters (+1 DMG & Stagger)!"
+              : "Arcs Chain Lightning to 4 monsters (+2 DMG) and flips Spiked Beetles!",
+          timer: 4.6,
+        },
+      });
+    } else if (slot === "bow") {
+      const cur = hero.bowRuneTier ?? 0;
+      if (cur >= 2) return;
+      const nextTier = (cur + 1) as 1 | 2;
+      const coreCost = nextTier === 1 ? 3 : 6;
+      const rupeeCost = nextTier === 1 ? 140 : 300;
+      if (cores < coreCost || hero.rupees < rupeeCost) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: "Insufficient Forge Materials!",
+            subtext: `Requires ${coreCost} Monster Cores and ${rupeeCost} Rupees.`,
+            timer: 3.2,
+          },
+        });
+        return;
+      }
+      hero.monsterCores = cores - coreCost;
+      hero.rupees -= rupeeCost;
+      hero.bowRuneTier = nextTier;
+      hero.hasBow = true;
+      soundEngine.unlock();
+      soundEngine.playPegPound();
+      soundEngine.playVictoryFanfare();
+      set({
+        hero,
+        banner: {
+          id: Date.now(),
+          text:
+            nextTier === 1
+              ? "Forged Bow Rune I: Twin-Hawk 3-Arrow Volley!"
+              : "Forged Bow Rune II: Starlight Piercer Volley!",
+          subtext:
+            nextTier === 1
+              ? "Firing your Bow [E] now launches a 3-Arrow Spread Volley for the cost of 1 arrow!"
+              : "3-Arrow Volley now pierces through enemies (+1 Bonus DMG) and ignites unlit Braziers!",
+          timer: 4.6,
+        },
+      });
+    } else if (slot === "hammer") {
+      const cur = hero.hammerRuneTier ?? 0;
+      if (cur >= 2) return;
+      const nextTier = (cur + 1) as 1 | 2;
+      const coreCost = nextTier === 1 ? 3 : 6;
+      const rupeeCost = nextTier === 1 ? 150 : 320;
+      if (cores < coreCost || hero.rupees < rupeeCost) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: "Insufficient Forge Materials!",
+            subtext: `Requires ${coreCost} Monster Cores and ${rupeeCost} Rupees.`,
+            timer: 3.2,
+          },
+        });
+        return;
+      }
+      hero.monsterCores = cores - coreCost;
+      hero.rupees -= rupeeCost;
+      hero.hammerRuneTier = nextTier;
+      hero.hasHammer = true;
+      soundEngine.unlock();
+      soundEngine.playPegPound();
+      soundEngine.playVictoryFanfare();
+      set({
+        hero,
+        banner: {
+          id: Date.now(),
+          text:
+            nextTier === 1
+              ? "Forged Hammer Rune I: Permafrost Quake Nova!"
+              : "Forged Hammer Rune II: Cataclysmic Frostfire Impact!",
+          subtext:
+            nextTier === 1
+              ? "War-Hammer slams [T] unleash a 5.0m Frost-Nova (+1 DMG & longer freeze stun)!"
+              : "6.2m Quake Nova (+2 Bonus DMG) that erupts 4 radial Elemental Seekers on impact!",
+          timer: 4.6,
+        },
+      });
+    }
   },
 
   warpToZone: (targetZone: ZoneId, forceAllow = false) => {
@@ -3470,6 +3657,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let fireballs: FireballProjectileState[] = (state.fireballs ?? []).map((f) => ({ ...f }));
     let fireZones: FireZoneState[] = (state.fireZones ?? []).map((fz) => ({ ...fz }));
     let friendlyBees: FriendlyBeeState[] = (state.friendlyBees ?? []).map((b) => ({ ...b }));
+    const lightningArcs: LightningArcState[] = (state.lightningArcs ?? [])
+      .map((arc) => ({ ...arc, timer: arc.timer - dt }))
+      .filter((arc) => arc.timer > 0);
     let thrownObjects: ThrownObjectState[] = (state.thrownObjects ?? []).map((t) => ({ ...t }));
     let activeBombs: BombProjectileState[] = (state.activeBombs ?? []).map((b) => ({ ...b }));
     const rupees: RupeeItemState[] = state.rupees.map((r) => ({
@@ -4675,6 +4865,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         hero.hammerCooldown = 0.72;
         const slamX = hero.x + Math.sin(hero.facing) * 1.3;
         const slamZ = hero.z + Math.cos(hero.facing) * 1.3;
+        const hRune = hero.hammerRuneTier ?? 0;
+        const swRadius = hRune === 2 ? 6.2 : hRune === 1 ? 5.0 : 3.8;
         hammerSlamImpactPos = { x: slamX, z: slamZ };
         soundEngine.playHammerSlam();
         hammerShockwaves.push({
@@ -4684,8 +4876,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
           z: slamZ,
           timer: 0.48,
           maxTimer: 0.48,
-          maxRadius: 3.8,
+          maxRadius: swRadius,
         });
+        if (hRune === 2) {
+          // Tier 2 Hammer Rune: Erupts 4 radial Elemental Seekers in a cross pattern!
+          [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5].forEach((ang, idx) => {
+            fireballs.push({
+              id: `hammer-fb-${idx}-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+              zone,
+              x: slamX + Math.sin(ang) * 0.5,
+              z: slamZ + Math.cos(ang) * 0.5,
+              angle: ang,
+              speed: 11.5,
+              damage: 2,
+              radius: 0.52,
+              isCharged: false,
+              lifeTimer: 0.95,
+            });
+          });
+        }
         bushBursts.push({
           id: `hammer-burst-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
           zone,
@@ -4785,16 +4994,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
         hero.weaponLockTimer = 0.38;
         hero.bowCooldown = 0.42;
         soundEngine.playBowShoot();
-        arrows.push({
-          id: `hero-arrow-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
-          zone,
-          fromHero: true,
-          x: hero.x + Math.sin(hero.facing) * 0.95,
-          z: hero.z + Math.cos(hero.facing) * 0.95,
-          angle: hero.facing,
-          speed: 21.0,
-          damage: 2,
-          lifeTimer: 1.5,
+        const bRune = hero.bowRuneTier ?? 0;
+        const spreadAngles = bRune >= 1 ? [-0.18, 0, 0.18] : [0];
+        const arrowDmg = bRune === 2 ? 3 : 2;
+        spreadAngles.forEach((offsetAngle, idx) => {
+          const shotAngle = hero.facing + offsetAngle;
+          arrows.push({
+            id: `hero-arrow-${idx}-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+            zone,
+            fromHero: true,
+            x: hero.x + Math.sin(shotAngle) * 0.95,
+            z: hero.z + Math.cos(shotAngle) * 0.95,
+            angle: shotAngle,
+            speed: bRune === 2 ? 24.0 : 21.0,
+            damage: arrowDmg,
+            lifeTimer: 1.5,
+            isPiercing: bRune === 2,
+            hitEnemyIds: [],
+          });
         });
       }
     } else if (
@@ -6629,6 +6846,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       enemy.hp = 0;
       enemy.state = "dead";
       stats.enemiesDefeated += 1;
+      const coreGain =
+        enemy.kind === "boss"
+          ? 5
+          : enemy.isBounty || enemy.kind === "knight"
+          ? 2
+          : 1;
+      hero.monsterCores = (hero.monsterCores ?? 0) + coreGain;
 
       if (enemy.kind === "boss") {
         flags.bossState = "DEAD";
@@ -7034,7 +7258,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
           continue;
         }
 
-        const hitRadius = enemy.kind === "boss" ? 3.8 : 3.45;
+        const hRune = hero.hammerRuneTier ?? 0;
+        const hitRadius =
+          (enemy.kind === "boss" ? 3.8 : 3.45) +
+          (hRune === 2 ? 2.4 : hRune === 1 ? 1.25 : 0);
         if (dist > hitRadius) continue;
 
         enemy.provoked = true;
@@ -7093,12 +7320,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
           enemy.stunTimer = Math.max(enemy.stunTimer, 3.2);
         }
 
-        enemy.hp -= 3;
+        const hammerBonusDmg = hRune === 2 ? 2 : hRune === 1 ? 1 : 0;
+        const hammerBonusStun = hRune >= 1 ? 1.4 : 0;
+        enemy.hp -= 3 + hammerBonusDmg;
         enemy.hitFlashTimer = 0.38;
-        enemy.stunTimer = Math.max(enemy.stunTimer, 1.85);
+        enemy.stunTimer = Math.max(enemy.stunTimer, 1.85 + hammerBonusStun);
         if (enemy.kind !== "turret") {
           enemy.state = "stunned";
-          enemy.stateTimer = Math.max(enemy.stateTimer, 1.85);
+          enemy.stateTimer = Math.max(enemy.stateTimer, 1.85 + hammerBonusStun);
           const pushDirX = dist > 0.05 ? dx / dist : Math.sin(hero.facing);
           const pushDirZ = dist > 0.05 ? dz / dist : Math.cos(hero.facing);
           const kb = 16.5 / Math.max(0.6, Math.sqrt(enemy.weight || 1));
@@ -7545,9 +7774,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         for (const enemy of enemies) {
           if (enemy.zone !== zone || enemy.state === "dead") continue;
           if (enemy.kind === "burrower" && enemy.burrowed) continue; // Arrows fly over submerged Tunnel Wyrms!
+          if (arrow.hitEnemyIds?.includes(enemy.id)) continue;
           const eRad = enemy.kind === "boss" ? 1.55 : enemy.kind === "turret" ? 1.05 : 0.85;
           if (Math.hypot(enemy.x - arrow.x, enemy.z - arrow.z) <= eRad) {
-            arrowConsumed = true;
+            if (arrow.isPiercing && enemy.kind !== "boss") {
+              arrow.hitEnemyIds = [...(arrow.hitEnemyIds ?? []), enemy.id];
+            } else {
+              arrowConsumed = true;
+            }
 
             // Prevent sniping or waking the Boss/Sanctum Minions from outside the Boss Room before entering!
             if (isBossRoomSealed(enemy)) {
@@ -7718,7 +7952,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             }
 
             // Embed arrow into the enemy's body in local enemy coordinates so it moves & rotates with them!
-            if (enemy.hp > 0 && !arrow.isRock && !arrow.isFrost) {
+            if (arrowConsumed && enemy.hp > 0 && !arrow.isRock && !arrow.isFrost) {
               const dirX = Math.sin(arrow.angle);
               const dirZ = Math.cos(arrow.angle);
               const perpX = dirZ;
@@ -7759,7 +7993,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
               arrow.z = enemy.z + worldOffZ;
               remainingArrows.push(arrow);
             }
-            break;
+            if (arrowConsumed) {
+              break;
+            }
           }
         }
       } else {
@@ -9416,6 +9652,55 @@ export const useGameStore = create<GameStore>((set, get) => ({
               // Weight-based knockback system!
               enemy.hp -= strikeDamage;
               enemy.hitFlashTimer = 0.22;
+
+              // Sword Enchantment: Tempest Chain-Lightning Rune (Tier 1 & Tier 2)
+              const sRune = hero.swordRuneTier ?? 0;
+              if (sRune >= 1) {
+                const maxTargets = sRune === 2 ? 4 : 2;
+                const arcRange = sRune === 2 ? 6.2 : 4.8;
+                const arcDamage = sRune === 2 ? 2 : 1;
+                let chainedCount = 0;
+                for (const other of enemies) {
+                  if (chainedCount >= maxTargets) break;
+                  if (
+                    other.id === enemy.id ||
+                    other.zone !== zone ||
+                    other.state === "dead" ||
+                    (other.kind === "burrower" && other.burrowed) ||
+                    other.kind === "boss"
+                  ) {
+                    continue;
+                  }
+                  const dChain = Math.hypot(other.x - enemy.x, other.z - enemy.z);
+                  if (dChain <= arcRange) {
+                    chainedCount++;
+                    other.provoked = true;
+                    other.hp -= arcDamage;
+                    other.hitFlashTimer = 0.28;
+                    other.stunTimer = Math.max(other.stunTimer, sRune === 2 ? 1.45 : 0.85);
+                    if (other.kind !== "turret") {
+                      other.state = "stunned";
+                      other.stateTimer = Math.max(other.stateTimer, sRune === 2 ? 1.45 : 0.85);
+                    }
+                    lightningArcs.push({
+                      id: `arc-${enemy.id}-${other.id}-${stats.elapsedSeconds.toFixed(3)}`,
+                      zone,
+                      x1: enemy.x,
+                      z1: enemy.z,
+                      x2: other.x,
+                      z2: other.z,
+                      timer: 0.34,
+                      maxTimer: 0.34,
+                    });
+                    if (other.hp <= 0) {
+                      handleEnemyDeath(other);
+                    }
+                  }
+                }
+                if (chainedCount > 0) {
+                  soundEngine.playElectricShock();
+                }
+              }
 
               const kbDirX = dist > 0.01 ? dx / dist : Math.sin(hero.facing);
               const kbDirZ = dist > 0.01 ? dz / dist : Math.cos(hero.facing);
@@ -11466,6 +11751,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (Math.hypot(warpMeta.x - hero.x, warpMeta.z - hero.z) <= 3.6) {
           hero.interactPrompt =
             "Ancient Warp Monolith (Awakened) — Press [M] or [F] to Open World Atlas & Fast-Travel!";
+        } else if (
+          zone === "overworld" &&
+          Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.6
+        ) {
+          hero.interactPrompt =
+            "Master Smith Torvin's Runic Anvil — Press [U] or [F] to Enchant Weapons with Monster Cores!";
         } else {
           hero.interactPrompt = null;
         }
@@ -11474,6 +11765,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     let warpBeamTimer = Math.max(0, (state.warpBeamTimer ?? 0) - dt);
     let atlasOpen = state.atlasOpen;
+    let forgeOpen = state.forgeOpen;
+    if (
+      zone === "overworld" &&
+      Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      forgeOpen = true;
+      atlasOpen = false;
+      shopOpen = false;
+    }
     if (!flags.discoveredZones?.includes(zone)) {
       flags.discoveredZones = Array.from(
         new Set([...(flags.discoveredZones ?? ["overworld"]), zone])
@@ -11511,6 +11813,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       fireballs,
       fireZones,
       friendlyBees,
+      lightningArcs,
       thrownObjects,
       activeBombs,
       projectiles,
@@ -11526,6 +11829,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       nearShop,
       shopOpen,
       atlasOpen,
+      forgeOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

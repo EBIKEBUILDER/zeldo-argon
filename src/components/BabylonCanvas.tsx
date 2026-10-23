@@ -54,6 +54,7 @@ import {
   EAST_WING_DOOR_POS,
   EnemyKind,
   FIRE_ROD_CHEST_POS,
+  FORGE_ANVIL_POS,
   FRONTIER_BOMB_CHEST_POS,
   FRONTIER_CITADEL_GATE_POS,
   FRONTIER_HOOKSHOT_CHEST_POS,
@@ -5067,6 +5068,169 @@ export default function BabylonCanvas() {
     warpBeamCylinder.parent = warpMonolithNode;
 
     // =========================================================
+    // 3D MASTER BLACKSMITH FORGE HEARTH, RUNIC ANVIL & TORVIN (MAP 1 OVERWORLD)
+    // =========================================================
+    const forgeAnvilNode = new TransformNode("forgeAnvilNode", scene);
+    forgeAnvilNode.position.set(FORGE_ANVIL_POS.x, 0, FORGE_ANVIL_POS.z);
+
+    const forgeIronMat = makeMat(
+      "forgeIronMat",
+      new Color3(0.22, 0.24, 0.29),
+      new Color3(0.05, 0.06, 0.08),
+      new Color3(0.55, 0.58, 0.65)
+    );
+    const forgeEmberMat = makeMat(
+      "forgeEmberMat",
+      new Color3(1.0, 0.42, 0.12),
+      new Color3(0.95, 0.32, 0.06),
+      new Color3(1.0, 0.85, 0.5)
+    );
+    const forgeRuneRingMat = makeMat(
+      "forgeRuneRingMat",
+      new Color3(1.0, 0.78, 0.25),
+      new Color3(0.85, 0.55, 0.12),
+      new Color3(1.0, 0.95, 0.75)
+    );
+    const lightningArcMat = makeMat(
+      "lightningArcMat",
+      new Color3(0.45, 0.95, 1.0),
+      new Color3(0.35, 0.88, 1.0),
+      new Color3(1.0, 1.0, 1.0)
+    );
+
+    const forgePad = MeshBuilder.CreateCylinder(
+      "forgePad",
+      { diameterTop: 3.4, diameterBottom: 3.8, height: 0.22, tessellation: 12 },
+      scene
+    );
+    forgePad.position.set(0, 0.11, 0);
+    forgePad.material = ruinMat;
+    forgePad.isPickable = false;
+    forgePad.parent = forgeAnvilNode;
+
+    // Stone Hearth & Glowing Coal Bed (Behind Anvil)
+    const forgeHearth = MeshBuilder.CreateBox(
+      "forgeHearth",
+      { width: 1.9, height: 1.15, depth: 1.2 },
+      scene
+    );
+    forgeHearth.position.set(-0.65, 0.68, 0.85);
+    forgeHearth.material = dgWallMat;
+    forgeHearth.isPickable = false;
+    forgeHearth.parent = forgeAnvilNode;
+
+    const forgeChimney = MeshBuilder.CreateBox(
+      "forgeChimney",
+      { width: 1.1, height: 1.6, depth: 0.85 },
+      scene
+    );
+    forgeChimney.position.set(-0.65, 1.95, 0.95);
+    forgeChimney.material = dgWallMat;
+    forgeChimney.isPickable = false;
+    forgeChimney.parent = forgeAnvilNode;
+
+    const forgeCoals = MeshBuilder.CreateCylinder(
+      "forgeCoals",
+      { diameterTop: 1.05, diameterBottom: 1.2, height: 0.25, tessellation: 10 },
+      scene
+    );
+    forgeCoals.position.set(-0.65, 1.28, 0.78);
+    forgeCoals.material = forgeEmberMat;
+    forgeCoals.isPickable = false;
+    forgeCoals.parent = forgeAnvilNode;
+
+    // Oak Stump & Heavy Iron Runic Anvil (Center)
+    const anvilStump = MeshBuilder.CreateCylinder(
+      "anvilStump",
+      { diameterTop: 0.92, diameterBottom: 1.04, height: 0.68, tessellation: 10 },
+      scene
+    );
+    anvilStump.position.set(0.35, 0.45, -0.15);
+    anvilStump.material = cliffMat;
+    anvilStump.isPickable = false;
+    anvilStump.parent = forgeAnvilNode;
+
+    const anvilBase = MeshBuilder.CreateBox(
+      "anvilBase",
+      { width: 0.95, height: 0.34, depth: 0.56 },
+      scene
+    );
+    anvilBase.position.set(0.35, 0.95, -0.15);
+    anvilBase.material = forgeIronMat;
+    anvilBase.isPickable = false;
+    anvilBase.parent = forgeAnvilNode;
+
+    const anvilHorn = MeshBuilder.CreateCylinder(
+      "anvilHorn",
+      { diameterTop: 0.06, diameterBottom: 0.36, height: 0.55, tessellation: 10 },
+      scene
+    );
+    anvilHorn.rotation.z = -Math.PI / 2;
+    anvilHorn.position.set(0.95, 0.98, -0.15);
+    anvilHorn.material = forgeIronMat;
+    anvilHorn.isPickable = false;
+    anvilHorn.parent = forgeAnvilNode;
+
+    const forgeFloatingRuneRing = MeshBuilder.CreateTorus(
+      "forgeFloatingRuneRing",
+      { diameter: 1.25, thickness: 0.06, tessellation: 20 },
+      scene
+    );
+    forgeFloatingRuneRing.position.set(0.35, 1.48, -0.15);
+    forgeFloatingRuneRing.material = forgeRuneRingMat;
+    forgeFloatingRuneRing.isPickable = false;
+    forgeFloatingRuneRing.parent = forgeAnvilNode;
+
+    // Master Smith Torvin (Standing by the Anvil)
+    const smithBody = MeshBuilder.CreateCylinder(
+      "smithBody",
+      { diameterTop: 0.62, diameterBottom: 0.78, height: 1.05, tessellation: 10 },
+      scene
+    );
+    smithBody.position.set(1.15, 0.72, 0.55);
+    smithBody.material = forgeEmberMat;
+    smithBody.isPickable = false;
+    smithBody.parent = forgeAnvilNode;
+
+    const smithHead = MeshBuilder.CreateSphere(
+      "smithHead",
+      { diameter: 0.52, segments: 10 },
+      scene
+    );
+    smithHead.position.set(1.15, 1.45, 0.55);
+    smithHead.material = skinMat;
+    smithHead.isPickable = false;
+    smithHead.parent = forgeAnvilNode;
+
+    const smithArmNode = new TransformNode("smithArmNode", scene);
+    smithArmNode.position.set(0.85, 1.15, 0.35);
+    smithArmNode.parent = forgeAnvilNode;
+
+    const smithHammerHead = MeshBuilder.CreateBox(
+      "smithHammerHead",
+      { width: 0.28, height: 0.22, depth: 0.44 },
+      scene
+    );
+    smithHammerHead.position.set(0, 0.35, -0.25);
+    smithHammerHead.material = forgeIronMat;
+    smithHammerHead.isPickable = false;
+    smithHammerHead.parent = smithArmNode;
+
+    // 3D Chain-Lightning Arc Mesh Pool (8 reusable electric bolts)
+    const lightningArcPool: Mesh[] = [];
+    for (let i = 0; i < 8; i++) {
+      const bolt = MeshBuilder.CreateBox(
+        `lightningArcBolt-${i}`,
+        { width: 0.14, height: 0.14, depth: 1.0 },
+        scene
+      );
+      bolt.material = lightningArcMat;
+      bolt.isPickable = false;
+      bolt.setEnabled(false);
+      lightningArcPool.push(bolt);
+    }
+
+    // =========================================================
     // DYNAMIC ENEMY, ARROW, PROJECTILE, HAZARD & RUPEE REGISTRIES
     // =========================================================
     const enemyRigs = new Map<string, EnemyMeshRig>();
@@ -8053,6 +8217,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // U toggles Master Blacksmith Forge & Weapon Enchantments
+      if (code === "KeyU" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setForgeOpen(!store.forgeOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -8916,6 +9087,45 @@ export default function BabylonCanvas() {
       if (showWarpBeam) {
         const beamPulse = 0.92 + Math.sin(t * 12) * 0.1;
         warpBeamCylinder.scaling.set(beamPulse, 1, beamPulse);
+      }
+
+      // Sync 3D Master Blacksmith Forge & Runic Anvil (Map 1 Overworld)
+      const inOverworld = snap.zone === "overworld";
+      forgeAnvilNode.setEnabled(inOverworld);
+      if (inOverworld) {
+        const forgeGroundY = sampleTerrainHeight(
+          activeCells,
+          FORGE_ANVIL_POS.x,
+          FORGE_ANVIL_POS.z
+        );
+        forgeAnvilNode.position.set(FORGE_ANVIL_POS.x, forgeGroundY, FORGE_ANVIL_POS.z);
+        forgeFloatingRuneRing.rotation.y = t * 2.4;
+        forgeFloatingRuneRing.position.y = 1.46 + Math.sin(t * 3.8) * 0.1;
+        const coalPulse = 0.95 + Math.sin(t * 8.5) * 0.08;
+        forgeCoals.scaling.set(coalPulse, 1, coalPulse);
+        smithArmNode.rotation.x = Math.sin(t * 6.5) * 0.55;
+      }
+
+      // Sync 3D Chain-Lightning Arcs between struck enemies
+      const activeArcs = (snap.lightningArcs ?? []).filter((a) => a.zone === snap.zone);
+      for (let i = 0; i < lightningArcPool.length; i++) {
+        const bolt = lightningArcPool[i];
+        const arc = activeArcs[i];
+        if (!arc) {
+          bolt.setEnabled(false);
+          continue;
+        }
+        bolt.setEnabled(true);
+        const mx = (arc.x1 + arc.x2) * 0.5;
+        const mz = (arc.z1 + arc.z2) * 0.5;
+        const dx = arc.x2 - arc.x1;
+        const dz = arc.z2 - arc.z1;
+        const len = Math.max(0.2, Math.hypot(dx, dz));
+        const groundY = sampleTerrainHeight(activeCells, mx, mz);
+        bolt.position.set(mx, groundY + 0.95 + Math.sin(t * 42 + i) * 0.08, mz);
+        bolt.rotation.y = Math.atan2(dx, dz);
+        const pulseW = 0.8 + Math.sin(t * 55 + i * 2) * 0.35;
+        bolt.scaling.set(pulseW, pulseW, len);
       }
 
       // 5. Camera Follow in Play Mode vs Free Orbit in Editor Mode

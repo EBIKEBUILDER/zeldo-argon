@@ -243,6 +243,7 @@ export default function GameOverlay() {
   const characterOpen = useGameStore((s) => s.characterOpen);
   const questLogOpen = useGameStore((s) => s.questLogOpen);
   const atlasOpen = useGameStore((s) => s.atlasOpen);
+  const forgeOpen = useGameStore((s) => s.forgeOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -266,6 +267,9 @@ export default function GameOverlay() {
   const setCharacterOpen = useGameStore((s) => s.setCharacterOpen);
   const setQuestLogOpen = useGameStore((s) => s.setQuestLogOpen);
   const setAtlasOpen = useGameStore((s) => s.setAtlasOpen);
+  const setForgeOpen = useGameStore((s) => s.setForgeOpen);
+  const forgeEnchantWeapon = useGameStore((s) => s.forgeEnchantWeapon);
+  const grantForgePlaytestBundle = useGameStore((s) => s.grantForgePlaytestBundle);
   const warpToZone = useGameStore((s) => s.warpToZone);
   const toggleWayfinder = useGameStore((s) => s.toggleWayfinder);
   const setPinnedQuestId = useGameStore((s) => s.setPinnedQuestId);
@@ -315,6 +319,7 @@ export default function GameOverlay() {
         if (characterOpen) setCharacterOpen(false);
         if (questLogOpen) setQuestLogOpen(false);
         if (atlasOpen) setAtlasOpen(false);
+        if (forgeOpen) setForgeOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -324,10 +329,12 @@ export default function GameOverlay() {
     characterOpen,
     questLogOpen,
     atlasOpen,
+    forgeOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
     setAtlasOpen,
+    setForgeOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -572,7 +579,13 @@ export default function GameOverlay() {
                 <span className="gear-name">
                   {(hero.swordChargeTimer ?? 0) >= 0.62
                     ? "SPIN READY!"
-                    : `Sword (${hero.swordDamage ?? 1} DMG)`}
+                    : `Sword (${hero.swordDamage ?? 1} DMG${
+                        (hero.swordRuneTier ?? 0) === 2
+                          ? " ⚡II"
+                          : (hero.swordRuneTier ?? 0) === 1
+                          ? " ⚡I"
+                          : ""
+                      })`}
                 </span>
               </div>
 
@@ -701,7 +714,13 @@ export default function GameOverlay() {
                       ? "Slamming!"
                       : (hero.hammerCooldown ?? 0) > 0
                       ? `Hammer (${(hero.hammerCooldown ?? 0).toFixed(1)}s)`
-                      : "War-Hammer"
+                      : `War-Hammer${
+                          (hero.hammerRuneTier ?? 0) === 2
+                            ? " ❄II"
+                            : (hero.hammerRuneTier ?? 0) === 1
+                            ? " ❄I"
+                            : ""
+                        }`
                     : "??? Relic"}
                 </span>
               </div>
@@ -766,7 +785,15 @@ export default function GameOverlay() {
               >
                 <span className="gear-key">E</span>
                 <span className="gear-name">
-                  {hero.hasBow ? `Bow (${hero.arrows})` : `Arrows: ${hero.arrows}`}
+                  {hero.hasBow
+                    ? `Bow (${hero.arrows}${
+                        (hero.bowRuneTier ?? 0) === 2
+                          ? " • 3x✦"
+                          : (hero.bowRuneTier ?? 0) === 1
+                          ? " • 3x"
+                          : ""
+                      })`
+                    : `Arrows: ${hero.arrows}`}
                 </span>
               </div>
 
@@ -1078,6 +1105,14 @@ export default function GameOverlay() {
                   title="Open the Interactive World Atlas & Fast-Travel Warp Network (Shortcut: M)"
                 >
                   🗺 Atlas (M)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForgeOpen(!forgeOpen)}
+                  className={`char-toggle-btn ${forgeOpen ? "active" : ""}`}
+                  title="Open Master Smith Torvin's Runic Forge & Weapon Enchantments (Shortcut: U)"
+                >
+                  ⚒ Forge ({hero.monsterCores ?? 0}✦)
                 </button>
                 <button
                   type="button"
@@ -3306,6 +3341,223 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close World Atlas (M)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          MASTER BLACKSMITH FORGE & RUNIC WEAPON ENCHANTMENTS MODAL (SHORTCUT: U)
+         ========================================================= */}
+      {phase === "playing" && !editorMode && forgeOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card char-sheet-card" style={{ maxWidth: "1020px" }}>
+            <div className="shop-header">
+              <div>
+                <div className="shop-pill">CROSSROADS VILLAGE HEARTH • MASTER SMITH TORVIN</div>
+                <h2 className="shop-title">RUNIC ANVIL &amp; WEAPON ENCHANTMENTS</h2>
+              </div>
+              <div className="char-summary-badges" style={{ alignItems: "center", gap: "8px" }}>
+                <span className="char-stat-badge" style={{ borderColor: "#4ef2ff", color: "#9ef6ff" }}>
+                  ✦ Monster Cores: <strong>{hero.monsterCores ?? 0}</strong>
+                </span>
+                <span className="char-stat-badge" style={{ borderColor: "#ffd24c", color: "#ffe694" }}>
+                  ◆ Rupees: <strong>{hero.rupees}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={grantForgePlaytestBundle}
+                  className="char-equip-btn"
+                  style={{
+                    background: "rgba(92, 214, 255, 0.2)",
+                    borderColor: "rgba(92, 214, 255, 0.55)",
+                    color: "#9ef0ff",
+                    padding: "5px 10px",
+                  }}
+                  title="Playtest: Instantly grant +12 Monster Cores & +600 Rupees to test all weapon enchantments"
+                >
+                  ⚡ Playtest: +12 Cores &amp; +600 Rupees
+                </button>
+              </div>
+            </div>
+
+            <p className="shop-greeting" style={{ marginBottom: "14px" }}>
+              &ldquo;Hail, champion! Every monster you slay yields crystallized{" "}
+              <strong>Monster Cores (✦)</strong> — 1 from regular foes, 2 from Knights &amp;
+              Crowned Bounties, and 5 from Sanctum Bosses! Bring them to my Runic Anvil in
+              Crossroads Village (or press <strong>U</strong> anytime) to infuse your{" "}
+              <strong>Sword, Bow, and War-Hammer</strong> with Tier I &amp; Tier II Elemental
+              Runes!&rdquo;
+            </p>
+
+            {(() => {
+              const cores = hero.monsterCores ?? 0;
+              const sTier = hero.swordRuneTier ?? 0;
+              const bTier = hero.bowRuneTier ?? 0;
+              const hTier = hero.hammerRuneTier ?? 0;
+
+              const forgeTrees = [
+                {
+                  slot: "sword" as const,
+                  title: "1. Sword Enchantment • Tempest Chain-Lightning",
+                  hotkey: "Space / LMB",
+                  tier: sTier,
+                  accent: "#4ef2ff",
+                  tier1Name: "Tier I: Arcing Storm-Edge",
+                  tier1Cost: { cores: 3, rupees: 120 },
+                  tier1Desc:
+                    "Every Sword slash & Spin Attack arcs Chain Lightning to up to 2 nearby monsters within 4.8m for +1 Electric DMG and a 0.85s shock stagger!",
+                  tier2Name: "Tier II: Sovereign Thunder-Cleaver",
+                  tier2Cost: { cores: 6, rupees: 280 },
+                  tier2Desc:
+                    "Arcs Chain Lightning to up to 4 monsters within 6.2m for +2 Electric DMG and a 1.45s shock stun!",
+                },
+                {
+                  slot: "bow" as const,
+                  title: "2. Bow Enchantment • Astral Multi-Shot & Piercer",
+                  hotkey: "Key: E / 2",
+                  tier: bTier,
+                  accent: "#ffd95e",
+                  tier1Name: "Tier I: Twin-Hawk 3-Arrow Volley",
+                  tier1Cost: { cores: 3, rupees: 140 },
+                  tier1Desc:
+                    "Firing your Bow launches a 3-Arrow Spread Volley (-10°, 0°, +10°) while consuming only 1 arrow from your quiver!",
+                  tier2Name: "Tier II: Starlight Piercer Volley",
+                  tier2Cost: { cores: 6, rupees: 300 },
+                  tier2Desc:
+                    "Upgrades your 3-Arrow Volley to 3 DMG per arrow and pierces straight through multiple enemies in a line!",
+                },
+                {
+                  slot: "hammer" as const,
+                  title: "3. War-Hammer Enchantment • Permafrost & Cataclysm",
+                  hotkey: "Key: T / 8",
+                  tier: hTier,
+                  accent: "#ff7b54",
+                  tier1Name: "Tier I: Permafrost Quake Nova",
+                  tier1Cost: { cores: 3, rupees: 150 },
+                  tier1Desc:
+                    "Expands your War-Hammer seismic shockwave to 5.0m radius, deals 4 DMG, and extends monster stun duration by +1.4s!",
+                  tier2Name: "Tier II: Cataclysmic Frostfire Impact",
+                  tier2Cost: { cores: 6, rupees: 320 },
+                  tier2Desc:
+                    "Expands shockwave to 6.2m radius (5 DMG) and erupts 4 radial Elemental Fireballs outward in a 4-way cross on every slam!",
+                },
+              ];
+
+              return (
+                <div className="shop-items-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                  {forgeTrees.map((tree) => {
+                    const nextTier = tree.tier < 2 ? ((tree.tier + 1) as 1 | 2) : null;
+                    const req =
+                      nextTier === 1
+                        ? tree.tier1Cost
+                        : nextTier === 2
+                        ? tree.tier2Cost
+                        : null;
+                    const canAfford =
+                      req !== null && cores >= req.cores && hero.rupees >= req.rupees;
+
+                    return (
+                      <div
+                        key={tree.slot}
+                        className={`shop-item-card ${tree.tier >= 2 ? "shop-item-owned" : ""}`}
+                        style={{
+                          borderColor:
+                            tree.tier > 0 ? tree.accent : "rgba(140, 165, 210, 0.35)",
+                        }}
+                      >
+                        <div className="shop-item-top">
+                          <span className="shop-item-name" style={{ color: tree.accent }}>
+                            {tree.title}
+                          </span>
+                          <span className="shop-item-hotkey">
+                            {tree.tier === 0
+                              ? "Unenchanted"
+                              : tree.tier === 1
+                              ? "★ RUNE TIER I"
+                              : "★★ MAX TIER II"}
+                          </span>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: "8px 10px",
+                            borderRadius: "8px",
+                            marginBottom: "8px",
+                            background:
+                              tree.tier >= 1
+                                ? "rgba(46, 214, 118, 0.12)"
+                                : "rgba(255, 255, 255, 0.04)",
+                            border:
+                              tree.tier >= 1
+                                ? "1px solid rgba(46, 214, 118, 0.45)"
+                                : "1px solid rgba(255, 255, 255, 0.1)",
+                            fontSize: "0.76rem",
+                          }}
+                        >
+                          <div style={{ fontWeight: 800, color: "#fff2c2", marginBottom: "3px" }}>
+                            {tree.tier >= 1 ? `✓ ${tree.tier1Name}` : tree.tier1Name}
+                          </div>
+                          <div style={{ color: "#d6e2f5" }}>{tree.tier1Desc}</div>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: "8px 10px",
+                            borderRadius: "8px",
+                            marginBottom: "10px",
+                            background:
+                              tree.tier >= 2
+                                ? "rgba(46, 214, 118, 0.12)"
+                                : "rgba(255, 255, 255, 0.04)",
+                            border:
+                              tree.tier >= 2
+                                ? "1px solid rgba(46, 214, 118, 0.45)"
+                                : "1px solid rgba(255, 255, 255, 0.1)",
+                            fontSize: "0.76rem",
+                          }}
+                        >
+                          <div style={{ fontWeight: 800, color: "#ffd978", marginBottom: "3px" }}>
+                            {tree.tier >= 2 ? `✓ ${tree.tier2Name}` : tree.tier2Name}
+                          </div>
+                          <div style={{ color: "#d6e2f5" }}>{tree.tier2Desc}</div>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={!nextTier || !canAfford}
+                          onClick={() => forgeEnchantWeapon(tree.slot)}
+                          className="shop-buy-btn"
+                        >
+                          {!nextTier
+                            ? "★★ Masterwork Rune Complete"
+                            : canAfford
+                            ? `⚒ Forge Tier ${nextTier === 1 ? "I" : "II"} — ${req!.cores}✦ Cores & ${
+                                req!.rupees
+                              } Rupees`
+                            : `Need ${req!.cores}✦ Cores (${cores}/${req!.cores}) & ${
+                                req!.rupees
+                              } Rupees`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Visit Master Smith Torvin&apos;s Anvil in Crossroads Village or press{" "}
+                <strong>U</strong> / <strong>Esc</strong> anytime to close.
+              </span>
+              <button
+                type="button"
+                onClick={() => setForgeOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Runic Forge (U)
               </button>
             </div>
           </div>
