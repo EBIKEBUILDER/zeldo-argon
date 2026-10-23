@@ -65,6 +65,7 @@ import {
   MapPortal,
   MapPropInstance,
   PropPrefabId,
+  RIFT_ENTRANCE_POS,
   SECRET_STASH_POS,
   SHOP_INTERACT_POS,
   SHOP_STALL_POS,
@@ -494,6 +495,7 @@ export default function BabylonCanvas() {
     const citadelRoot = new TransformNode("citadelRoot", scene);
     const desertRoot = new TransformNode("desertRoot", scene);
     const calderaRoot = new TransformNode("calderaRoot", scene);
+    const riftRoot = new TransformNode("riftRoot", scene);
 
     const owBaseColor = new Color3(0.24, 0.55, 0.28);
     const grBaseColor = new Color3(0.19, 0.48, 0.27);
@@ -503,6 +505,7 @@ export default function BabylonCanvas() {
     const ctBaseColor = new Color3(0.16, 0.14, 0.22);
     const dsBaseColor = new Color3(0.82, 0.66, 0.36);
     const caBaseColor = new Color3(0.22, 0.12, 0.12);
+    const riftBaseColor = new Color3(0.14, 0.12, 0.22);
 
     const owGroundMat = makeMat(
       "owGroundMat",
@@ -551,6 +554,12 @@ export default function BabylonCanvas() {
       new Color3(1, 1, 1),
       undefined,
       new Color3(0.18, 0.08, 0.06)
+    );
+    const riftGroundMat = makeMat(
+      "riftGroundMat",
+      new Color3(1, 1, 1),
+      undefined,
+      new Color3(0.12, 0.08, 0.18)
     );
 
     // Subdivided updatable ground meshes for real-time Terrain Brush sculpting & painting!
@@ -633,6 +642,16 @@ export default function BabylonCanvas() {
     caGround.parent = calderaRoot;
     caGround.isPickable = true;
     applyTerrainCellsToGroundMesh(caGround, caBaseColor, {});
+
+    const riftGround = MeshBuilder.CreateGround(
+      "riftGround",
+      { width: 84, height: 84, subdivisions: 42, updatable: true },
+      scene
+    );
+    riftGround.material = riftGroundMat;
+    riftGround.parent = riftRoot;
+    riftGround.isPickable = true;
+    applyTerrainCellsToGroundMesh(riftGround, riftBaseColor, {});
 
     // Shared Prop Materials
     const pathMat = makeMat("owPathMat", new Color3(0.75, 0.65, 0.46), undefined, new Color3(0.08, 0.08, 0.06));
@@ -5231,6 +5250,336 @@ export default function BabylonCanvas() {
     }
 
     // =========================================================
+    // 3D ABYSSAL RIFT OBELISK (VILLAGE OVERWORLD) & PROCEDURAL DUNGEON LANDMARKS
+    // =========================================================
+    const riftVioletMat = makeMat(
+      "riftVioletMat",
+      new Color3(0.76, 0.28, 1.0),
+      new Color3(0.62, 0.18, 0.92),
+      new Color3(1.0, 0.85, 1.0)
+    );
+    const riftVortexDiscMat = makeMat(
+      "riftVortexDiscMat",
+      new Color3(0.58, 0.16, 0.88),
+      new Color3(0.45, 0.1, 0.78),
+      new Color3(0, 0, 0),
+      0.58
+    );
+    const riftShrineGlowMat = makeMat(
+      "riftShrineGlowMat",
+      new Color3(0.32, 0.98, 0.78),
+      new Color3(0.22, 0.86, 0.64),
+      new Color3(0.95, 1.0, 0.98)
+    );
+
+    // 1. Overworld Abyssal Rift Obelisk & Swirling Vortex (`RIFT_ENTRANCE_POS = 12.2, -13.5`)
+    const riftEntranceNode = new TransformNode("riftEntranceNode", scene);
+    riftEntranceNode.position.set(RIFT_ENTRANCE_POS.x, 0, RIFT_ENTRANCE_POS.z);
+
+    const riftObeliskPad = MeshBuilder.CreateCylinder(
+      "riftObeliskPad",
+      { diameterTop: 3.4, diameterBottom: 3.9, height: 0.24, tessellation: 14 },
+      scene
+    );
+    riftObeliskPad.position.set(0, 0.12, 0);
+    riftObeliskPad.material = darkObsidianMat;
+    riftObeliskPad.isPickable = false;
+    riftObeliskPad.parent = riftEntranceNode;
+
+    for (const side of [-1, 1]) {
+      const hornPillar = MeshBuilder.CreateCylinder(
+        `riftHornPillar-${side}`,
+        { diameterTop: 0.36, diameterBottom: 0.72, height: 2.85, tessellation: 8 },
+        scene
+      );
+      hornPillar.position.set(side * 1.18, 1.48, 0);
+      hornPillar.rotation.z = side * -0.14;
+      hornPillar.material = darkObsidianMat;
+      hornPillar.isPickable = false;
+      hornPillar.parent = riftEntranceNode;
+
+      const hornCrystal = MeshBuilder.CreatePolyhedron(
+        `riftHornCrystal-${side}`,
+        { type: 1, size: 0.26 },
+        scene
+      );
+      hornCrystal.position.set(side * 0.98, 2.98, 0);
+      hornCrystal.scaling.set(0.85, 1.5, 0.85);
+      hornCrystal.material = riftVioletMat;
+      hornCrystal.isPickable = false;
+      hornCrystal.parent = riftEntranceNode;
+    }
+
+    const riftVortexDisc = MeshBuilder.CreateCylinder(
+      "riftVortexDisc",
+      { diameter: 1.85, height: 0.08, tessellation: 24 },
+      scene
+    );
+    riftVortexDisc.rotation.x = Math.PI / 2;
+    riftVortexDisc.position.set(0, 1.65, 0);
+    riftVortexDisc.material = riftVortexDiscMat;
+    riftVortexDisc.isPickable = false;
+    riftVortexDisc.parent = riftEntranceNode;
+
+    const riftOuterRing = MeshBuilder.CreateTorus(
+      "riftOuterRing",
+      { diameter: 2.1, thickness: 0.11, tessellation: 28 },
+      scene
+    );
+    riftOuterRing.rotation.x = Math.PI / 2;
+    riftOuterRing.position.set(0, 1.65, 0);
+    riftOuterRing.material = riftVioletMat;
+    riftOuterRing.isPickable = false;
+    riftOuterRing.parent = riftEntranceNode;
+
+    const riftGroundHalo = MeshBuilder.CreateTorus(
+      "riftGroundHalo",
+      { diameter: 3.55, thickness: 0.09, tessellation: 28 },
+      scene
+    );
+    riftGroundHalo.position.set(0, 0.14, 0);
+    riftGroundHalo.material = riftVioletMat;
+    riftGroundHalo.isPickable = false;
+    riftGroundHalo.parent = riftEntranceNode;
+
+    // 2. Procedural Rift Blessing Shrine (`riftShrineNode`)
+    const riftShrineNode = new TransformNode("riftShrineNode", scene);
+    riftShrineNode.parent = riftRoot;
+
+    const shrineDais = MeshBuilder.CreateCylinder(
+      "riftShrineDais",
+      { diameterTop: 2.6, diameterBottom: 3.1, height: 0.34, tessellation: 14 },
+      scene
+    );
+    shrineDais.position.set(0, 0.17, 0);
+    shrineDais.material = dgPillarMat;
+    shrineDais.isPickable = false;
+    shrineDais.parent = riftShrineNode;
+
+    const shrinePillar = MeshBuilder.CreateCylinder(
+      "riftShrinePillar",
+      { diameterTop: 0.85, diameterBottom: 1.15, height: 1.55, tessellation: 10 },
+      scene
+    );
+    shrinePillar.position.set(0, 0.92, 0);
+    shrinePillar.material = darkObsidianMat;
+    shrinePillar.isPickable = false;
+    shrinePillar.parent = riftShrineNode;
+
+    const riftShrineGem = MeshBuilder.CreatePolyhedron(
+      "riftShrineGem",
+      { type: 1, size: 0.42 },
+      scene
+    );
+    riftShrineGem.position.set(0, 2.35, 0);
+    riftShrineGem.scaling.set(0.9, 1.45, 0.9);
+    riftShrineGem.material = riftShrineGlowMat;
+    riftShrineGem.isPickable = false;
+    riftShrineGem.parent = riftShrineNode;
+
+    const riftShrineRing = MeshBuilder.CreateTorus(
+      "riftShrineRing",
+      { diameter: 2.4, thickness: 0.1, tessellation: 24 },
+      scene
+    );
+    riftShrineRing.position.set(0, 0.36, 0);
+    riftShrineRing.material = riftShrineGlowMat;
+    riftShrineRing.isPickable = false;
+    riftShrineRing.parent = riftShrineNode;
+
+    // 3. Procedural Rift Vault Chest (`riftVaultChestNode`)
+    const riftVaultChestNode = new TransformNode("riftVaultChestNode", scene);
+    riftVaultChestNode.parent = riftRoot;
+
+    const rvDais = MeshBuilder.CreateBox(
+      "rvDais",
+      { width: 3.2, height: 0.32, depth: 2.5 },
+      scene
+    );
+    rvDais.position.set(0, 0.16, 0);
+    rvDais.material = dgPillarMat;
+    rvDais.isPickable = false;
+    rvDais.parent = riftVaultChestNode;
+
+    const rvBase = MeshBuilder.CreateBox(
+      "rvBase",
+      { width: 1.75, height: 0.88, depth: 1.2 },
+      scene
+    );
+    rvBase.position.set(0, 0.76, 0);
+    rvBase.material = darkObsidianMat;
+    rvBase.isPickable = false;
+    rvBase.parent = riftVaultChestNode;
+
+    const rvTrim = MeshBuilder.CreateBox(
+      "rvTrim",
+      { width: 1.85, height: 0.2, depth: 1.28 },
+      scene
+    );
+    rvTrim.position.set(0, 1.12, 0);
+    rvTrim.material = goldKeyMat;
+    rvTrim.isPickable = false;
+    rvTrim.parent = riftVaultChestNode;
+
+    const riftVaultChestLid = MeshBuilder.CreateCylinder(
+      "riftVaultChestLid",
+      { diameter: 1.2, height: 1.78, tessellation: 16 },
+      scene
+    );
+    riftVaultChestLid.rotation.z = Math.PI / 2;
+    riftVaultChestLid.position.set(0, 1.24, 0);
+    riftVaultChestLid.material = riftVioletMat;
+    riftVaultChestLid.isPickable = false;
+    riftVaultChestLid.parent = riftVaultChestNode;
+
+    const riftVaultChestRing = MeshBuilder.CreateTorus(
+      "riftVaultChestRing",
+      { diameter: 2.8, thickness: 0.12, tessellation: 24 },
+      scene
+    );
+    riftVaultChestRing.position.set(0, 0.36, 0);
+    riftVaultChestRing.material = goldKeyMat;
+    riftVaultChestRing.isPickable = false;
+    riftVaultChestRing.parent = riftVaultChestNode;
+
+    const riftVaultRelicNode = new TransformNode("riftVaultRelicNode", scene);
+    riftVaultRelicNode.parent = riftVaultChestNode;
+    riftVaultRelicNode.position.set(0, 2.15, 0);
+    {
+      const rvGem = MeshBuilder.CreatePolyhedron(
+        "rvRelicGem",
+        { type: 1, size: 0.32 },
+        scene
+      );
+      rvGem.material = riftVioletMat;
+      rvGem.isPickable = false;
+      rvGem.parent = riftVaultRelicNode;
+    }
+
+    // 4. Procedural Rift Guardian Hoard Chest (`riftBossChestNode`)
+    const riftBossChestNode = new TransformNode("riftBossChestNode", scene);
+    riftBossChestNode.parent = riftRoot;
+
+    const rbDais = MeshBuilder.CreateBox(
+      "rbDais",
+      { width: 3.8, height: 0.38, depth: 2.9 },
+      scene
+    );
+    rbDais.position.set(0, 0.19, 0);
+    rbDais.material = dgPillarMat;
+    rbDais.isPickable = false;
+    rbDais.parent = riftBossChestNode;
+
+    const rbBase = MeshBuilder.CreateBox(
+      "rbBase",
+      { width: 1.95, height: 0.98, depth: 1.32 },
+      scene
+    );
+    rbBase.position.set(0, 0.86, 0);
+    rbBase.material = glowingCrimsonMat;
+    rbBase.isPickable = false;
+    rbBase.parent = riftBossChestNode;
+
+    const rbTrim = MeshBuilder.CreateBox(
+      "rbTrim",
+      { width: 2.05, height: 0.22, depth: 1.4 },
+      scene
+    );
+    rbTrim.position.set(0, 1.26, 0);
+    rbTrim.material = goldKeyMat;
+    rbTrim.isPickable = false;
+    rbTrim.parent = riftBossChestNode;
+
+    const riftBossChestLid = MeshBuilder.CreateCylinder(
+      "riftBossChestLid",
+      { diameter: 1.32, height: 1.96, tessellation: 16 },
+      scene
+    );
+    riftBossChestLid.rotation.z = Math.PI / 2;
+    riftBossChestLid.position.set(0, 1.38, 0);
+    riftBossChestLid.material = goldKeyMat;
+    riftBossChestLid.isPickable = false;
+    riftBossChestLid.parent = riftBossChestNode;
+
+    const riftBossChestSealRing = MeshBuilder.CreateTorus(
+      "riftBossChestSealRing",
+      { diameter: 3.2, thickness: 0.14, tessellation: 26 },
+      scene
+    );
+    riftBossChestSealRing.position.set(0, 0.95, 0);
+    riftBossChestSealRing.material = glowingCrimsonMat;
+    riftBossChestSealRing.isPickable = false;
+    riftBossChestSealRing.parent = riftBossChestNode;
+
+    const riftBossChestUnsealedRing = MeshBuilder.CreateTorus(
+      "riftBossChestUnsealedRing",
+      { diameter: 3.3, thickness: 0.13, tessellation: 28 },
+      scene
+    );
+    riftBossChestUnsealedRing.position.set(0, 0.45, 0);
+    riftBossChestUnsealedRing.material = goldKeyMat;
+    riftBossChestUnsealedRing.isPickable = false;
+    riftBossChestUnsealedRing.parent = riftBossChestNode;
+
+    const riftBossChestRelicNode = new TransformNode("riftBossChestRelicNode", scene);
+    riftBossChestRelicNode.parent = riftBossChestNode;
+    riftBossChestRelicNode.position.set(0, 2.45, 0);
+    {
+      const rbRelicGem = MeshBuilder.CreatePolyhedron(
+        "rbRelicGem",
+        { type: 1, size: 0.36 },
+        scene
+      );
+      rbRelicGem.material = goldKeyMat;
+      rbRelicGem.isPickable = false;
+      rbRelicGem.parent = riftBossChestRelicNode;
+    }
+
+    // 5. Procedural Rift Next-Floor Descent Portal (`riftDescentPortalNode`)
+    const riftDescentPortalNode = new TransformNode("riftDescentPortalNode", scene);
+    riftDescentPortalNode.parent = riftRoot;
+
+    const descentDisc = MeshBuilder.CreateCylinder(
+      "riftDescentDisc",
+      { diameter: 3.2, height: 0.06, tessellation: 28 },
+      scene
+    );
+    descentDisc.position.set(0, 0.04, 0);
+    descentDisc.material = riftVortexDiscMat;
+    descentDisc.isPickable = false;
+    descentDisc.parent = riftDescentPortalNode;
+
+    const descentOuterRing = MeshBuilder.CreateTorus(
+      "riftDescentOuterRing",
+      { diameter: 3.4, thickness: 0.13, tessellation: 28 },
+      scene
+    );
+    descentOuterRing.position.set(0, 0.12, 0);
+    descentOuterRing.material = riftVioletMat;
+    descentOuterRing.isPickable = false;
+    descentOuterRing.parent = riftDescentPortalNode;
+
+    const descentInnerRing = MeshBuilder.CreateTorus(
+      "riftDescentInnerRing",
+      { diameter: 2.2, thickness: 0.1, tessellation: 24 },
+      scene
+    );
+    descentInnerRing.position.set(0, 0.28, 0);
+    descentInnerRing.material = goldKeyMat;
+    descentInnerRing.isPickable = false;
+    descentInnerRing.parent = riftDescentPortalNode;
+
+    const descentColumn = MeshBuilder.CreateCylinder(
+      "riftDescentColumn",
+      { diameterTop: 1.5, diameterBottom: 2.5, height: 8.5, tessellation: 20 },
+      scene
+    );
+    descentColumn.position.set(0, 4.25, 0);
+    descentColumn.material = warpBeamMat;
+    descentColumn.isPickable = false;
+    descentColumn.parent = riftDescentPortalNode;
+
+    // =========================================================
     // DYNAMIC ENEMY, ARROW, PROJECTILE, HAZARD & RUPEE REGISTRIES
     // =========================================================
     const enemyRigs = new Map<string, EnemyMeshRig>();
@@ -8132,6 +8481,8 @@ export default function BabylonCanvas() {
           ? dsGround
           : snap.zone === "caldera"
           ? caGround
+          : snap.zone === "rift"
+          ? riftGround
           : dgGround;
       const pick = scene.pick(
         scene.pointerX,
@@ -8221,6 +8572,13 @@ export default function BabylonCanvas() {
       if (code === "KeyU" && !pressedKeys.has(code)) {
         e.preventDefault();
         store.setForgeOpen(!store.forgeOpen);
+        return;
+      }
+
+      // P toggles Procedural Abyssal Rift Console
+      if (code === "KeyP" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setRiftOpen(!store.riftOpen);
         return;
       }
 
@@ -8390,6 +8748,7 @@ export default function BabylonCanvas() {
     let lastTime = performance.now();
     let fpsUpdateAccumulator = 0;
     let syncedTerrainRevision = -1;
+    let syncedRiftFloorHex = "";
 
     engine.runRenderLoop(() => {
       const now = performance.now();
@@ -8500,8 +8859,11 @@ export default function BabylonCanvas() {
       const activeCells = snap.terrainCells[snap.zone];
 
       // 0. Sync Sculpted & Painted Terrain Vertex Buffers when modified
-      if (snap.terrainRevision !== syncedTerrainRevision) {
+      const currentRiftFloorHex = snap.flags.riftFloorColorHex ?? "#251e38";
+      if (snap.terrainRevision !== syncedTerrainRevision || currentRiftFloorHex !== syncedRiftFloorHex) {
         syncedTerrainRevision = snap.terrainRevision;
+        syncedRiftFloorHex = currentRiftFloorHex;
+        riftBaseColor.copyFrom(Color3.FromHexString(currentRiftFloorHex));
         applyTerrainCellsToGroundMesh(owGround, owBaseColor, snap.terrainCells.overworld);
         applyTerrainCellsToGroundMesh(grGround, grBaseColor, snap.terrainCells.grove ?? {});
         applyTerrainCellsToGroundMesh(dgGround, dgBaseColor, snap.terrainCells.dungeon);
@@ -8510,6 +8872,7 @@ export default function BabylonCanvas() {
         applyTerrainCellsToGroundMesh(ctGround, ctBaseColor, snap.terrainCells.citadel ?? {});
         applyTerrainCellsToGroundMesh(dsGround, dsBaseColor, snap.terrainCells.desert ?? {});
         applyTerrainCellsToGroundMesh(caGround, caBaseColor, snap.terrainCells.caldera ?? {});
+        applyTerrainCellsToGroundMesh(riftGround, riftBaseColor, snap.terrainCells.rift ?? {});
       }
 
       // 1. Zone visibility & lighting atmosphere
@@ -8521,6 +8884,7 @@ export default function BabylonCanvas() {
       const isCitadel = snap.zone === "citadel";
       const isDesert = snap.zone === "desert";
       const isCaldera = snap.zone === "caldera";
+      const isRift = snap.zone === "rift";
       overworldRoot.setEnabled(isOverworld);
       groveRoot.setEnabled(isGrove);
       dungeonRoot.setEnabled(isDungeon);
@@ -8529,6 +8893,7 @@ export default function BabylonCanvas() {
       citadelRoot.setEnabled(isCitadel);
       desertRoot.setEnabled(isDesert);
       calderaRoot.setEnabled(isCaldera);
+      riftRoot.setEnabled(isRift);
 
       if (isOverworld) {
         scene.clearColor.set(0.08, 0.16, 0.11, 1);
@@ -8571,6 +8936,21 @@ export default function BabylonCanvas() {
         hemiLight.intensity = 0.72;
         dirLight.intensity = 0.64;
         sanctumPointLight.intensity = snap.flags.calderaBossDefeated ? 1.55 : 0.95;
+        heroLanternDisc.setEnabled(false);
+      } else if (isRift) {
+        const themeId = snap.flags.riftBiome ?? "catacombs";
+        if (themeId === "glacial") {
+          scene.clearColor.set(0.04, 0.1, 0.18, 1);
+        } else if (themeId === "brimstone") {
+          scene.clearColor.set(0.14, 0.04, 0.04, 1);
+        } else if (themeId === "void") {
+          scene.clearColor.set(0.08, 0.03, 0.14, 1);
+        } else {
+          scene.clearColor.set(0.06, 0.04, 0.11, 1);
+        }
+        hemiLight.intensity = 0.66;
+        dirLight.intensity = 0.58;
+        sanctumPointLight.intensity = snap.flags.riftBossDefeated ? 1.45 : 0.85;
         heroLanternDisc.setEnabled(false);
       } else {
         // Dark Room Visibility Cone & Lantern Illumination in Dungeon Room 4 (The Dark Archery Crypt)
@@ -9104,6 +9484,101 @@ export default function BabylonCanvas() {
         const coalPulse = 0.95 + Math.sin(t * 8.5) * 0.08;
         forgeCoals.scaling.set(coalPulse, 1, coalPulse);
         smithArmNode.rotation.x = Math.sin(t * 6.5) * 0.55;
+      }
+
+      // Sync 3D Abyssal Rift Obelisk (Map 1 Overworld) & Procedural Rift Landmarks
+      riftEntranceNode.setEnabled(inOverworld);
+      if (inOverworld) {
+        const riftEntGroundY = sampleTerrainHeight(
+          activeCells,
+          RIFT_ENTRANCE_POS.x,
+          RIFT_ENTRANCE_POS.z
+        );
+        riftEntranceNode.position.set(
+          RIFT_ENTRANCE_POS.x,
+          riftEntGroundY,
+          RIFT_ENTRANCE_POS.z
+        );
+        riftOuterRing.rotation.y = t * 2.4;
+        riftGroundHalo.rotation.y = -t * 1.8;
+        const vortexPulse = 0.92 + Math.sin(t * 5.2) * 0.1;
+        riftVortexDisc.scaling.set(vortexPulse, 1, vortexPulse);
+      }
+
+      if (isRift) {
+        // 1. Blessing Shrine
+        const shrinePos = snap.flags.riftShrinePos;
+        if (shrinePos) {
+          riftShrineNode.setEnabled(true);
+          riftShrineNode.position.set(shrinePos.x, 0, shrinePos.z);
+          const claimed = Boolean(snap.flags.riftShrineClaimed);
+          riftShrineGem.setEnabled(!claimed);
+          riftShrineRing.setEnabled(!claimed);
+          if (!claimed) {
+            riftShrineGem.rotation.y = t * 2.6;
+            riftShrineGem.position.y = 2.35 + Math.sin(t * 3.6) * 0.16;
+            riftShrineRing.rotation.y = -t * 2.1;
+          }
+        } else {
+          riftShrineNode.setEnabled(false);
+        }
+
+        // 2. Side Vault Chest
+        const vaultPos = snap.flags.riftVaultChestPos;
+        if (vaultPos) {
+          riftVaultChestNode.setEnabled(true);
+          riftVaultChestNode.position.set(vaultPos.x, 0, vaultPos.z);
+          if (snap.flags.riftVaultChestOpened) {
+            riftVaultChestLid.position.set(0, 1.54, 0.42);
+            riftVaultChestRing.setEnabled(false);
+            riftVaultRelicNode.setEnabled(false);
+          } else {
+            riftVaultChestLid.position.set(0, 1.24, 0);
+            riftVaultChestRing.setEnabled(true);
+            riftVaultChestRing.rotation.y = t * 2.2;
+            riftVaultRelicNode.setEnabled(true);
+            riftVaultRelicNode.rotation.y = t * 2.8;
+            riftVaultRelicNode.position.y = 2.15 + Math.sin(t * 3.4) * 0.15;
+          }
+        } else {
+          riftVaultChestNode.setEnabled(false);
+        }
+
+        // 3. Guardian Boss Hoard Chest
+        const bossChestPos = snap.flags.riftBossChestPos;
+        if (bossChestPos) {
+          riftBossChestNode.setEnabled(true);
+          riftBossChestNode.position.set(bossChestPos.x, 0, bossChestPos.z);
+          const bossSlain = Boolean(snap.flags.riftBossDefeated);
+          riftBossChestSealRing.setEnabled(!bossSlain);
+          riftBossChestSealRing.rotation.y = t * 1.9;
+          riftBossChestUnsealedRing.setEnabled(bossSlain);
+          riftBossChestUnsealedRing.scaling.setAll(1 + Math.sin(t * 4.2) * 0.06);
+
+          if (snap.flags.riftBossChestOpened) {
+            riftBossChestLid.position.set(0, 1.72, 0.45);
+            riftBossChestRelicNode.setEnabled(true);
+            riftBossChestRelicNode.rotation.y = t * 2.6;
+            riftBossChestRelicNode.position.y = 2.6 + Math.sin(t * 3.2) * 0.16;
+          } else {
+            riftBossChestLid.position.set(0, 1.38, 0);
+            riftBossChestRelicNode.setEnabled(false);
+          }
+        } else {
+          riftBossChestNode.setEnabled(false);
+        }
+
+        // 4. Next-Floor Descent Portal (unseals when Rift Guardian is slain!)
+        const nextFloorPos = snap.flags.riftNextFloorPos;
+        const showDescent = Boolean(nextFloorPos && snap.flags.riftBossDefeated);
+        riftDescentPortalNode.setEnabled(showDescent);
+        if (showDescent && nextFloorPos) {
+          riftDescentPortalNode.position.set(nextFloorPos.x, 0, nextFloorPos.z);
+          descentOuterRing.rotation.y = t * 2.4;
+          descentInnerRing.rotation.y = -t * 3.2;
+          const colPulse = 0.9 + Math.sin(t * 9) * 0.1;
+          descentColumn.scaling.set(colPulse, 1, colPulse);
+        }
       }
 
       // Sync 3D Chain-Lightning Arcs between struck enemies

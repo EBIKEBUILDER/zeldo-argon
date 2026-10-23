@@ -54,12 +54,18 @@ import {
   PropPrefabId,
   resolveArrowCollisions,
   resolveWorldCollisions,
+  RIFT_ENTRANCE_POS,
   RupeeTier,
   SECRET_STASH_POS,
   SHOP_INTERACT_POS,
   WARP_STONE_META,
   ZoneId,
 } from "@/game/worldData";
+import {
+  generateProceduralRiftFloor,
+  RiftBiomeId,
+  RiftRoomMeta,
+} from "@/game/proceduralRift";
 import { soundEngine } from "@/audio/soundEngine";
 
 export type GamePhase = "title" | "playing" | "gameover" | "victory";
@@ -536,6 +542,25 @@ export interface GameFlags {
   calderaVictoryChestOpened?: boolean;
   discoveredZones?: ZoneId[];
   awakenedWarpZones?: ZoneId[];
+  // Diablo-Style Endless Procedural Rift State
+  riftActive?: boolean;
+  riftDepth?: number;
+  highestRiftDepth?: number;
+  riftSeed?: number;
+  riftBiome?: RiftBiomeId;
+  riftBiomeTitle?: string;
+  riftFloorColorHex?: string;
+  riftBossName?: string;
+  riftEliteAffix?: string;
+  riftRooms?: RiftRoomMeta[];
+  riftShrinePos?: { x: number; z: number };
+  riftShrineClaimed?: boolean;
+  riftVaultChestPos?: { x: number; z: number };
+  riftVaultChestOpened?: boolean;
+  riftBossChestPos?: { x: number; z: number };
+  riftBossChestOpened?: boolean;
+  riftNextFloorPos?: { x: number; z: number };
+  riftBossDefeated?: boolean;
 }
 
 export interface GameStats {
@@ -606,6 +631,7 @@ export interface SerializableGameState {
   questLogOpen: boolean;
   atlasOpen: boolean;
   forgeOpen: boolean;
+  riftOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -637,6 +663,8 @@ export interface GameActions {
   setQuestLogOpen: (open: boolean) => void;
   setAtlasOpen: (open: boolean) => void;
   setForgeOpen: (open: boolean) => void;
+  setRiftOpen: (open: boolean) => void;
+  enterProceduralRift: (depth?: number, customSeed?: number) => void;
   forgeEnchantWeapon: (slot: "sword" | "bow" | "hammer") => void;
   grantForgePlaytestBundle: () => void;
   warpToZone: (targetZone: ZoneId, forceAllow?: boolean) => void;
@@ -1037,6 +1065,7 @@ function createInitialState(
       citadel: {},
       desert: {},
       caldera: {},
+      rift: {},
     },
     terrainRevision: 1,
     flags: {
@@ -1143,6 +1172,7 @@ function createInitialState(
     questLogOpen: false,
     atlasOpen: false,
     forgeOpen: false,
+    riftOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -1486,7 +1516,155 @@ export const useGameStore = create<GameStore>((set, get) => ({
       characterOpen: open ? false : state.characterOpen,
       questLogOpen: open ? false : state.questLogOpen,
       atlasOpen: open ? false : state.atlasOpen,
+      riftOpen: open ? false : state.riftOpen,
     }));
+  },
+
+  setRiftOpen: (open: boolean) => {
+    set((state) => ({
+      riftOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+    }));
+  },
+
+  enterProceduralRift: (depth = 1, customSeed?: number) => {
+    const state = get();
+    const targetDepth = Math.max(1, Math.floor(depth));
+    const seed =
+      customSeed !== undefined
+        ? customSeed
+        : Math.floor(100000 + Math.random() * 899999);
+    const gen = generateProceduralRiftFloor(targetDepth, seed);
+
+    soundEngine.unlock();
+    soundEngine.playPortalTransition();
+
+    const nonRiftProps = state.mapProps.filter((p) => p.zone !== "rift");
+    const nonRiftEnemies = state.enemies.filter((e) => e.zone !== "rift");
+    const nonRiftRupees = state.rupees.filter((r) => r.zone !== "rift");
+    const nonRiftPortals = state.portals.filter((pt) => pt.zone !== "rift");
+
+    const spawnedEnemies: EnemyState[] = gen.enemies.map((sp) => ({
+      id: sp.id,
+      kind: sp.kind,
+      zone: "rift",
+      x: sp.x,
+      z: sp.z,
+      spawnX: sp.x,
+      spawnZ: sp.z,
+      facing: Math.PI,
+      hp: sp.hp,
+      maxHp: sp.hp,
+      weight: sp.weight,
+      state: "idle",
+      stateTimer: 0,
+      hitFlashTimer: 0,
+      knockbackImmunityTimer: 0,
+      stunTimer: 0,
+      lastHitSwingId: -1,
+      knockbackVx: 0,
+      knockbackVz: 0,
+      aggroRadius: sp.aggroRadius,
+      speed: sp.speed,
+      damage: sp.damage,
+      rupeeDrop: sp.rupeeDrop,
+      shieldArmor: sp.shieldArmor ?? "none",
+      initialShieldArmor: sp.shieldArmor ?? "none",
+      shockArmor: sp.shockArmor ?? false,
+      initialShockArmor: sp.shockArmor ?? false,
+      isBounty: sp.isBounty ?? false,
+      initialIsBounty: sp.isBounty ?? false,
+      burrowed: sp.kind === "burrower",
+      provoked: false,
+      chargeAngle: Math.PI,
+      chargePathLength: 12.0,
+      chargeDistanceTraveled: 0,
+      actionCounter: 0,
+      actionCooldown: 0.9,
+    }));
+
+    const spawnedRupees: RupeeItemState[] = gen.rupees.map((r) => ({
+      id: r.id,
+      zone: "rift",
+      x: r.x,
+      z: r.z,
+      tier: r.tier,
+      value: r.value,
+      collected: false,
+      spawnBounceTimer: 0,
+    }));
+
+    const nextDiscovered = Array.from(
+      new Set([...(state.flags.discoveredZones ?? ["overworld"]), "rift" as ZoneId])
+    );
+    const nextAwakened = Array.from(
+      new Set([...(state.flags.awakenedWarpZones ?? ["overworld"]), "rift" as ZoneId])
+    );
+
+    set({
+      zone: "rift",
+      riftOpen: false,
+      atlasOpen: false,
+      shopOpen: false,
+      characterOpen: false,
+      questLogOpen: false,
+      forgeOpen: false,
+      warpBeamTimer: 1.4,
+      hero: {
+        ...state.hero,
+        x: 0,
+        z: -22.5,
+        facing: 0,
+        knockbackVx: 0,
+        knockbackVz: 0,
+        knockbackLockTimer: 0,
+        portalCooldown: 1.2,
+      },
+      boomerang: null,
+      hookshot: null,
+      arrows: [],
+      fireballs: [],
+      projectiles: [],
+      mapProps: [...nonRiftProps, ...gen.props],
+      enemies: [...nonRiftEnemies, ...spawnedEnemies],
+      rupees: [...nonRiftRupees, ...spawnedRupees],
+      portals: [...nonRiftPortals, ...gen.portals],
+      terrainRevision: state.terrainRevision + 1,
+      flags: {
+        ...state.flags,
+        discoveredZones: nextDiscovered,
+        awakenedWarpZones: nextAwakened,
+        bossState: "ARMORED",
+        bossArmorTimer: 0,
+        riftActive: true,
+        riftDepth: targetDepth,
+        riftSeed: seed,
+        riftBiome: gen.biome,
+        riftBiomeTitle: gen.biomeTitle,
+        riftFloorColorHex: gen.floorColorHex,
+        riftBossName: gen.bossName,
+        riftEliteAffix: gen.eliteAffixLabel,
+        riftRooms: gen.rooms,
+        riftShrinePos: gen.shrinePos,
+        riftShrineClaimed: false,
+        riftVaultChestPos: gen.vaultChestPos,
+        riftVaultChestOpened: false,
+        riftBossChestPos: gen.bossChestPos,
+        riftBossChestOpened: false,
+        riftNextFloorPos: gen.nextFloorPortalPos,
+        riftBossDefeated: false,
+      },
+      banner: {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        text: `Abyssal Rift — Depth ${targetDepth}: ${gen.biomeTitle}`,
+        subtext: `Seed #${seed} • ${gen.rooms.length} Procedural Chambers • Affix: ${gen.eliteAffixLabel}`,
+        timer: 5.2,
+      },
+    });
   },
 
   grantForgePlaytestBundle: () => {
@@ -2775,6 +2953,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           citadel: data.terrainCells?.citadel ?? state.terrainCells.citadel ?? {},
           desert: data.terrainCells?.desert ?? state.terrainCells.desert ?? {},
           caldera: data.terrainCells?.caldera ?? state.terrainCells.caldera ?? {},
+          rift: data.terrainCells?.rift ?? state.terrainCells.rift ?? {},
         };
         const nextState = {
           mapProps: data.mapProps,
@@ -2825,6 +3004,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           citadel: data.terrainCells?.citadel ?? {},
           desert: data.terrainCells?.desert ?? {},
           caldera: data.terrainCells?.caldera ?? {},
+          rift: data.terrainCells?.rift ?? {},
         },
         terrainRevision: state.terrainRevision + 1,
       }));
@@ -2857,6 +3037,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         citadel: {},
         desert: {},
         caldera: {},
+        rift: {},
       },
       terrainRevision: state.terrainRevision + 1,
       editorSelected: null,
@@ -7085,10 +7266,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
           5.5
         );
       }
+
+      if (zone === "rift" && enemy.kind === "boss" && !flags.riftBossDefeated) {
+        flags.riftBossDefeated = true;
+        const curDepth = flags.riftDepth ?? 1;
+        flags.highestRiftDepth = Math.max(flags.highestRiftDepth ?? 0, curDepth);
+        soundEngine.playVictoryFanfare();
+        pushBanner(
+          `Rift Guardian Vanquished! (Depth ${curDepth} Cleared!)`,
+          `Claim the Rift Hoard Chest and step into the Descent Portal to generate Floor ${
+            curDepth + 1
+          }!`,
+          6.0
+        );
+      }
     };
 
     const getBossName = (z: ZoneId = zone): string =>
-      z === "caldera"
+      z === "rift"
+        ? flags.riftBossName ?? "Rift Guardian"
+        : z === "caldera"
         ? "Pyrax"
         : z === "desert"
         ? "Skorpius"
@@ -9875,7 +10072,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (enemy.kind === "boss") {
         const bossName = getBossName(zone);
         const isCurrentBossAwakened =
-          zone === "caldera"
+          zone === "rift"
+            ? distToHero <= 11.5 || Boolean(enemy.provoked)
+            : zone === "caldera"
             ? Boolean(flags.calderaBossAwakened)
             : zone === "desert"
             ? Boolean(flags.desertBossAwakened)
@@ -9885,7 +10084,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
             ? Boolean(flags.cavernBossAwakened)
             : Boolean(flags.bossAwakened);
         const isCurrentBossPhase2 =
-          zone === "caldera"
+          zone === "rift"
+            ? enemy.hp <= Math.ceil(enemy.maxHp / 2)
+            : zone === "caldera"
             ? Boolean(flags.calderaBossPhase2)
             : zone === "desert"
             ? Boolean(flags.desertBossPhase2)
@@ -9895,10 +10096,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
             ? Boolean(flags.cavernBossPhase2)
             : Boolean(flags.bossPhase2);
         const isEastSanctumBoss = zone === "caverns" || zone === "desert";
-        const bossMinX = isEastSanctumBoss ? 13.8 : -14.5;
-        const bossMaxX = isEastSanctumBoss ? 31.5 : 14.5;
-        const bossMinZ = isEastSanctumBoss ? 6.5 : 14.5;
-        const bossMaxZ = isEastSanctumBoss ? 29.5 : 33.5;
+        const bossMinX =
+          zone === "rift" ? enemy.spawnX - 8.2 : isEastSanctumBoss ? 13.8 : -14.5;
+        const bossMaxX =
+          zone === "rift" ? enemy.spawnX + 8.2 : isEastSanctumBoss ? 31.5 : 14.5;
+        const bossMinZ =
+          zone === "rift" ? enemy.spawnZ - 8.2 : isEastSanctumBoss ? 6.5 : 14.5;
+        const bossMaxZ =
+          zone === "rift" ? enemy.spawnZ + 8.2 : isEastSanctumBoss ? 29.5 : 33.5;
 
         // Tick Phase 2 Exposed Eye countdown -> regenerates carapace if not stunned in time!
         if (flags.bossState === "EXPOSED_EYE" && enemy.state !== "stunned") {
@@ -11757,6 +11962,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ) {
           hero.interactPrompt =
             "Master Smith Torvin's Runic Anvil — Press [U] or [F] to Enchant Weapons with Monster Cores!";
+        } else if (
+          zone === "overworld" &&
+          Math.hypot(RIFT_ENTRANCE_POS.x - hero.x, RIFT_ENTRANCE_POS.z - hero.z) <= 3.6
+        ) {
+          hero.interactPrompt =
+            "Abyssal Rift Obelisk — Press [P] or [F] to Enter the Endless Procedural Labyrinth!";
+        } else if (
+          zone === "rift" &&
+          flags.riftNextFloorPos &&
+          Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
+        ) {
+          hero.interactPrompt = flags.riftBossDefeated
+            ? `Descent Portal Ready — Step In or Press [F] to Descend to Floor ${(flags.riftDepth ?? 1) + 1}!`
+            : "Descent Portal (Sealed) — Vanquish the Floor's Rift Guardian Boss to Unseal!";
         } else {
           hero.interactPrompt = null;
         }
@@ -11766,6 +11985,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let warpBeamTimer = Math.max(0, (state.warpBeamTimer ?? 0) - dt);
     let atlasOpen = state.atlasOpen;
     let forgeOpen = state.forgeOpen;
+    let riftOpen = state.riftOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -11775,7 +11995,113 @@ export const useGameStore = create<GameStore>((set, get) => ({
       forgeOpen = true;
       atlasOpen = false;
       shopOpen = false;
+      riftOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(RIFT_ENTRANCE_POS.x - hero.x, RIFT_ENTRANCE_POS.z - hero.z) <= 3.5 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      riftOpen = true;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
     }
+
+    // =========================================================
+    // DIABLO-STYLE PROCEDURAL RIFT INTERACTIONS (SHRINE, VAULT CHEST, BOSS CHEST & NEXT FLOOR DESCENT)
+    // =========================================================
+    if (zone === "rift") {
+      if (
+        flags.riftShrinePos &&
+        !flags.riftShrineClaimed &&
+        Math.hypot(flags.riftShrinePos.x - hero.x, flags.riftShrinePos.z - hero.z) <= 2.2
+      ) {
+        flags.riftShrineClaimed = true;
+        hero.hp = hero.maxHp;
+        hero.mp = hero.maxMp;
+        hero.rupees += 35;
+        hero.monsterCores = (hero.monsterCores ?? 0) + 2;
+        soundEngine.playFairyRevive();
+        banner = {
+          id: Date.now(),
+          text: "Abyssal Blessing Shrine Activated!",
+          subtext: "Restored 100% Hearts & MP, +2 Monster Cores (✦), and +35 Rupees!",
+          timer: 4.5,
+        };
+      }
+
+      if (
+        flags.riftVaultChestPos &&
+        !flags.riftVaultChestOpened &&
+        Math.hypot(flags.riftVaultChestPos.x - hero.x, flags.riftVaultChestPos.z - hero.z) <= 2.2
+      ) {
+        flags.riftVaultChestOpened = true;
+        hero.rupees += 75;
+        hero.arrows += 10;
+        hero.maxBombs = Math.max(hero.maxBombs || 20, 20);
+        hero.bombs = Math.min(hero.maxBombs, (hero.bombs ?? 0) + 5);
+        hero.monsterCores = (hero.monsterCores ?? 0) + 2;
+        soundEngine.playVictoryFanfare();
+        banner = {
+          id: Date.now(),
+          text: "Opened the Procedural Vault Chest!",
+          subtext: "+75 Rupees, +2 Monster Cores (✦), +5 Bombs, and +10 Arrows!",
+          timer: 4.5,
+        };
+      }
+
+      if (
+        flags.riftBossChestPos &&
+        !flags.riftBossChestOpened &&
+        Math.hypot(flags.riftBossChestPos.x - hero.x, flags.riftBossChestPos.z - hero.z) <= 2.3
+      ) {
+        if (flags.riftBossDefeated) {
+          flags.riftBossChestOpened = true;
+          const depth = flags.riftDepth ?? 1;
+          const bonusRupees = 80 + depth * 35;
+          hero.rupees += bonusRupees;
+          hero.monsterCores = (hero.monsterCores ?? 0) + 4;
+          hero.maxHp = Math.min(40, hero.maxHp + 2);
+          hero.hp = hero.maxHp;
+          soundEngine.playVictoryFanfare();
+          banner = {
+            id: Date.now(),
+            text: `Claimed Depth ${depth} Rift Guardian Hoard!`,
+            subtext: `+1 Heart Container, +4 Monster Cores (✦), and +${bonusRupees} Rupees! Step into the Descent Portal for Floor ${
+              depth + 1
+            }!`,
+            timer: 5.5,
+          };
+        } else if (chestNoticeCooldown <= 0) {
+          chestNoticeCooldown = 3.0;
+          soundEngine.playGateLocked();
+          banner = {
+            id: Date.now(),
+            text: "Rift Guardian Hoard Chest Sealed!",
+            subtext: "Vanquish this floor's Rift Guardian Boss to unseal the hoard and Descent Portal!",
+            timer: 3.5,
+          };
+        }
+      }
+
+      if (
+        flags.riftNextFloorPos &&
+        flags.riftBossDefeated &&
+        hero.portalCooldown <= 0 &&
+        Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 2.1
+      ) {
+        const nextDepth = (flags.riftDepth ?? 1) + 1;
+        set({
+          hero,
+          flags,
+          stats,
+        });
+        get().enterProceduralRift(nextDepth);
+        return;
+      }
+    }
+
     if (!flags.discoveredZones?.includes(zone)) {
       flags.discoveredZones = Array.from(
         new Set([...(flags.discoveredZones ?? ["overworld"]), zone])
@@ -11830,6 +12156,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       shopOpen,
       atlasOpen,
       forgeOpen,
+      riftOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

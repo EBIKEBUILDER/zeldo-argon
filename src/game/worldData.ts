@@ -6,7 +6,8 @@ export type ZoneId =
   | "caverns"
   | "citadel"
   | "desert"
-  | "caldera";
+  | "caldera"
+  | "rift";
 export type DungeonRoomId = "hub" | "west_wing" | "east_wing" | "crypt" | "sanctum";
 export type BossArmorState = "ARMORED" | "EXPOSED_EYE" | "STUNNED" | "DEAD";
 export type EnemyKind =
@@ -258,6 +259,12 @@ export const GUIDE_NPC_POS = {
 // Map 1 Master Blacksmith Forge & Runic Anvil (Master Smith Torvin — infuses weapons with Elemental Runes!)
 export const FORGE_ANVIL_POS = {
   x: 6.2,
+  z: -13.5,
+};
+
+// Map 1 Abyssal Rift Obelisk & Portal (Enters the Endless Procedural Labyrinth — different every time!)
+export const RIFT_ENTRANCE_POS = {
+  x: 12.2,
   z: -13.5,
 };
 
@@ -586,6 +593,19 @@ export const WARP_STONE_META: Record<ZoneId, WarpStoneMeta> = {
     atlasX: 88,
     atlasY: 82,
     themeColor: "#ff6b4a",
+  },
+  rift: {
+    zone: "rift",
+    title: "Abyssal Rift Monolith",
+    regionName: "The Abyssal Labyrinth (Procedural)",
+    shortLabel: "8 • Abyssal Rift",
+    x: -4.8,
+    z: -24.5,
+    arrivalX: 0,
+    arrivalZ: -25.5,
+    atlasX: 16,
+    atlasY: 84,
+    themeColor: "#e84cff",
   },
 };
 

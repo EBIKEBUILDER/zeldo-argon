@@ -244,6 +244,7 @@ export default function GameOverlay() {
   const questLogOpen = useGameStore((s) => s.questLogOpen);
   const atlasOpen = useGameStore((s) => s.atlasOpen);
   const forgeOpen = useGameStore((s) => s.forgeOpen);
+  const riftOpen = useGameStore((s) => s.riftOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -268,6 +269,8 @@ export default function GameOverlay() {
   const setQuestLogOpen = useGameStore((s) => s.setQuestLogOpen);
   const setAtlasOpen = useGameStore((s) => s.setAtlasOpen);
   const setForgeOpen = useGameStore((s) => s.setForgeOpen);
+  const setRiftOpen = useGameStore((s) => s.setRiftOpen);
+  const enterProceduralRift = useGameStore((s) => s.enterProceduralRift);
   const forgeEnchantWeapon = useGameStore((s) => s.forgeEnchantWeapon);
   const grantForgePlaytestBundle = useGameStore((s) => s.grantForgePlaytestBundle);
   const warpToZone = useGameStore((s) => s.warpToZone);
@@ -305,6 +308,14 @@ export default function GameOverlay() {
   const [expandedHintIds, setExpandedHintIds] = useState<string[]>([]);
   const [selectedAtlasZone, setSelectedAtlasZone] = useState<ZoneId>("overworld");
   const [unlockAllWarpsPlaytest, setUnlockAllWarpsPlaytest] = useState(false);
+  const [riftTargetDepth, setRiftTargetDepth] = useState<number>(1);
+  const [riftCustomSeedText, setRiftCustomSeedText] = useState<string>("");
+
+  React.useEffect(() => {
+    if (riftOpen) {
+      setRiftTargetDepth(zone === "rift" ? (flags.riftDepth ?? 1) + 1 : Math.max(1, flags.riftDepth || 1));
+    }
+  }, [riftOpen, zone, flags.riftDepth]);
 
   React.useEffect(() => {
     if (atlasOpen) {
@@ -320,6 +331,7 @@ export default function GameOverlay() {
         if (questLogOpen) setQuestLogOpen(false);
         if (atlasOpen) setAtlasOpen(false);
         if (forgeOpen) setForgeOpen(false);
+        if (riftOpen) setRiftOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -330,11 +342,13 @@ export default function GameOverlay() {
     questLogOpen,
     atlasOpen,
     forgeOpen,
+    riftOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
     setAtlasOpen,
     setForgeOpen,
+    setRiftOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -467,6 +481,8 @@ export default function GameOverlay() {
       ? "Map 6: Sunscorched Oasis & Shifting Sands"
       : zone === "caldera"
       ? "Map 7: Skyward Caldera & Dragon's Peak"
+      : zone === "rift"
+      ? `Abyssal Rift • Depth ${flags.riftDepth ?? 1}: ${flags.riftBiomeTitle ?? "The Endless Labyrinth"} (Seed #${flags.riftSeed ?? 0})`
       : dungeonRoom === "hub"
       ? "Map 2: Sunken Sanctum — Room 1: Central Lantern Hub"
       : dungeonRoom === "west_wing"
@@ -919,6 +935,90 @@ export default function GameOverlay() {
             </div>
           )}
 
+          {!editorMode && phase === "playing" && zone === "rift" && (
+            <div
+              className="hud-panel"
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: "8px 12px",
+                padding: "6px 14px",
+                borderRadius: "12px",
+                border: "1px solid rgba(196, 114, 255, 0.65)",
+                background: "rgba(18, 12, 34, 0.94)",
+                color: "#eed4ff",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                boxShadow: "0 8px 22px rgba(0,0,0,0.55)",
+              }}
+            >
+              <span style={{ color: "#e09eff", fontWeight: 800 }}>
+                🌀 Depth {flags.riftDepth ?? 1}: {flags.riftBiomeTitle ?? "Abyssal Labyrinth"}
+              </span>
+              <span style={{ color: "#ffd978" }}>
+                • {flags.riftEliteAffix ?? "Cursed Pack"}
+              </span>
+              <span>
+                • Monsters:{" "}
+                <strong style={{ color: "#9ef6ff" }}>
+                  {
+                    enemies.filter(
+                      (e) => e.zone === "rift" && e.kind !== "boss" && e.state !== "dead"
+                    ).length
+                  }
+                </strong>
+              </span>
+              <span>
+                • Shrine:{" "}
+                <strong style={{ color: flags.riftShrineClaimed ? "#7affaa" : "#ffe694" }}>
+                  {flags.riftShrineClaimed ? "✓ Blessed" : "✦ Active"}
+                </strong>
+              </span>
+              <span>
+                • Vault:{" "}
+                <strong style={{ color: flags.riftVaultChestOpened ? "#7affaa" : "#ffe694" }}>
+                  {flags.riftVaultChestOpened ? "✓ Looted" : "✦ Sealed"}
+                </strong>
+              </span>
+              <span>
+                • Guardian:{" "}
+                <strong style={{ color: flags.riftBossDefeated ? "#7affaa" : "#ff6b8b" }}>
+                  {flags.riftBossDefeated ? "✓ Slain" : "☠ Alive"}
+                </strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => enterProceduralRift((flags.riftDepth ?? 1) + 1)}
+                className="char-equip-btn"
+                style={{
+                  background: flags.riftBossDefeated
+                    ? "linear-gradient(180deg, #b85cff 0%, #6d24b8 100%)"
+                    : "rgba(180, 92, 255, 0.2)",
+                  borderColor: "rgba(210, 140, 255, 0.7)",
+                  color: "#ffffff",
+                  padding: "3px 9px",
+                  fontSize: "0.72rem",
+                }}
+                title="Generate and descend into the next deeper procedural Rift floor!"
+              >
+                🌀 Descend to Floor {(flags.riftDepth ?? 1) + 1}
+              </button>
+              <button
+                type="button"
+                onClick={() => setRiftOpen(true)}
+                className="char-equip-btn"
+                style={{
+                  padding: "3px 9px",
+                  fontSize: "0.72rem",
+                }}
+                title="Open the Abyssal Rift Console & Chamber Blueprint (Shortcut: P)"
+              >
+                🗺 Rift Map (P)
+              </button>
+            </div>
+          )}
+
           {!editorMode &&
             phase === "playing" &&
             ((zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated) ||
@@ -933,12 +1033,19 @@ export default function GameOverlay() {
                 !flags.desertBossDefeated) ||
               (zone === "caldera" &&
                 flags.calderaBossAwakened &&
-                !flags.calderaBossDefeated)) &&
+                !flags.calderaBossDefeated) ||
+              (zone === "rift" &&
+                !flags.riftBossDefeated &&
+                bossEnemy &&
+                bossEnemy.state !== "idle" &&
+                bossEnemy.state !== "dead")) &&
             bossEnemy && (
               <div className="hud-panel boss-bar-panel">
                 <div className="boss-bar-header">
                   <span className="boss-name">
-                    {zone === "caldera"
+                    {zone === "rift"
+                      ? (flags.riftBossName ?? "RIFT GUARDIAN").toUpperCase()
+                      : zone === "caldera"
                       ? "PYRAX, THE MAGMA WYRM"
                       : zone === "desert"
                       ? "SKORPIUS, THE SUN-SCORPION BEHEMOTH"
@@ -1113,6 +1220,23 @@ export default function GameOverlay() {
                   title="Open Master Smith Torvin's Runic Forge & Weapon Enchantments (Shortcut: U)"
                 >
                   ⚒ Forge ({hero.monsterCores ?? 0}✦)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRiftOpen(!riftOpen)}
+                  className={`char-toggle-btn ${riftOpen || zone === "rift" ? "active" : ""}`}
+                  style={
+                    zone === "rift"
+                      ? {
+                          borderColor: "rgba(196, 114, 255, 0.85)",
+                          background: "rgba(48, 18, 76, 0.92)",
+                          color: "#eabfff",
+                        }
+                      : undefined
+                  }
+                  title="Open the Diablo-Style Procedural Abyssal Rift Dungeon Console (Shortcut: P)"
+                >
+                  🌀 Rift {flags.riftDepth ? `(F${flags.riftDepth})` : "(P)"}
                 </button>
                 <button
                   type="button"
@@ -3558,6 +3682,358 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Runic Forge (U)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          DIABLO-STYLE PROCEDURAL ABYSSAL RIFT CONSOLE MODAL (SHORTCUT: P)
+         ========================================================= */}
+      {phase === "playing" && !editorMode && riftOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card char-sheet-card" style={{ maxWidth: "1040px" }}>
+            <div className="shop-header">
+              <div>
+                <div className="shop-pill" style={{ color: "#e09eff" }}>
+                  PROCEDURAL LABYRINTH GENERATOR • ENDLESS NEPHALEM-STYLE RIFTING
+                </div>
+                <h2 className="shop-title">THE ABYSSAL RIFT • PROCEDURAL DUNGEONS</h2>
+              </div>
+              <div className="char-summary-badges" style={{ alignItems: "center", gap: "8px" }}>
+                <span className="char-stat-badge" style={{ borderColor: "#c875ff", color: "#eabfff" }}>
+                  🌀 Deepest Floor Cleared: <strong>Floor {flags.highestRiftDepth ?? 0}</strong>
+                </span>
+                <span className="char-stat-badge" style={{ borderColor: "#4ef2ff", color: "#9ef6ff" }}>
+                  ✦ Monster Cores: <strong>{hero.monsterCores ?? 0}</strong>
+                </span>
+                <span className="char-stat-badge" style={{ borderColor: "#ffd24c", color: "#ffe694" }}>
+                  ◆ Rupees: <strong>{hero.rupees}</strong>
+                </span>
+              </div>
+            </div>
+
+            <p className="shop-greeting" style={{ marginBottom: "14px" }}>
+              &ldquo;Step into the <strong>Abyssal Rift Obelisk</strong> in Crossroads Village (or
+              press <strong>P</strong> anytime) to open a procedurally generated dungeon floor!
+              Every run carves a brand-new multi-room labyrinth with randomized{" "}
+              <strong>Corridors, Biome Themes, Crowned Elite Champions, Blessing Shrines, Treasure Vaults, and a Rift Guardian Boss</strong>{" "}
+              that unseals the Descent Portal to the next deeper floor!&rdquo;
+            </p>
+
+            <div className="char-equip-grid" style={{ gridTemplateColumns: "1.1fr 0.9fr" }}>
+              {/* LEFT: LAUNCH / REROLL PROCEDURAL RIFT FLOOR */}
+              <div className="char-slot-panel">
+                <div className="char-slot-header">
+                  <span className="char-slot-title">OPEN OR REROLL PROCEDURAL RIFT</span>
+                  <span className="char-slot-sub">
+                    Choose a Floor Depth &amp; Seed (leave Seed blank for a unique layout every time)
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "8px" }}>
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "0.75rem",
+                        fontWeight: 800,
+                        color: "#c8d8f0",
+                        marginBottom: "6px",
+                      }}
+                    >
+                      SELECT RIFT FLOOR DEPTH (SCALES MONSTER PACKS, ELITES &amp; LOOT):
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setRiftTargetDepth(d)}
+                          className={`char-equip-btn ${riftTargetDepth === d ? "active" : ""}`}
+                          style={{
+                            padding: "6px 12px",
+                            background:
+                              riftTargetDepth === d
+                                ? "linear-gradient(180deg, #b85cff 0%, #6d24b8 100%)"
+                                : "rgba(26, 32, 52, 0.85)",
+                            borderColor:
+                              riftTargetDepth === d
+                                ? "#eabfff"
+                                : "rgba(140, 165, 210, 0.35)",
+                            color: "#ffffff",
+                            fontWeight: 800,
+                          }}
+                        >
+                          Floor {d}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto",
+                      gap: "8px",
+                      alignItems: "end",
+                    }}
+                  >
+                    <label className="inspector-field" style={{ margin: 0 }}>
+                      <span>Custom Dungeon Seed (Optional — Leave Empty for Random Layout)</span>
+                      <input
+                        type="text"
+                        placeholder="e.g. 777421 (or leave blank for random)"
+                        value={riftCustomSeedText}
+                        onChange={(e) => setRiftCustomSeedText(e.target.value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRiftCustomSeedText(
+                          String(Math.floor(100000 + Math.random() * 899999))
+                        )
+                      }
+                      className="char-equip-btn"
+                      style={{ padding: "8px 12px", height: "36px" }}
+                    >
+                      🎲 Roll Seed
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: "10px",
+                      background: "rgba(32, 18, 54, 0.65)",
+                      border: "1px solid rgba(196, 114, 255, 0.35)",
+                      fontSize: "0.78rem",
+                      color: "#e2d4f8",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, color: "#ffd978", marginBottom: "4px" }}>
+                      ✦ Floor {riftTargetDepth} Procedural Modifiers &amp; Rewards:
+                    </div>
+                    <div>• <strong>6 to 8 Interconnected Chambers</strong> on a 3×3 Dungeon Grid</div>
+                    <div>
+                      • <strong>{Math.min(3, 1 + Math.floor(riftTargetDepth / 2))} Crowned Elite Champion Packs</strong>{" "}
+                      with Diablo-style Affixes (2x HP, +50 Rupees &amp; +2 Monster Cores)
+                    </div>
+                    <div>
+                      • <strong>1 Abyssal Blessing Shrine</strong> (100% Heal, MP Refill &amp; +2 Cores) &amp;{" "}
+                      <strong>1 Treasure Vault Chest</strong> (+75 Rupees, +2 Cores, Bombs &amp; Arrows)
+                    </div>
+                    <div>
+                      • <strong>Rift Guardian Boss Hoard</strong>: Unseals{" "}
+                      <strong>+1 Heart Container, +4 Monster Cores &amp; +{80 + riftTargetDepth * 35} Rupees</strong>!
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const parsed = parseInt(riftCustomSeedText.trim(), 10);
+                        const customSeed = Number.isFinite(parsed) ? parsed : undefined;
+                        enterProceduralRift(riftTargetDepth, customSeed);
+                      }}
+                      className="shop-buy-btn"
+                      style={{
+                        flex: 1,
+                        padding: "11px 16px",
+                        fontSize: "0.9rem",
+                        background: "linear-gradient(180deg, #c86bff 0%, #7320c9 100%)",
+                        color: "#ffffff",
+                        fontWeight: 800,
+                      }}
+                    >
+                      🌀 Open Procedural Rift — Floor {riftTargetDepth}{" "}
+                      {riftCustomSeedText.trim() ? `(Seed #${riftCustomSeedText.trim()})` : "(New Random Layout)"}
+                    </button>
+
+                    {zone === "rift" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRiftOpen(false);
+                          warpToZone("overworld", true);
+                        }}
+                        className="shop-close-btn"
+                        style={{ padding: "11px 14px" }}
+                      >
+                        🏛 Return to Village
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT: LIVE 3x3 PROCEDURAL CHAMBER TOPOLOGY MAP */}
+              <div className="char-slot-panel">
+                <div className="char-slot-header">
+                  <span className="char-slot-title">
+                    {(flags.riftDepth ?? 0) > 0
+                      ? `ACTIVE RIFT BLUEPRINT • FLOOR ${flags.riftDepth} (SEED #${flags.riftSeed})`
+                      : "PROCEDURAL CHAMBER TOPOLOGY PREVIEW"}
+                  </span>
+                  <span className="char-slot-sub">
+                    {flags.riftBiomeTitle
+                      ? `${flags.riftBiomeTitle} • ${flags.riftEliteAffix}`
+                      : "Open a Rift to inspect its generated 3×3 room graph"}
+                  </span>
+                </div>
+
+                {flags.riftRooms && flags.riftRooms.length > 0 ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "10px",
+                      marginTop: "6px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, 1fr)",
+                        gap: "10px",
+                        width: "100%",
+                        maxWidth: "320px",
+                        padding: "14px",
+                        borderRadius: "12px",
+                        background: "rgba(10, 12, 24, 0.92)",
+                        border: "1px solid rgba(196, 114, 255, 0.35)",
+                      }}
+                    >
+                      {[2, 1, 0].map((row) =>
+                        [0, 1, 2].map((col) => {
+                          const room = (flags.riftRooms ?? []).find(
+                            (r) => r.col === col && r.row === row
+                          );
+                          const isHeroHere =
+                            zone === "rift" &&
+                            room &&
+                            Math.abs(hero.x - room.cx) <= 11 &&
+                            Math.abs(hero.z - room.cz) <= 11;
+
+                          if (!room) {
+                            return (
+                              <div
+                                key={`${col}-${row}`}
+                                style={{
+                                  height: "68px",
+                                  borderRadius: "8px",
+                                  background: "rgba(255,255,255,0.02)",
+                                  border: "1px dashed rgba(255,255,255,0.08)",
+                                }}
+                              />
+                            );
+                          }
+
+                          const roleBadge =
+                            room.role === "start"
+                              ? { icon: "⛩", label: "Entry", color: "#4ef2ff" }
+                              : room.role === "boss"
+                              ? { icon: "☠", label: "Guardian", color: "#ff4769" }
+                              : room.role === "shrine"
+                              ? { icon: "✦", label: "Shrine", color: "#4eff91" }
+                              : room.role === "vault"
+                              ? { icon: "💎", label: "Vault", color: "#ffd24c" }
+                              : room.role === "elite"
+                              ? { icon: "👑", label: "Elite", color: "#e09eff" }
+                              : { icon: "⚔", label: "Combat", color: "#9eb4d8" };
+
+                          return (
+                            <div
+                              key={`${col}-${row}`}
+                              style={{
+                                height: "68px",
+                                borderRadius: "8px",
+                                background: isHeroHere
+                                  ? "rgba(184, 92, 255, 0.32)"
+                                  : "rgba(30, 36, 58, 0.9)",
+                                border: isHeroHere
+                                  ? "2px solid #4eff91"
+                                  : `1.5px solid ${roleBadge.color}`,
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                padding: "4px",
+                                textAlign: "center",
+                              }}
+                            >
+                              <span style={{ fontSize: "1.05rem" }}>{roleBadge.icon}</span>
+                              <span
+                                style={{
+                                  fontSize: "0.7rem",
+                                  fontWeight: 800,
+                                  color: roleBadge.color,
+                                }}
+                              >
+                                {roleBadge.label}
+                              </span>
+                              {isHeroHere && (
+                                <span
+                                  style={{
+                                    fontSize: "0.62rem",
+                                    color: "#4eff91",
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  ● HERO
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: "0.74rem",
+                        color: "#c8d8f0",
+                        textAlign: "center",
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      Every chamber is linked by carved <strong>5.6m Stone Corridors</strong>. Slay{" "}
+                      <strong>{flags.riftBossName}</strong> in the <strong>☠ Guardian Lair</strong>{" "}
+                      to unseal the Descent Portal to Floor {(flags.riftDepth ?? 1) + 1}!
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      padding: "28px 18px",
+                      textAlign: "center",
+                      color: "#9eb4d8",
+                      fontSize: "0.82rem",
+                    }}
+                  >
+                    No Abyssal Rift floor is active yet. Click{" "}
+                    <strong>&ldquo;🌀 Open Procedural Rift&rdquo;</strong> on the left to generate
+                    your first Diablo-style dungeon!
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>P</strong> or <strong>Esc</strong> anytime to close the Abyssal Rift
+                Console.
+              </span>
+              <button
+                type="button"
+                onClick={() => setRiftOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Rift Console (P)
               </button>
             </div>
           </div>
