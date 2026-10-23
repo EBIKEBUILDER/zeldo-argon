@@ -21,6 +21,7 @@ import {
   CITADEL_BOSS_GATE_POS,
   CITADEL_EXIT_GATE_POS,
   CITADEL_VICTORY_CHEST_POS,
+  COMPANION_ALTAR_POS,
   computeBossChargePathLength,
   computeEnemyChargePathLength,
   computePathfindingMoveDir,
@@ -118,6 +119,23 @@ export type BottleContentId =
   | "blue_potion"
   | "fairy"
   | "bee";
+
+export type CompanionId =
+  | "none"
+  | "ember_phoenix"
+  | "frost_owl"
+  | "storm_wolf"
+  | "gold_sprite";
+
+export type RelicId =
+  | "vampiric_fang"
+  | "arcane_conduit"
+  | "thunder_sigil"
+  | "demolition_core"
+  | "wind_feather"
+  | "greed_crown"
+  | "berserker_torc"
+  | "aegis_ankh";
 
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
@@ -229,6 +247,17 @@ export interface HeroState {
   swordRuneTier?: 0 | 1 | 2;
   bowRuneTier?: 0 | 1 | 2;
   hammerRuneTier?: 0 | 1 | 2;
+  activeCompanion?: CompanionId;
+  unlockedCompanions?: CompanionId[];
+  companionAttackTimer?: number;
+  companionBlessTimer?: number;
+  unlockedRelics?: RelicId[];
+  equippedRelics?: RelicId[];
+  dashTimer?: number;
+  dashCooldown?: number;
+  comboCount?: number;
+  comboTimer?: number;
+  maxComboStreak?: number;
   shieldBlock: number; // Physical damage blocked by current shield
   swordDamage: number; // Base sword damage (1 for Traveler's Sword, 2 for Tempered Blade)
   isAttacking: boolean;
@@ -610,6 +639,7 @@ export interface FrameInput {
   bottlePressed?: boolean;
   interactPressed?: boolean;
   bombPressed?: boolean;
+  dashPressed?: boolean;
 }
 
 export interface SerializableGameState {
@@ -650,6 +680,7 @@ export interface SerializableGameState {
   atlasOpen: boolean;
   forgeOpen: boolean;
   riftOpen: boolean;
+  sanctuaryOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -682,6 +713,11 @@ export interface GameActions {
   setAtlasOpen: (open: boolean) => void;
   setForgeOpen: (open: boolean) => void;
   setRiftOpen: (open: boolean) => void;
+  setSanctuaryOpen: (open: boolean) => void;
+  summonOrUnlockCompanion: (companionId: CompanionId) => void;
+  toggleEquipRelic: (relicId: RelicId) => void;
+  gambleAncientRelic: () => void;
+  grantSanctuaryPlaytestBundle: () => void;
   enterProceduralRift: (depth?: number, customSeed?: number) => void;
   forgeEnchantWeapon: (slot: "sword" | "bow" | "hammer") => void;
   grantForgePlaytestBundle: () => void;
@@ -1002,6 +1038,17 @@ function createInitialState(
       swordRuneTier: 0,
       bowRuneTier: 0,
       hammerRuneTier: 0,
+      activeCompanion: "none",
+      unlockedCompanions: ["none"],
+      companionAttackTimer: 1.5,
+      companionBlessTimer: 14.0,
+      unlockedRelics: [],
+      equippedRelics: [],
+      dashTimer: 0,
+      dashCooldown: 0,
+      comboCount: 0,
+      comboTimer: 0,
+      maxComboStreak: 0,
       shieldBlock: 1,
       swordDamage: 1,
       isAttacking: false,
@@ -1206,6 +1253,7 @@ function createInitialState(
     atlasOpen: false,
     forgeOpen: false,
     riftOpen: false,
+    sanctuaryOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -1568,6 +1616,264 @@ export const useGameStore = create<GameStore>((set, get) => ({
       questLogOpen: open ? false : state.questLogOpen,
       atlasOpen: open ? false : state.atlasOpen,
       forgeOpen: open ? false : state.forgeOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+    }));
+  },
+
+  setSanctuaryOpen: (open: boolean) => {
+    set((state) => ({
+      sanctuaryOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+    }));
+  },
+
+  summonOrUnlockCompanion: (companionId: CompanionId) => {
+    const state = get();
+    const hero = {
+      ...state.hero,
+      unlockedCompanions: [...(state.hero.unlockedCompanions ?? ["none"])],
+    };
+
+    if (companionId === "none") {
+      hero.activeCompanion = "none";
+      soundEngine.unlock();
+      soundEngine.playCrystalSwitch(false);
+      set({
+        hero,
+        banner: {
+          id: Date.now(),
+          text: "Spirit Companion Dismissed",
+          subtext: "Press [K] anytime to summon an Elemental Spirit Companion!",
+          timer: 3.0,
+        },
+      });
+      return;
+    }
+
+    const COMP_COSTS: Record<
+      Exclude<CompanionId, "none">,
+      { cores: number; rupees: number; name: string; desc: string }
+    > = {
+      ember_phoenix: {
+        cores: 3,
+        rupees: 120,
+        name: "Pyra, the Ember Phoenix",
+        desc: "Orbits you in 3D and launches homing Fireballs every 2.2s (melts Ice Armor & lights torches)!",
+      },
+      frost_owl: {
+        cores: 3,
+        rupees: 140,
+        name: "Glacia, the Rimefeather Owl",
+        desc: "Fires Frost Bolts every 2.4s (chills & stuns foes) and grants +1 Shield Block!",
+      },
+      storm_wolf: {
+        cores: 4,
+        rupees: 160,
+        name: "Voltaris, the Astral Storm-Wolf",
+        desc: "Grants +15% Movement Speed and zaps nearby monsters with 3D Chain Lightning every 2.0s!",
+      },
+      gold_sprite: {
+        cores: 4,
+        rupees: 180,
+        name: "Aurelia, the Treasure Sprite",
+        desc: "Pulls Rupees & Hearts from 8.5m away, boosts Rupee value +50%, and heals +1 Heart & +20 MP every 14s!",
+      },
+    };
+
+    const meta = COMP_COSTS[companionId];
+    const alreadyUnlocked = hero.unlockedCompanions.includes(companionId);
+    if (!alreadyUnlocked) {
+      const cores = hero.monsterCores ?? 0;
+      if (cores < meta.cores || hero.rupees < meta.rupees) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: "Insufficient Sanctuary Offerings!",
+            subtext: `Summoning ${meta.name} requires ${meta.cores} Monster Cores and ${meta.rupees} Rupees.`,
+            timer: 3.4,
+          },
+        });
+        return;
+      }
+      hero.monsterCores = cores - meta.cores;
+      hero.rupees -= meta.rupees;
+      hero.unlockedCompanions.push(companionId);
+    }
+
+    hero.activeCompanion = companionId;
+    hero.companionAttackTimer = 0.6;
+    soundEngine.unlock();
+    soundEngine.playFairyRevive();
+    soundEngine.playVictoryFanfare();
+    set({
+      hero,
+      banner: {
+        id: Date.now(),
+        text: alreadyUnlocked
+          ? `Summoned ${meta.name}!`
+          : `Awakened & Summoned ${meta.name}!`,
+        subtext: meta.desc,
+        timer: 4.5,
+      },
+    });
+  },
+
+  toggleEquipRelic: (relicId: RelicId) => {
+    const state = get();
+    const unlocked = state.hero.unlockedRelics ?? [];
+    if (!unlocked.includes(relicId)) return;
+    const equipped = [...(state.hero.equippedRelics ?? [])];
+    const idx = equipped.indexOf(relicId);
+    soundEngine.unlock();
+    if (idx !== -1) {
+      equipped.splice(idx, 1);
+      soundEngine.playCrystalSwitch(false);
+      set({
+        hero: { ...state.hero, equippedRelics: equipped },
+      });
+    } else {
+      if (equipped.length >= 3) {
+        equipped.shift();
+      }
+      equipped.push(relicId);
+      soundEngine.playCrystalSwitch(true);
+      set({
+        hero: { ...state.hero, equippedRelics: equipped },
+      });
+    }
+  },
+
+  gambleAncientRelic: () => {
+    const state = get();
+    const allRelics: RelicId[] = [
+      "vampiric_fang",
+      "arcane_conduit",
+      "thunder_sigil",
+      "demolition_core",
+      "wind_feather",
+      "greed_crown",
+      "berserker_torc",
+      "aegis_ankh",
+    ];
+    const unlocked = [...(state.hero.unlockedRelics ?? [])];
+    const locked = allRelics.filter((r) => !unlocked.includes(r));
+    if (locked.length === 0) {
+      soundEngine.playGateLocked();
+      set({
+        banner: {
+          id: Date.now(),
+          text: "All 8 Ancient Relics Already Discovered!",
+          subtext: "Equip any 3 Relics in the Sanctuary Vault [K] to customize your Hero build!",
+          timer: 3.4,
+        },
+      });
+      return;
+    }
+
+    const coreCost = 2;
+    const rupeeCost = 90;
+    const cores = state.hero.monsterCores ?? 0;
+    if (cores < coreCost || state.hero.rupees < rupeeCost) {
+      soundEngine.playGateLocked();
+      set({
+        banner: {
+          id: Date.now(),
+          text: "Insufficient Offerings to Roll Ancient Relic!",
+          subtext: `Requires ${coreCost} Monster Cores and ${rupeeCost} Rupees.`,
+          timer: 3.2,
+        },
+      });
+      return;
+    }
+
+    const rolled = locked[Math.floor(Math.random() * locked.length)];
+    unlocked.push(rolled);
+    const equipped = [...(state.hero.equippedRelics ?? [])];
+    if (equipped.length < 3) {
+      equipped.push(rolled);
+    }
+
+    const RELIC_NAMES: Record<RelicId, string> = {
+      vampiric_fang: "Crimson Leech Fang (+1 HP & +8 MP on Kill)",
+      arcane_conduit: "Archmage's Ley-Crystal (2x MP Regen & -40% Flame Cost)",
+      thunder_sigil: "Tempest Thorns Sigil (Shield Block Zaps Attackers for 2 DMG)",
+      demolition_core: "Sapper's Cluster Core (+40% Bomb Radius & +2 Bomb DMG)",
+      wind_feather: "Zephyr Gale Plume (+18% Speed & -35% Dash Cooldown)",
+      greed_crown: "Sovereign's Greed Crown (+50% Rupees & +1 Extra Boss/Elite Core)",
+      berserker_torc: "Bloodforged War-Torc (+1 Sword/Hammer DMG & +35% Charge Speed)",
+      aegis_ankh: "Immortal Phoenix Ankh (-25% DMG Taken & Auto-Revive Rebirth)",
+    };
+
+    soundEngine.unlock();
+    soundEngine.playSecretSolve();
+    soundEngine.playVictoryFanfare();
+    set({
+      hero: {
+        ...state.hero,
+        monsterCores: cores - coreCost,
+        rupees: state.hero.rupees - rupeeCost,
+        unlockedRelics: unlocked,
+        equippedRelics: equipped,
+      },
+      banner: {
+        id: Date.now(),
+        text: `Unearthed Ancient Relic: ${RELIC_NAMES[rolled]}!`,
+        subtext:
+          equipped.includes(rolled)
+            ? "Automatically attuned into your Active Relic Loadout!"
+            : "Added to your Relic Vault — click to equip in one of your 3 Relic Slots!",
+        timer: 4.8,
+      },
+    });
+  },
+
+  grantSanctuaryPlaytestBundle: () => {
+    soundEngine.unlock();
+    soundEngine.playVictoryFanfare();
+    const allRelics: RelicId[] = [
+      "vampiric_fang",
+      "arcane_conduit",
+      "thunder_sigil",
+      "demolition_core",
+      "wind_feather",
+      "greed_crown",
+      "berserker_torc",
+      "aegis_ankh",
+    ];
+    set((state) => ({
+      hero: {
+        ...state.hero,
+        monsterCores: (state.hero.monsterCores ?? 0) + 15,
+        rupees: state.hero.rupees + 800,
+        unlockedCompanions: [
+          "none",
+          "ember_phoenix",
+          "frost_owl",
+          "storm_wolf",
+          "gold_sprite",
+        ],
+        activeCompanion:
+          state.hero.activeCompanion && state.hero.activeCompanion !== "none"
+            ? state.hero.activeCompanion
+            : "ember_phoenix",
+        unlockedRelics: allRelics,
+        equippedRelics:
+          (state.hero.equippedRelics ?? []).length > 0
+            ? state.hero.equippedRelics
+            : ["vampiric_fang", "berserker_torc", "wind_feather"],
+      },
+      banner: {
+        id: Date.now(),
+        text: "Sanctuary Playtest Unlocked! (All 4 Companions & All 8 Relics!)",
+        subtext: "Switch 3D Spirit Companions & customize your 3 Active Relics anytime!",
+        timer: 4.2,
+      },
     }));
   },
 
@@ -3693,23 +3999,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     };
 
-    // Passive Magic Power regeneration (2.5 MP/s)
+    const hasRelic = (r: RelicId): boolean =>
+      Boolean(hero.equippedRelics && hero.equippedRelics.includes(r));
+
+    // Passive Magic Power regeneration (2.5 MP/s base, or 5.0 MP/s with Archmage's Ley-Crystal!)
+    const mpRegenRate = hasRelic("arcane_conduit") ? 5.0 : 2.5;
     hero.maxMp = hero.maxMp || 100;
-    hero.mp = Math.min(hero.maxMp, (hero.mp ?? 100) + dt * 2.5);
+    hero.mp = Math.min(hero.maxMp, (hero.mp ?? 100) + dt * mpRegenRate);
     hero.maxBombs = hero.maxBombs ?? 0;
     hero.bombs = hero.bombs ?? 0;
 
-    // Tunic damage multiplier:
+    // Tunic & Relic damage multiplier:
     // - Forest Green Tunic (default): 1.0x (0% physical/magical reduction)
     // - Sapphire Mail (blue_mail): 0.5x (50% physical & magical damage reduction!)
     // - Crimson Dragon Mail (red_mail): 0.25x (75% physical & magical damage reduction!)
+    // - Immortal Phoenix Ankh (aegis_ankh): additional 0.75x multiplier (-25% incoming damage!)
     const getTunicDamageMultiplier = (): number => {
-      if (hero.equippedTunic === "red_mail") return 0.25;
-      if (hero.equippedTunic === "blue_mail") return 0.5;
-      return 1.0;
+      const baseMult =
+        hero.equippedTunic === "red_mail"
+          ? 0.25
+          : hero.equippedTunic === "blue_mail"
+          ? 0.5
+          : 1.0;
+      return hasRelic("aegis_ankh") ? baseMult * 0.75 : baseMult;
     };
 
-    // Helper: check if hero died and auto-revive with a Bottled Fairy if one is in a bottle!
+    // Helper: check if hero died and auto-revive with Bottled Fairy OR Immortal Phoenix Ankh (`aegis_ankh`)!
     const checkHeroDeathOrFairyRevive = () => {
       if (hero.hp > 0) return;
       const fairyIdx = hero.bottles.findIndex((b) => b === "fairy");
@@ -3723,6 +4038,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
           "Bottled Fairy Revived You! (+7 Hearts)",
           `Your Fairy burst from Bottle #${fairyIdx + 1} and restored your life!`,
           4.5
+        );
+      } else if (hasRelic("aegis_ankh")) {
+        // Immortal Phoenix Ankh triggers Phoenix Rebirth (100% HP + 100% MP + 2.5s Invulnerability) and shatters!
+        hero.equippedRelics = (hero.equippedRelics ?? []).filter((r) => r !== "aegis_ankh");
+        hero.unlockedRelics = (hero.unlockedRelics ?? []).filter((r) => r !== "aegis_ankh");
+        hero.hp = hero.maxHp;
+        hero.mp = hero.maxMp;
+        hero.damageFractionAcc = 0;
+        hero.invulnerableTimer = 2.5;
+        soundEngine.playFairyRevive();
+        soundEngine.playVictoryFanfare();
+        pushBanner(
+          "🔥 Immortal Phoenix Ankh Triggered Rebirth! (100% HP & MP!)",
+          "Your Phoenix Ankh shattered in a blaze of golden light to restore your life and grant 2.5s Invulnerability!",
+          5.5
         );
       } else {
         phase = "gameover";
@@ -3739,6 +4069,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       );
     };
 
+    const lightningArcs: LightningArcState[] = (state.lightningArcs ?? [])
+      .map((arc) => ({ ...arc, timer: arc.timer - dt }))
+      .filter((arc) => arc.timer > 0);
+    const enemies: EnemyState[] = state.enemies.map((e) => ({ ...e }));
+
     const damageHero = (
       rawAmount: number,
       pushX: number,
@@ -3753,7 +4088,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return { triggered: false, blocked: false };
       }
 
-      const shieldPower = Math.max(1, hero.shieldBlock ?? 1);
+      const companionBlockBonus = hero.activeCompanion === "frost_owl" ? 1 : 0;
+      const shieldPower = Math.max(1, (hero.shieldBlock ?? 1) + companionBlockBonus);
       let finalDamage = rawAmount;
       const kbScale = hero.equippedBoots === "titan_greaves" ? 0.5 : 1.0;
       let blocked = false;
@@ -3773,6 +4109,53 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (canBlock) {
         blocked = true;
         soundEngine.playShieldBlock();
+
+        // Tempest Thorns Sigil (`thunder_sigil`): Blocking an attack zaps up to 3 nearby foes within 4.5m with Chain Lightning!
+        if (hasRelic("thunder_sigil")) {
+          let zapped = 0;
+          for (const e of enemies) {
+            if (zapped >= 3) break;
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              e.kind === "boss"
+            ) {
+              continue;
+            }
+            if (Math.hypot(e.x - hero.x, e.z - hero.z) <= 4.5) {
+              zapped++;
+              e.provoked = true;
+              e.hp -= 2;
+              e.hitFlashTimer = 0.28;
+              e.stunTimer = Math.max(e.stunTimer, 1.2);
+              if (e.kind !== "turret") {
+                e.state = "stunned";
+                e.stateTimer = Math.max(e.stateTimer, 1.2);
+              }
+              lightningArcs.push({
+                id: `thorns-arc-${e.id}-${stats.elapsedSeconds.toFixed(3)}`,
+                zone,
+                x1: hero.x,
+                z1: hero.z,
+                x2: e.x,
+                z2: e.z,
+                timer: 0.28,
+                maxTimer: 0.28,
+              });
+              if (e.hp <= 0) {
+                e.hp = 0;
+                e.state = "dead";
+                stats.enemiesDefeated += 1;
+                hero.monsterCores = (hero.monsterCores ?? 0) + 1;
+                soundEngine.playEnemyDefeat();
+              }
+            }
+          }
+          if (zapped > 0) {
+            soundEngine.playElectricShock();
+          }
+        }
 
         if (isBossLunge) {
           finalDamage = Math.max(0, rawAmount - Math.max(shieldPower, rawAmount));
@@ -3868,6 +4251,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     hero.hurtFlashTimer = Math.max(0, (hero.hurtFlashTimer ?? 0) - dt);
     hero.chillTimer = Math.max(0, (hero.chillTimer ?? 0) - dt);
     hero.knockbackLockTimer = Math.max(0, (hero.knockbackLockTimer ?? 0) - dt);
+    hero.dashTimer = Math.max(0, (hero.dashTimer ?? 0) - dt);
+    hero.dashCooldown = Math.max(0, (hero.dashCooldown ?? 0) - dt);
+    if ((hero.comboTimer ?? 0) > 0) {
+      hero.comboTimer = Math.max(0, (hero.comboTimer ?? 0) - dt);
+      if (hero.comboTimer <= 0) {
+        hero.comboCount = 0;
+      }
+    }
     hero.isSpinAttacking = hero.spinAttackTimer > 0;
     hero.isAttacking = hero.attackTimer > 0 || hero.spinAttackTimer > 0;
 
@@ -3899,16 +4290,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let fireballs: FireballProjectileState[] = (state.fireballs ?? []).map((f) => ({ ...f }));
     let fireZones: FireZoneState[] = (state.fireZones ?? []).map((fz) => ({ ...fz }));
     let friendlyBees: FriendlyBeeState[] = (state.friendlyBees ?? []).map((b) => ({ ...b }));
-    const lightningArcs: LightningArcState[] = (state.lightningArcs ?? [])
-      .map((arc) => ({ ...arc, timer: arc.timer - dt }))
-      .filter((arc) => arc.timer > 0);
     let thrownObjects: ThrownObjectState[] = (state.thrownObjects ?? []).map((t) => ({ ...t }));
     let activeBombs: BombProjectileState[] = (state.activeBombs ?? []).map((b) => ({ ...b }));
     const rupees: RupeeItemState[] = state.rupees.map((r) => ({
       ...r,
       spawnBounceTimer: Math.max(0, (r.spawnBounceTimer ?? 0) - dt),
     }));
-    const enemies: EnemyState[] = state.enemies.map((e) => ({ ...e }));
 
     // Track cut bushes, looted bushes, bush rupee cap, and active leaf/dirt/ceramic/rock bursts
     let cutBushIds = [...state.cutBushIds];
@@ -4708,6 +5095,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     // Charged Spin Attack Logic: Hold Attack button after swinging to charge, release at >= 0.62s for 360° Double-Damage Spin!
+    const chargeSpeedMult = hasRelic("berserker_torc") ? 1.35 : 1.0;
     const SPIN_CHARGE_THRESHOLD = 0.62;
     if (
       input.attackHeld &&
@@ -4718,7 +5106,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.spinAttackTimer <= 0
     ) {
       const prevCharge = hero.swordChargeTimer ?? 0;
-      hero.swordChargeTimer = Math.min(1.6, prevCharge + dt);
+      hero.swordChargeTimer = Math.min(1.6, prevCharge + dt * chargeSpeedMult);
       if (prevCharge < SPIN_CHARGE_THRESHOLD && hero.swordChargeTimer >= SPIN_CHARGE_THRESHOLD) {
         soundEngine.playSpinChargeReady();
       }
@@ -4769,7 +5157,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.knockbackLockTimer <= 0
     ) {
       const prevFire = hero.fireRodChargeTimer ?? 0;
-      hero.fireRodChargeTimer = Math.min(1.6, prevFire + dt);
+      hero.fireRodChargeTimer = Math.min(1.6, prevFire + dt * chargeSpeedMult);
       if (prevFire < FIRE_CHARGE_THRESHOLD && hero.fireRodChargeTimer >= FIRE_CHARGE_THRESHOLD) {
         soundEngine.playSpinChargeReady();
       }
@@ -4783,7 +5171,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     ) {
       const isCharged = (hero.fireRodChargeTimer ?? 0) >= FIRE_CHARGE_THRESHOLD;
       hero.fireRodChargeTimer = 0;
-      const mpCost = isCharged ? 16 : 8;
+      const mpCost = hasRelic("arcane_conduit") ? (isCharged ? 10 : 5) : (isCharged ? 16 : 8);
       if (hero.mp < mpCost) {
         soundEngine.playGateLocked();
         hero.fireRodCooldown = 0.35;
@@ -5286,20 +5674,50 @@ export const useGameStore = create<GameStore>((set, get) => ({
       input.blockHeld &&
       !hero.heldObject &&
       !isUsingAnyWeapon &&
+      (hero.dashTimer ?? 0) <= 0 &&
       hero.knockbackLockTimer <= 0;
 
-    // 2. Hero Movement + Boots Speed Multiplier + Knockback + Hookshot Grapple Pull + Pushable Block Puzzles
+    // Tactical Dash-Evade Roll (Press X or Alt): 0.22s speed burst + 0.28s invulnerability frames!
+    if (
+      input.dashPressed &&
+      (hero.dashCooldown ?? 0) <= 0 &&
+      (hero.dashTimer ?? 0) <= 0 &&
+      !hero.heldObject &&
+      hero.knockbackLockTimer <= 0 &&
+      !state.shopOpen &&
+      !state.characterOpen &&
+      !state.sanctuaryOpen
+    ) {
+      hero.dashTimer = 0.22;
+      hero.dashCooldown = hasRelic("wind_feather") ? 0.58 : 0.9;
+      hero.invulnerableTimer = Math.max(hero.invulnerableTimer, 0.28);
+      hero.isBlocking = false;
+      if (Math.hypot(input.moveX, input.moveZ) > 0.05) {
+        hero.facing = Math.atan2(input.moveX, input.moveZ);
+      }
+      soundEngine.playSwordSwing();
+    }
+
+    // 2. Hero Movement + Boots / Relic / Companion / Dash Speed Multiplier + Knockback + Hookshot Grapple Pull + Pushable Block Puzzles
     const isKnockbackLocked = hero.knockbackLockTimer > 0;
-    let mx = isKnockbackLocked ? 0 : input.moveX;
-    let mz = isKnockbackLocked ? 0 : input.moveZ;
+    const isDashing = (hero.dashTimer ?? 0) > 0;
+    let mx = isKnockbackLocked ? 0 : isDashing ? Math.sin(hero.facing) : input.moveX;
+    let mz = isKnockbackLocked ? 0 : isDashing ? Math.cos(hero.facing) : input.moveZ;
     const mag = Math.hypot(mx, mz);
     const chillMultiplier = (hero.chillTimer ?? 0) > 0 ? 0.68 : 1.0;
+    const relicSpeedMult = hasRelic("wind_feather") ? 1.18 : 1.0;
+    const companionSpeedMult = hero.activeCompanion === "storm_wolf" ? 1.15 : 1.0;
+    const dashSpeedMult = isDashing ? 2.25 : 1.0;
     const bootsMultiplier =
       (hero.equippedBoots === "swift_boots"
         ? 1.25
         : hero.equippedBoots === "titan_greaves"
         ? 1.12
-        : 1.0) * chillMultiplier;
+        : 1.0) *
+      chillMultiplier *
+      relicSpeedMult *
+      companionSpeedMult *
+      dashSpeedMult;
 
     const initialGatePassable =
       zone === "overworld"
@@ -7343,18 +7761,45 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // Kill-Streak Combo & Critical Hit Mastery helpers
+    const registerComboHit = () => {
+      hero.comboCount = (hero.comboCount ?? 0) + 1;
+      hero.comboTimer = 6.5;
+      hero.maxComboStreak = Math.max(hero.maxComboStreak ?? 0, hero.comboCount);
+    };
+
+    const rollComboCritBonus = (): number => {
+      const critChance = Math.min(0.4, (hero.comboCount ?? 0) * 0.04);
+      if (critChance > 0 && Math.random() < critChance) {
+        return 1;
+      }
+      return 0;
+    };
+
     // Helper to handle enemy defeat & rupee / recovery heart drops (including 5x Bounty Monster Fountain, Heirloom Sub-Quest, & Room 3 Ember Guards!)
     const handleEnemyDeath = (enemy: EnemyState) => {
       enemy.hp = 0;
       enemy.state = "dead";
       stats.enemiesDefeated += 1;
+      registerComboHit();
+      const greedCoreBonus =
+        hasRelic("greed_crown") &&
+        (enemy.kind === "boss" || enemy.isBounty || enemy.kind === "knight")
+          ? 1
+          : 0;
       const coreGain =
-        enemy.kind === "boss"
+        (enemy.kind === "boss"
           ? 5
           : enemy.isBounty || enemy.kind === "knight"
           ? 2
-          : 1;
+          : 1) + greedCoreBonus;
       hero.monsterCores = (hero.monsterCores ?? 0) + coreGain;
+
+      // Crimson Leech Fang (`vampiric_fang`): +1 HP (Half-Heart) & +8 MP on every monster kill!
+      if (hasRelic("vampiric_fang")) {
+        hero.hp = Math.min(hero.maxHp, hero.hp + 1);
+        hero.mp = Math.min(hero.maxMp, (hero.mp ?? 0) + 8);
+      }
 
       if (enemy.kind === "boss") {
         flags.bossState = "DEAD";
@@ -7874,8 +8319,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           enemy.stunTimer = Math.max(enemy.stunTimer, 3.2);
         }
 
-        const hammerBonusDmg = hRune === 2 ? 2 : hRune === 1 ? 1 : 0;
+        const hammerBonusDmg =
+          (hRune === 2 ? 2 : hRune === 1 ? 1 : 0) +
+          (hasRelic("berserker_torc") ? 1 : 0) +
+          rollComboCritBonus();
         const hammerBonusStun = hRune >= 1 ? 1.4 : 0;
+        registerComboHit();
         enemy.hp -= 3 + hammerBonusDmg;
         enemy.hitFlashTimer = 0.38;
         enemy.stunTimer = Math.max(enemy.stunTimer, 1.85 + hammerBonusStun);
@@ -9598,6 +10047,141 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     friendlyBees = remainingBees;
 
+    // 9b-2. Update 3D Elemental Spirit Companion AI (`hero.activeCompanion`)
+    if (hero.activeCompanion && phase === "playing") {
+      hero.companionAttackTimer = Math.max(0, (hero.companionAttackTimer ?? 0) - dt);
+      hero.companionBlessTimer = Math.max(0, (hero.companionBlessTimer ?? 0) - dt);
+
+      const orbitAngle = stats.elapsedSeconds * 2.1;
+      const compX = hero.x + Math.cos(orbitAngle) * 1.45;
+      const compZ = hero.z + Math.sin(orbitAngle) * 1.45;
+
+      if (hero.activeCompanion === "gold_sprite") {
+        // Aurelia, the Treasure Sprite: Pulses +2 HP (1 Full Heart) & +20 MP every 14.0s!
+        if ((hero.companionBlessTimer ?? 0) <= 0) {
+          hero.companionBlessTimer = 14.0;
+          if (hero.hp < hero.maxHp || hero.mp < hero.maxMp) {
+            hero.hp = Math.min(hero.maxHp, hero.hp + 2);
+            hero.mp = Math.min(hero.maxMp, (hero.mp ?? 0) + 20);
+            soundEngine.playHeartPickup();
+          }
+        }
+      } else if ((hero.companionAttackTimer ?? 0) <= 0) {
+        const maxRange =
+          hero.activeCompanion === "frost_owl"
+            ? 10.0
+            : hero.activeCompanion === "ember_phoenix"
+            ? 9.5
+            : 6.5;
+        let targetFoe: EnemyState | null = null;
+        let bestDist = maxRange;
+        for (const enemy of enemies) {
+          if (enemy.zone !== zone || enemy.state === "dead") continue;
+          if (enemy.kind === "burrower" && enemy.burrowed) continue;
+          if (isBossRoomSealed(enemy)) continue;
+          const d = Math.hypot(enemy.x - hero.x, enemy.z - hero.z);
+          if (d < bestDist) {
+            bestDist = d;
+            targetFoe = enemy;
+          }
+        }
+
+        if (hero.activeCompanion === "ember_phoenix") {
+          if (targetFoe) {
+            hero.companionAttackTimer = 2.2;
+            const shotAngle = Math.atan2(targetFoe.x - compX, targetFoe.z - compZ);
+            soundEngine.playFireballShoot(false);
+            fireballs.push({
+              id: `phoenix-fb-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+              zone,
+              x: compX,
+              z: compZ,
+              angle: shotAngle,
+              speed: 13.5,
+              damage: 1,
+              radius: 0.44,
+              isCharged: false,
+              lifeTimer: 1.35,
+            });
+          } else {
+            // Also check for nearby unlit braziers within 6.5m!
+            const unlitTorch = mapProps.find(
+              (p) =>
+                p.zone === zone &&
+                p.prefab === "wall_torch" &&
+                p.lit === false &&
+                Math.hypot(p.x - hero.x, p.z - hero.z) <= 6.5
+            );
+            if (unlitTorch) {
+              hero.companionAttackTimer = 2.4;
+              const shotAngle = Math.atan2(unlitTorch.x - compX, unlitTorch.z - compZ);
+              soundEngine.playFireballShoot(false);
+              fireballs.push({
+                id: `phoenix-torch-fb-${stats.elapsedSeconds.toFixed(3)}`,
+                zone,
+                x: compX,
+                z: compZ,
+                angle: shotAngle,
+                speed: 13.5,
+                damage: 1,
+                radius: 0.44,
+                isCharged: false,
+                lifeTimer: 1.2,
+              });
+            }
+          }
+        } else if (hero.activeCompanion === "frost_owl" && targetFoe) {
+          hero.companionAttackTimer = 2.4;
+          const shotAngle = Math.atan2(targetFoe.x - compX, targetFoe.z - compZ);
+          soundEngine.playBowShoot();
+          arrows.push({
+            id: `owl-frost-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+            zone,
+            fromHero: true,
+            isFrost: true,
+            x: compX,
+            z: compZ,
+            angle: shotAngle,
+            speed: 19.5,
+            damage: 2,
+            lifeTimer: 1.35,
+          });
+        } else if (hero.activeCompanion === "storm_wolf" && targetFoe) {
+          hero.companionAttackTimer = 2.0;
+          soundEngine.playElectricShock();
+          targetFoe.provoked = true;
+          if (targetFoe.kind !== "boss") {
+            targetFoe.hp -= 2;
+            targetFoe.hitFlashTimer = 0.28;
+            targetFoe.stunTimer = Math.max(targetFoe.stunTimer, 1.1);
+            if (targetFoe.kind !== "turret") {
+              targetFoe.state = "stunned";
+              targetFoe.stateTimer = Math.max(targetFoe.stateTimer, 1.1);
+            }
+            if (targetFoe.hp <= 0) {
+              handleEnemyDeath(targetFoe);
+            }
+          } else if (flags.bossState === "STUNNED") {
+            targetFoe.hp -= 2;
+            targetFoe.hitFlashTimer = 0.28;
+            if (targetFoe.hp <= 0) {
+              handleEnemyDeath(targetFoe);
+            }
+          }
+          lightningArcs.push({
+            id: `wolf-arc-${targetFoe.id}-${stats.elapsedSeconds.toFixed(3)}`,
+            zone,
+            x1: compX,
+            z1: compZ,
+            x2: targetFoe.x,
+            z2: targetFoe.z,
+            timer: 0.28,
+            maxTimer: 0.28,
+          });
+        }
+      }
+    }
+
     // 9c. Update Thrown Clay Pots & Light Rocks in Flight (`thrownObjects`)
     const remainingThrown: ThrownObjectState[] = [];
     for (const obj of thrownObjects) {
@@ -9754,7 +10338,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         bomb.y = 0;
         soundEngine.playBombExplosion();
 
-        const blastRadius = 3.5;
+        const blastRadius = hasRelic("demolition_core") ? 4.9 : 3.5;
+        const bombHitDamage = hasRelic("demolition_core") ? 5 : 3;
 
         // 1. Blow up any Explodable Cracked Rocks (`cracked_rock`), Pots (`clay_pot`), or Light Rocks (`light_rock`) in blast radius!
         for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
@@ -9762,7 +10347,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           if (prop.zone !== zone) continue;
           const distToProp = Math.hypot(prop.x - bomb.x, prop.z - bomb.z);
 
-          if (prop.prefab === "cracked_rock" && !prop.smashed && distToProp <= 3.85) {
+          if (prop.prefab === "cracked_rock" && !prop.smashed && distToProp <= Math.max(3.85, blastRadius)) {
             ensureMutableMapProps();
             mapProps[pIdx].smashed = true;
             mapProps[pIdx].hasCollider = false;
@@ -9895,7 +10480,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   3.6
                 );
               }
-              enemy.hp -= 3;
+              enemy.hp -= bombHitDamage;
               enemy.hitFlashTimer = 0.28;
               if (enemy.kind !== "turret") {
                 const pushX = dist > 0.01 ? dx / dist : 0;
@@ -10101,7 +10686,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
               }
             } else {
               enemy.provoked = true;
-              const strikeDamage = (hero.swordDamage || 1) * (isSpin ? 2 : 1);
+              const relicSwordBonus = hasRelic("berserker_torc") ? 1 : 0;
+              const critBonus = rollComboCritBonus();
+              const strikeDamage =
+                ((hero.swordDamage || 1) + relicSwordBonus) * (isSpin ? 2 : 1) + critBonus;
+              registerComboHit();
 
               if (enemy.kind === "boss") {
                 // Boss 3-Step Vulnerability Loop: Phase 3 Melee Punish when STUNNED!
@@ -11870,22 +12459,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     // 12. Rupee & Recovery Heart Magnet & Pickup (waits until initial pop-up bounce settles so player sees drops!)
+    const magnetRange = hero.activeCompanion === "gold_sprite" ? 8.5 : 2.6;
+    const magnetSpeed = hero.activeCompanion === "gold_sprite" ? 12.5 : 7.5;
+    const rupeeValueMult =
+      1 +
+      (hero.activeCompanion === "gold_sprite" ? 0.5 : 0) +
+      (hasRelic("greed_crown") ? 0.5 : 0);
+
     for (const rupee of rupees) {
       if (rupee.zone !== zone || rupee.collected) continue;
       if ((rupee.spawnBounceTimer ?? 0) > 0.14) continue;
       const dx = hero.x - rupee.x;
       const dz = hero.z - rupee.z;
       const dist = Math.hypot(dx, dz);
-      if (dist < 2.6 && dist > 0.05) {
-        rupee.x += (dx / dist) * 7.5 * dt;
-        rupee.z += (dz / dist) * 7.5 * dt;
+      if (dist < magnetRange && dist > 0.05) {
+        rupee.x += (dx / dist) * magnetSpeed * dt;
+        rupee.z += (dz / dist) * magnetSpeed * dt;
       }
       if (dist < 1.25) {
         rupee.collected = true;
         if (rupee.tier === "heart") {
           hero.hp = Math.min(hero.maxHp, hero.hp + (rValue(rupee.value)));
         } else {
-          hero.rupees += rupee.value;
+          hero.rupees += Math.max(1, Math.round(rupee.value * rupeeValueMult));
         }
         soundEngine.playRupeePickup(rupee.tier);
       }
@@ -12385,6 +12981,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Abyssal Rift Obelisk — Press [P] or [F] to Enter the Endless Procedural Labyrinth!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(COMPANION_ALTAR_POS.x - hero.x, COMPANION_ALTAR_POS.z - hero.z) <= 3.6
+        ) {
+          hero.interactPrompt =
+            "Spirit Companion Sanctuary & Ancient Relic Vault — Press [K] or [F] to Summon Companions & Equip Relics!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -12402,6 +13004,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let atlasOpen = state.atlasOpen;
     let forgeOpen = state.forgeOpen;
     let riftOpen = state.riftOpen;
+    let sanctuaryOpen = state.sanctuaryOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -12412,6 +13015,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       atlasOpen = false;
       shopOpen = false;
       riftOpen = false;
+      sanctuaryOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(RIFT_ENTRANCE_POS.x - hero.x, RIFT_ENTRANCE_POS.z - hero.z) <= 3.5 &&
@@ -12419,6 +13023,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       riftOpen = true;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+      sanctuaryOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(COMPANION_ALTAR_POS.x - hero.x, COMPANION_ALTAR_POS.z - hero.z) <= 3.5 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      sanctuaryOpen = true;
+      riftOpen = false;
       forgeOpen = false;
       atlasOpen = false;
       shopOpen = false;
@@ -12573,6 +13189,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       atlasOpen,
       forgeOpen,
       riftOpen,
+      sanctuaryOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

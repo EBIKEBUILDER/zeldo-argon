@@ -274,6 +274,12 @@ export const RIFT_ENTRANCE_POS = {
   z: -13.5,
 };
 
+// Map 1 Spirit Companion Sanctuary & Ancient Relic Altar (Summons 3D Elemental Companions & attunes Ancient Relics!)
+export const COMPANION_ALTAR_POS = {
+  x: -12.2,
+  z: -13.5,
+};
+
 // Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,

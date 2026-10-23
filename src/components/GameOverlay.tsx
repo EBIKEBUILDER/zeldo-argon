@@ -4,9 +4,11 @@ import React, { useRef, useState } from "react";
 import {
   BootsId,
   BottleContentId,
+  CompanionId,
   EditorPlaceCategory,
   OffhandId,
   PrimaryHandId,
+  RelicId,
   TerrainBrushMode,
   TunicId,
   useGameStore,
@@ -248,6 +250,7 @@ export default function GameOverlay() {
   const atlasOpen = useGameStore((s) => s.atlasOpen);
   const forgeOpen = useGameStore((s) => s.forgeOpen);
   const riftOpen = useGameStore((s) => s.riftOpen);
+  const sanctuaryOpen = useGameStore((s) => s.sanctuaryOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -273,6 +276,11 @@ export default function GameOverlay() {
   const setAtlasOpen = useGameStore((s) => s.setAtlasOpen);
   const setForgeOpen = useGameStore((s) => s.setForgeOpen);
   const setRiftOpen = useGameStore((s) => s.setRiftOpen);
+  const setSanctuaryOpen = useGameStore((s) => s.setSanctuaryOpen);
+  const summonOrUnlockCompanion = useGameStore((s) => s.summonOrUnlockCompanion);
+  const toggleEquipRelic = useGameStore((s) => s.toggleEquipRelic);
+  const gambleAncientRelic = useGameStore((s) => s.gambleAncientRelic);
+  const grantSanctuaryPlaytestBundle = useGameStore((s) => s.grantSanctuaryPlaytestBundle);
   const enterProceduralRift = useGameStore((s) => s.enterProceduralRift);
   const forgeEnchantWeapon = useGameStore((s) => s.forgeEnchantWeapon);
   const grantForgePlaytestBundle = useGameStore((s) => s.grantForgePlaytestBundle);
@@ -335,6 +343,7 @@ export default function GameOverlay() {
         if (atlasOpen) setAtlasOpen(false);
         if (forgeOpen) setForgeOpen(false);
         if (riftOpen) setRiftOpen(false);
+        if (sanctuaryOpen) setSanctuaryOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -346,12 +355,14 @@ export default function GameOverlay() {
     atlasOpen,
     forgeOpen,
     riftOpen,
+    sanctuaryOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
     setAtlasOpen,
     setForgeOpen,
     setRiftOpen,
+    setSanctuaryOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -841,6 +852,26 @@ export default function GameOverlay() {
                     : `Bottles (${filledBottlesCount}/${(hero.bottles ?? []).length})`}
                 </span>
               </button>
+
+              <div
+                className={`gear-slot ${
+                  (hero.dashTimer ?? 0) > 0
+                    ? "gear-slot-active"
+                    : (hero.dashCooldown ?? 0) > 0
+                    ? "gear-slot-warn"
+                    : "gear-slot-owned"
+                }`}
+                title="Press X or Alt for a Tactical Dash-Evade Roll (2.25x speed burst + 0.28s invulnerability frames)!"
+              >
+                <span className="gear-key">X</span>
+                <span className="gear-name">
+                  {(hero.dashTimer ?? 0) > 0
+                    ? "DASHING!"
+                    : (hero.dashCooldown ?? 0) > 0
+                    ? `Dash (${(hero.dashCooldown ?? 0).toFixed(1)}s)`
+                    : "Dash-Evade"}
+                </span>
+              </div>
             </div>
           )}
         </div>
@@ -924,6 +955,26 @@ export default function GameOverlay() {
                 {minTimedLeft.toFixed(1)}s before extinguish!
               </div>
             )}
+
+          {!editorMode && phase === "playing" && (hero.comboCount ?? 0) >= 2 && (
+            <div
+              className="hud-panel"
+              style={{
+                padding: "5px 14px",
+                borderRadius: "999px",
+                border: "1px solid rgba(255, 132, 68, 0.78)",
+                background: "rgba(38, 14, 16, 0.92)",
+                color: "#ffb478",
+                fontSize: "0.8rem",
+                fontWeight: 800,
+                letterSpacing: "0.03em",
+                boxShadow: "0 6px 18px rgba(0,0,0,0.45)",
+              }}
+            >
+              🔥 x{hero.comboCount} KILL-STREAK COMBO! • +
+              {Math.min(40, (hero.comboCount ?? 0) * 4)}% CRIT CHANCE ({(hero.comboTimer ?? 0).toFixed(1)}s)
+            </div>
+          )}
 
           {!editorMode && phase === "playing" && hero.interactPrompt && (
             <div
@@ -1261,6 +1312,23 @@ export default function GameOverlay() {
                   title="Open the Diablo-Style Procedural Abyssal Rift Dungeon Console (Shortcut: P)"
                 >
                   🌀 Rift {flags.riftDepth ? `(F${flags.riftDepth})` : "(P)"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSanctuaryOpen(!sanctuaryOpen)}
+                  className={`char-toggle-btn ${sanctuaryOpen || hero.activeCompanion || (hero.equippedRelics ?? []).length > 0 ? "active" : ""}`}
+                  style={
+                    hero.activeCompanion || (hero.equippedRelics ?? []).length > 0
+                      ? {
+                          borderColor: "rgba(82, 246, 196, 0.85)",
+                          background: "rgba(14, 52, 46, 0.92)",
+                          color: "#9effdf",
+                        }
+                      : undefined
+                  }
+                  title="Open the Spirit Companion Sanctuary & Ancient Relic Loadout Vault (Shortcut: K)"
+                >
+                  🐾 Sanctuary ({(hero.equippedRelics ?? []).length}/3 • K)
                 </button>
                 <button
                   type="button"
@@ -4093,6 +4161,417 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Rift Console (P)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          SPIRIT COMPANION SANCTUARY & ANCIENT RELIC VAULT MODAL (SHORTCUT: K)
+         ========================================================= */}
+      {phase === "playing" && !editorMode && sanctuaryOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card char-sheet-card" style={{ maxWidth: "1100px" }}>
+            <div className="shop-header">
+              <div>
+                <div className="shop-pill" style={{ color: "#80ffdb" }}>
+                  ELEMENTAL SPIRIT FAMILIARS • 8 ANCIENT RELIC TALISMANS (3-SLOT LOADOUT)
+                </div>
+                <h2 className="shop-title">SPIRIT COMPANION SANCTUARY &amp; RELIC VAULT</h2>
+              </div>
+              <div className="char-summary-badges" style={{ alignItems: "center", gap: "8px" }}>
+                <span className="char-stat-badge" style={{ borderColor: "#80ffdb", color: "#b8fff0" }}>
+                  🐾 Active Companion:{" "}
+                  <strong>
+                    {hero.activeCompanion === "ember_phoenix"
+                      ? "Pyra (Phoenix)"
+                      : hero.activeCompanion === "frost_owl"
+                      ? "Glacia (Owl)"
+                      : hero.activeCompanion === "storm_wolf"
+                      ? "Voltaris (Wolf)"
+                      : hero.activeCompanion === "gold_sprite"
+                      ? "Aurelia (Sprite)"
+                      : "None"}
+                  </strong>
+                </span>
+                <span className="char-stat-badge" style={{ borderColor: "#4ef2ff", color: "#9ef6ff" }}>
+                  ✦ Monster Cores: <strong>{hero.monsterCores ?? 0}</strong>
+                </span>
+                <span className="char-stat-badge" style={{ borderColor: "#ffd24c", color: "#ffe694" }}>
+                  ◆ Rupees: <strong>{hero.rupees}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={grantSanctuaryPlaytestBundle}
+                  className="char-equip-btn"
+                  style={{
+                    background: "rgba(82, 246, 196, 0.2)",
+                    borderColor: "rgba(82, 246, 196, 0.65)",
+                    color: "#9effdf",
+                    padding: "5px 10px",
+                  }}
+                  title="Playtest: Instantly unlock all 4 Spirit Companions, all 8 Ancient Relics, +15 Cores & +500 Rupees"
+                >
+                  ⚡ Playtest: Unlock All Companions &amp; Relics
+                </button>
+              </div>
+            </div>
+
+            <p className="shop-greeting" style={{ marginBottom: "12px" }}>
+              &ldquo;Attune to the <strong>Spirit Companion Sanctuary</strong> in Crossroads Village
+              (or press <strong>K</strong> anytime) to summon a <strong>3D Elemental Spirit Companion</strong>{" "}
+              that orbits your Hero in real time and fights alongside you! Below, socket up to{" "}
+              <strong>3 Ancient Relics</strong> into your active Talisman Loadout — and remember you
+              can press <strong>X</strong> or <strong>Alt</strong> anytime for a{" "}
+              <strong>Tactical Dash-Evade Roll</strong>!&rdquo;
+            </p>
+
+            {(() => {
+              const cores = hero.monsterCores ?? 0;
+              const unlockedComps = hero.unlockedCompanions ?? [];
+              const unlockedRelics = hero.unlockedRelics ?? [];
+              const equippedRelics = hero.equippedRelics ?? [];
+
+              const companionsList: Array<{
+                id: CompanionId;
+                name: string;
+                icon: string;
+                accent: string;
+                costCores: number;
+                costRupees: number;
+                desc: string;
+              }> = [
+                {
+                  id: "ember_phoenix",
+                  name: "Pyra, the Ember Phoenix",
+                  icon: "🔥",
+                  accent: "#ff7b54",
+                  costCores: 3,
+                  costRupees: 150,
+                  desc: "Orbits your Hero in 3D and fires homing Fireballs at nearby monsters every 2.2s (melts Glacial Ice Armor & ignites unlit braziers!).",
+                },
+                {
+                  id: "frost_owl",
+                  name: "Glacia, the Rimefeather Owl",
+                  icon: "🦉",
+                  accent: "#4ef2ff",
+                  costCores: 3,
+                  costRupees: 150,
+                  desc: "Orbits your Hero and fires chilling Frost Bolts (2 DMG) every 2.4s while granting +1 bonus Shield Block power!",
+                },
+                {
+                  id: "storm_wolf",
+                  name: "Voltaris, the Astral Storm-Wolf",
+                  icon: "🐺",
+                  accent: "#c875ff",
+                  costCores: 4,
+                  costRupees: 200,
+                  desc: "Bounds alongside your Hero, grants +15% Movement Speed, and zaps nearby foes with 3D Chain Lightning (2 DMG + 1.1s stun) every 2.0s!",
+                },
+                {
+                  id: "gold_sprite",
+                  name: "Aurelia, the Treasure Sprite",
+                  icon: "✨",
+                  accent: "#ffd24c",
+                  costCores: 4,
+                  costRupees: 200,
+                  desc: "Magnetically pulls Rupees & Hearts from 8.5m away, boosts Rupee value by +50%, and pulses +1 Full Heart & +20 MP every 14s!",
+                },
+              ];
+
+              const relicsList: Array<{
+                id: RelicId;
+                name: string;
+                icon: string;
+                desc: string;
+              }> = [
+                {
+                  id: "vampiric_fang",
+                  name: "Crimson Leech Fang",
+                  icon: "🩸",
+                  desc: "Restores +1/2 Heart (+1 HP) and +8 MP on every monster kill.",
+                },
+                {
+                  id: "arcane_conduit",
+                  name: "Archmage's Ley-Crystal",
+                  icon: "🔮",
+                  desc: "Doubles passive MP regeneration (5.0 MP/s) and reduces Flame Rod MP cost by 40%.",
+                },
+                {
+                  id: "thunder_sigil",
+                  name: "Tempest Thorns Sigil",
+                  icon: "⚡",
+                  desc: "Blocking an attack with Shield (RMB) zaps up to 3 nearby foes with Chain Lightning (2 DMG + 1.2s stun).",
+                },
+                {
+                  id: "demolition_core",
+                  name: "Sapper's Cluster Core",
+                  icon: "💣",
+                  desc: "+40% Bomb explosion radius (4.9m) and +2 bonus Bomb blast damage (5 DMG total).",
+                },
+                {
+                  id: "wind_feather",
+                  name: "Zephyr Gale Plume",
+                  icon: "🪶",
+                  desc: "+18% Hero movement speed and -35% Tactical Dash-Evade cooldown.",
+                },
+                {
+                  id: "greed_crown",
+                  name: "Sovereign's Greed Crown",
+                  icon: "👑",
+                  desc: "+50% Rupee pickup value and +1 extra Monster Core (✦) from Knights, Bounties & Bosses.",
+                },
+                {
+                  id: "berserker_torc",
+                  name: "Bloodforged War-Torc",
+                  icon: "⚔",
+                  desc: "+1 Sword & War-Hammer damage and +35% faster Spin Attack / Flame Rod charge speed.",
+                },
+                {
+                  id: "aegis_ankh",
+                  name: "Immortal Phoenix Ankh",
+                  icon: "☥",
+                  desc: "-25% incoming damage and automatic Phoenix Rebirth (100% HP/MP + 2.5s Invulnerability) if HP hits zero!",
+                },
+              ];
+
+              const allRelicsUnlocked = unlockedRelics.length >= 8;
+              const canGambleRelic = !allRelicsUnlocked && cores >= 2 && hero.rupees >= 100;
+
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                  {/* SECTION 1: 4 ELEMENTAL SPIRIT COMPANIONS */}
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "0.78rem",
+                        fontWeight: 800,
+                        color: "#80ffdb",
+                        marginBottom: "6px",
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      1. 3D ELEMENTAL SPIRIT COMPANIONS (CHOOSE 1 ACTIVE FAMILIAR):
+                    </div>
+                    <div
+                      className="shop-items-grid"
+                      style={{ gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}
+                    >
+                      {companionsList.map((comp) => {
+                        const isUnlocked = unlockedComps.includes(comp.id);
+                        const isActive = hero.activeCompanion === comp.id;
+                        const canAfford =
+                          cores >= comp.costCores && hero.rupees >= comp.costRupees;
+
+                        return (
+                          <div
+                            key={comp.id}
+                            className={`shop-item-card ${isActive ? "shop-item-owned" : ""}`}
+                            style={{
+                              borderColor: isActive
+                                ? comp.accent
+                                : isUnlocked
+                                ? "rgba(82, 246, 196, 0.45)"
+                                : "rgba(140, 165, 210, 0.3)",
+                              padding: "10px",
+                            }}
+                          >
+                            <div className="shop-item-top" style={{ marginBottom: "6px" }}>
+                              <span
+                                className="shop-item-name"
+                                style={{ color: comp.accent, fontSize: "0.84rem" }}
+                              >
+                                {comp.icon} {comp.name}
+                              </span>
+                            </div>
+                            <p
+                              style={{
+                                fontSize: "0.73rem",
+                                color: "#d6e2f5",
+                                lineHeight: 1.4,
+                                margin: "0 0 10px 0",
+                              }}
+                            >
+                              {comp.desc}
+                            </p>
+                            <button
+                              type="button"
+                              disabled={!isUnlocked && !canAfford}
+                              onClick={() => summonOrUnlockCompanion(comp.id)}
+                              className="shop-buy-btn"
+                              style={{
+                                fontSize: "0.76rem",
+                                padding: "7px 10px",
+                                background: isActive
+                                  ? "rgba(46, 214, 118, 0.25)"
+                                  : isUnlocked
+                                  ? "linear-gradient(180deg, #3ad6b5 0%, #168f78 100%)"
+                                  : undefined,
+                              }}
+                            >
+                              {isActive
+                                ? "✓ Active (Click to Dismiss)"
+                                : isUnlocked
+                                ? "🐾 Summon Companion"
+                                : `Unlock (${comp.costCores}✦ + ${comp.costRupees} Rupees)`}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* SECTION 2: 8 ANCIENT RELIC TALISMANS & MYSTERY RELIC GAMBLE */}
+                  <div>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "8px",
+                        flexWrap: "wrap",
+                        gap: "8px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "0.78rem",
+                          fontWeight: 800,
+                          color: "#ffd978",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        2. ANCIENT RELIC LOADOUT ({equippedRelics.length}/3 EQUIPPED •{" "}
+                        {unlockedRelics.length}/8 DISCOVERED):
+                      </div>
+                      <button
+                        type="button"
+                        disabled={!canGambleRelic}
+                        onClick={gambleAncientRelic}
+                        className="shop-buy-btn"
+                        style={{
+                          width: "auto",
+                          padding: "6px 14px",
+                          fontSize: "0.78rem",
+                          background: canGambleRelic
+                            ? "linear-gradient(180deg, #ffd24c 0%, #c9860d 100%)"
+                            : undefined,
+                          color: canGambleRelic ? "#1c1204" : undefined,
+                          fontWeight: 800,
+                        }}
+                      >
+                        {allRelicsUnlocked
+                          ? "★ All 8 Ancient Relics Discovered!"
+                          : "🎲 Roll Mystery Ancient Relic (2✦ Cores & 100 Rupees)"}
+                      </button>
+                    </div>
+
+                    <div
+                      className="shop-items-grid"
+                      style={{ gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}
+                    >
+                      {relicsList.map((rel) => {
+                        const isOwned = unlockedRelics.includes(rel.id);
+                        const isEquipped = equippedRelics.includes(rel.id);
+
+                        return (
+                          <div
+                            key={rel.id}
+                            className={`shop-item-card ${isEquipped ? "shop-item-owned" : ""}`}
+                            style={{
+                              padding: "9px 10px",
+                              opacity: isOwned ? 1 : 0.65,
+                              borderColor: isEquipped
+                                ? "#ffd24c"
+                                : isOwned
+                                ? "rgba(120, 210, 255, 0.45)"
+                                : "rgba(120, 140, 175, 0.25)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontWeight: 800,
+                                  fontSize: "0.8rem",
+                                  color: isEquipped ? "#ffe694" : "#ffffff",
+                                }}
+                              >
+                                {rel.icon} {rel.name}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: "0.66rem",
+                                  fontWeight: 800,
+                                  color: isEquipped
+                                    ? "#4eff91"
+                                    : isOwned
+                                    ? "#8ceeff"
+                                    : "#8a9bb8",
+                                }}
+                              >
+                                {isEquipped ? "EQUIPPED" : isOwned ? "OWNED" : "LOCKED"}
+                              </span>
+                            </div>
+                            <p
+                              style={{
+                                fontSize: "0.71rem",
+                                color: "#d6e2f5",
+                                lineHeight: 1.35,
+                                margin: "0 0 8px 0",
+                              }}
+                            >
+                              {rel.desc}
+                            </p>
+                            <button
+                              type="button"
+                              disabled={!isOwned}
+                              onClick={() => toggleEquipRelic(rel.id)}
+                              className="char-equip-btn"
+                              style={{
+                                width: "100%",
+                                padding: "5px 8px",
+                                fontSize: "0.73rem",
+                                background: isEquipped
+                                  ? "rgba(255, 210, 76, 0.24)"
+                                  : undefined,
+                                borderColor: isEquipped ? "#ffd24c" : undefined,
+                                color: isEquipped ? "#ffe694" : undefined,
+                              }}
+                            >
+                              {!isOwned
+                                ? "🔒 Roll Relic Above to Unlock"
+                                : isEquipped
+                                ? "✓ Equipped (Click to Unequip)"
+                                : "Equip Relic"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>K</strong> or <strong>Esc</strong> anytime to close the Spirit
+                Companion Sanctuary &amp; Relic Vault.
+              </span>
+              <button
+                type="button"
+                onClick={() => setSanctuaryOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Sanctuary (K)
               </button>
             </div>
           </div>

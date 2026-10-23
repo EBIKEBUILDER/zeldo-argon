@@ -45,6 +45,7 @@ import {
   CITADEL_BOSS_GATE_POS,
   CITADEL_EXIT_GATE_POS,
   CITADEL_VICTORY_CHEST_POS,
+  COMPANION_ALTAR_POS,
   CRYPT_SHORTCUT_DOOR_POS,
   CustomModelAsset,
   DESERT_CALDERA_GATE_POS,
@@ -5663,6 +5664,175 @@ export default function BabylonCanvas() {
     riftGroundHalo.isPickable = false;
     riftGroundHalo.parent = riftEntranceNode;
 
+    // 1b. Overworld Spirit Companion Sanctuary & Ancient Relic Altar (`COMPANION_ALTAR_POS = -12.2, -13.5`)
+    const companionAltarNode = new TransformNode("companionAltarNode", scene);
+    companionAltarNode.position.set(COMPANION_ALTAR_POS.x, 0, COMPANION_ALTAR_POS.z);
+
+    const altarDais = MeshBuilder.CreateCylinder(
+      "companionAltarDais",
+      { diameterTop: 3.3, diameterBottom: 3.8, height: 0.24, tessellation: 14 },
+      scene
+    );
+    altarDais.position.set(0, 0.12, 0);
+    altarDais.material = ruinMat;
+    altarDais.isPickable = false;
+    altarDais.parent = companionAltarNode;
+
+    const altarPedestal = MeshBuilder.CreateCylinder(
+      "companionAltarPedestal",
+      { diameterTop: 1.15, diameterBottom: 1.45, height: 1.25, tessellation: 12 },
+      scene
+    );
+    altarPedestal.position.set(0, 0.72, 0);
+    altarPedestal.material = dgPillarMat;
+    altarPedestal.isPickable = false;
+    altarPedestal.parent = companionAltarNode;
+
+    const altarOrb = MeshBuilder.CreatePolyhedron(
+      "companionAltarOrb",
+      { type: 1, size: 0.44 },
+      scene
+    );
+    altarOrb.position.set(0, 2.05, 0);
+    altarOrb.material = riftShrineGlowMat;
+    altarOrb.isPickable = false;
+    altarOrb.parent = companionAltarNode;
+
+    const altarOrbitRing = MeshBuilder.CreateTorus(
+      "companionAltarOrbitRing",
+      { diameter: 1.65, thickness: 0.08, tessellation: 24 },
+      scene
+    );
+    altarOrbitRing.position.set(0, 2.05, 0);
+    altarOrbitRing.rotation.x = Math.PI / 3;
+    altarOrbitRing.material = goldKeyMat;
+    altarOrbitRing.isPickable = false;
+    altarOrbitRing.parent = companionAltarNode;
+
+    const altarGroundHalo = MeshBuilder.CreateTorus(
+      "companionAltarGroundHalo",
+      { diameter: 3.45, thickness: 0.09, tessellation: 28 },
+      scene
+    );
+    altarGroundHalo.position.set(0, 0.14, 0);
+    altarGroundHalo.material = riftShrineGlowMat;
+    altarGroundHalo.isPickable = false;
+    altarGroundHalo.parent = companionAltarNode;
+
+    // 1c. 3D Elemental Spirit Companion Rig (`companionRoot` — Orbits / Follows the Hero!)
+    const companionRoot = new TransformNode("companionRoot", scene);
+    companionRoot.setEnabled(false);
+
+    // Companion 1: Ember Phoenix (`ember_phoenix`)
+    const phoenixNode = new TransformNode("phoenixNode", scene);
+    phoenixNode.parent = companionRoot;
+    const phoenixBody = MeshBuilder.CreateSphere(
+      "phoenixBody",
+      { diameter: 0.56, segments: 12 },
+      scene
+    );
+    phoenixBody.scaling.set(0.85, 0.85, 1.35);
+    phoenixBody.material = forgeEmberMat;
+    phoenixBody.isPickable = false;
+    phoenixBody.parent = phoenixNode;
+
+    const phoenixWingL = MeshBuilder.CreateBox(
+      "phoenixWingL",
+      { width: 0.65, height: 0.05, depth: 0.34 },
+      scene
+    );
+    phoenixWingL.position.set(-0.38, 0.08, 0);
+    phoenixWingL.material = goldKeyMat;
+    phoenixWingL.isPickable = false;
+    phoenixWingL.parent = phoenixNode;
+
+    const phoenixWingR = MeshBuilder.CreateBox(
+      "phoenixWingR",
+      { width: 0.65, height: 0.05, depth: 0.34 },
+      scene
+    );
+    phoenixWingR.position.set(0.38, 0.08, 0);
+    phoenixWingR.material = goldKeyMat;
+    phoenixWingR.isPickable = false;
+    phoenixWingR.parent = phoenixNode;
+
+    // Companion 2: Frost Owl (`frost_owl`)
+    const owlNode = new TransformNode("owlNode", scene);
+    owlNode.parent = companionRoot;
+    const owlBody = MeshBuilder.CreateSphere(
+      "owlBody",
+      { diameter: 0.58, segments: 12 },
+      scene
+    );
+    owlBody.scaling.set(0.95, 1.15, 0.95);
+    owlBody.material = warpAwakenedMat;
+    owlBody.isPickable = false;
+    owlBody.parent = owlNode;
+
+    const owlWingL = MeshBuilder.CreateBox(
+      "owlWingL",
+      { width: 0.58, height: 0.05, depth: 0.36 },
+      scene
+    );
+    owlWingL.position.set(-0.36, 0.05, 0);
+    owlWingL.material = whiteEyeMat;
+    owlWingL.isPickable = false;
+    owlWingL.parent = owlNode;
+
+    const owlWingR = MeshBuilder.CreateBox(
+      "owlWingR",
+      { width: 0.58, height: 0.05, depth: 0.36 },
+      scene
+    );
+    owlWingR.position.set(0.36, 0.05, 0);
+    owlWingR.material = whiteEyeMat;
+    owlWingR.isPickable = false;
+    owlWingR.parent = owlNode;
+
+    // Companion 3: Storm Wolf (`storm_wolf`)
+    const wolfNode = new TransformNode("wolfNode", scene);
+    wolfNode.parent = companionRoot;
+    const wolfBody = MeshBuilder.CreateBox(
+      "wolfBody",
+      { width: 0.44, height: 0.42, depth: 0.82 },
+      scene
+    );
+    wolfBody.material = riftVioletMat;
+    wolfBody.isPickable = false;
+    wolfBody.parent = wolfNode;
+
+    const wolfHead = MeshBuilder.CreateBox(
+      "wolfHead",
+      { width: 0.36, height: 0.34, depth: 0.38 },
+      scene
+    );
+    wolfHead.position.set(0, 0.22, 0.42);
+    wolfHead.material = lightningArcMat;
+    wolfHead.isPickable = false;
+    wolfHead.parent = wolfNode;
+
+    // Companion 4: Treasure Sprite (`gold_sprite`)
+    const spriteNode = new TransformNode("spriteNode", scene);
+    spriteNode.parent = companionRoot;
+    const spriteCore = MeshBuilder.CreatePolyhedron(
+      "spriteCore",
+      { type: 1, size: 0.28 },
+      scene
+    );
+    spriteCore.material = goldKeyMat;
+    spriteCore.isPickable = false;
+    spriteCore.parent = spriteNode;
+
+    const spriteHalo = MeshBuilder.CreateTorus(
+      "spriteHalo",
+      { diameter: 0.78, thickness: 0.05, tessellation: 20 },
+      scene
+    );
+    spriteHalo.rotation.x = Math.PI / 3;
+    spriteHalo.material = riftShrineGlowMat;
+    spriteHalo.isPickable = false;
+    spriteHalo.parent = spriteNode;
+
     // 2. Procedural Rift Blessing Shrine (`riftShrineNode`)
     const riftShrineNode = new TransformNode("riftShrineNode", scene);
     riftShrineNode.parent = riftRoot;
@@ -8777,6 +8947,7 @@ export default function BabylonCanvas() {
     let shovelTriggeredOnce = false;
     let bottleTriggeredOnce = false;
     let bombTriggeredOnce = false;
+    let dashTriggeredOnce = false;
     let leftMouseHeldInPlay = false;
     let rightMouseHeld = false;
     let leftMouseHeldInEditor = false;
@@ -8903,6 +9074,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // K toggles Spirit Companion Sanctuary & Ancient Relic Vault
+      if (code === "KeyK" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setSanctuaryOpen(!store.sanctuaryOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -8918,11 +9096,15 @@ export default function BabylonCanvas() {
       ) {
         attackTriggeredOnce = true;
       }
+      if (code === "KeyF" && !pressedKeys.has(code)) {
+        interactTriggeredOnce = true;
+      }
       if (
-        (code === "KeyF" || code === "KeyK" || code === "KeyX") &&
+        (code === "KeyX" || code === "AltLeft" || code === "AltRight") &&
         !pressedKeys.has(code)
       ) {
-        interactTriggeredOnce = true;
+        e.preventDefault();
+        dashTriggeredOnce = true;
       }
       if ((code === "KeyQ" || code === "Digit1") && !pressedKeys.has(code)) {
         boomerangTriggeredOnce = true;
@@ -9119,6 +9301,7 @@ export default function BabylonCanvas() {
         shovelTriggeredOnce = false;
         bottleTriggeredOnce = false;
         bombTriggeredOnce = false;
+        dashTriggeredOnce = false;
       } else {
         const attackPressed = attackTriggeredOnce;
         const attackHeld =
@@ -9142,6 +9325,7 @@ export default function BabylonCanvas() {
         const shovelPressed = shovelTriggeredOnce;
         const bottlePressed = bottleTriggeredOnce;
         const bombPressed = bombTriggeredOnce;
+        const dashPressed = dashTriggeredOnce;
 
         attackTriggeredOnce = false;
         interactTriggeredOnce = false;
@@ -9153,6 +9337,7 @@ export default function BabylonCanvas() {
         shovelTriggeredOnce = false;
         bottleTriggeredOnce = false;
         bombTriggeredOnce = false;
+        dashTriggeredOnce = false;
 
         if (store.phase === "playing") {
           store.tick(dt, {
@@ -9171,6 +9356,7 @@ export default function BabylonCanvas() {
             shovelPressed,
             bottlePressed,
             bombPressed,
+            dashPressed,
           });
         }
       }
@@ -9568,15 +9754,23 @@ export default function BabylonCanvas() {
       const isSpinning = spinTimer > 0;
       const spinProgress = isSpinning ? 1 - spinTimer / 0.38 : 0;
 
+      const dashTimer = snap.hero.dashTimer ?? 0;
+      const isDashingNow = dashTimer > 0;
+
       heroRoot.position.set(
         snap.hero.x,
-        heroGroundY + (kbLock > 0 ? launchArcY : Math.abs(stride) * 0.11),
+        heroGroundY + (kbLock > 0 ? launchArcY : isDashingNow ? 0.24 : Math.abs(stride) * 0.11),
         snap.hero.z
       );
       heroRoot.rotation.y = isSpinning
         ? snap.hero.facing + spinProgress * Math.PI * 4
         : snap.hero.facing;
-      heroRoot.rotation.x = kbLock > 0 ? -Math.sin(launchProgress * Math.PI) * 0.42 : 0;
+      heroRoot.rotation.x =
+        kbLock > 0
+          ? -Math.sin(launchProgress * Math.PI) * 0.42
+          : isDashingNow
+          ? 0.45
+          : 0;
       heroLeftBoot.position.z = kbLock > 0 ? 0.16 : stride * 0.22;
       heroRightBoot.position.z = kbLock > 0 ? -0.16 : -stride * 0.22;
 
@@ -9840,8 +10034,9 @@ export default function BabylonCanvas() {
         smithArmNode.rotation.x = Math.sin(t * 6.5) * 0.55;
       }
 
-      // Sync 3D Abyssal Rift Obelisk (Map 1 Overworld) & Procedural Rift Landmarks
+      // Sync 3D Abyssal Rift Obelisk & Spirit Companion Sanctuary (Map 1 Overworld)
       riftEntranceNode.setEnabled(inOverworld);
+      companionAltarNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -9857,6 +10052,55 @@ export default function BabylonCanvas() {
         riftGroundHalo.rotation.y = -t * 1.8;
         const vortexPulse = 0.92 + Math.sin(t * 5.2) * 0.1;
         riftVortexDisc.scaling.set(vortexPulse, 1, vortexPulse);
+
+        const altarGroundY = sampleTerrainHeight(
+          activeCells,
+          COMPANION_ALTAR_POS.x,
+          COMPANION_ALTAR_POS.z
+        );
+        companionAltarNode.position.set(
+          COMPANION_ALTAR_POS.x,
+          altarGroundY,
+          COMPANION_ALTAR_POS.z
+        );
+        altarOrb.rotation.y = t * 2.6;
+        altarOrb.position.y = 2.05 + Math.sin(t * 3.8) * 0.16;
+        altarOrbitRing.rotation.y = -t * 2.2;
+        altarGroundHalo.rotation.y = t * 1.5;
+      }
+
+      // Sync 3D Active Spirit Companion Orbiting / Following the Hero (`snap.hero.activeCompanion`)
+      const activeComp = snap.hero.activeCompanion;
+      const showCompanion = Boolean(activeComp) && !snap.editorMode;
+      companionRoot.setEnabled(showCompanion);
+      if (showCompanion && activeComp) {
+        const orbitAngle = t * 2.1;
+        const cx = snap.hero.x + Math.cos(orbitAngle) * 1.45;
+        const cz = snap.hero.z + Math.sin(orbitAngle) * 1.45;
+        const compGroundY = sampleTerrainHeight(activeCells, cx, cz);
+        const hoverY =
+          activeComp === "storm_wolf"
+            ? compGroundY + 0.32 + Math.abs(Math.sin(t * 9.5)) * 0.16
+            : compGroundY + 1.65 + Math.sin(t * 4.8) * 0.22;
+        companionRoot.position.set(cx, hoverY, cz);
+        companionRoot.rotation.y = orbitAngle + Math.PI / 2;
+
+        phoenixNode.setEnabled(activeComp === "ember_phoenix");
+        owlNode.setEnabled(activeComp === "frost_owl");
+        wolfNode.setEnabled(activeComp === "storm_wolf");
+        spriteNode.setEnabled(activeComp === "gold_sprite");
+
+        const flap = Math.sin(t * 18) * 0.38;
+        if (activeComp === "ember_phoenix") {
+          phoenixWingL.rotation.z = flap;
+          phoenixWingR.rotation.z = -flap;
+        } else if (activeComp === "frost_owl") {
+          owlWingL.rotation.z = flap;
+          owlWingR.rotation.z = -flap;
+        } else if (activeComp === "gold_sprite") {
+          spriteCore.rotation.y = t * 3.8;
+          spriteHalo.rotation.y = -t * 2.9;
+        }
       }
 
       if (isRift) {
