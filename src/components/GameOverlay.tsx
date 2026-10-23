@@ -18,6 +18,7 @@ import {
   PotRewardKind,
   PropPrefabId,
   RupeeTier,
+  WARP_STONE_META,
   ZoneId,
 } from "@/game/worldData";
 import {
@@ -241,6 +242,7 @@ export default function GameOverlay() {
   const shopOpen = useGameStore((s) => s.shopOpen);
   const characterOpen = useGameStore((s) => s.characterOpen);
   const questLogOpen = useGameStore((s) => s.questLogOpen);
+  const atlasOpen = useGameStore((s) => s.atlasOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -263,6 +265,8 @@ export default function GameOverlay() {
   const setShopOpen = useGameStore((s) => s.setShopOpen);
   const setCharacterOpen = useGameStore((s) => s.setCharacterOpen);
   const setQuestLogOpen = useGameStore((s) => s.setQuestLogOpen);
+  const setAtlasOpen = useGameStore((s) => s.setAtlasOpen);
+  const warpToZone = useGameStore((s) => s.warpToZone);
   const toggleWayfinder = useGameStore((s) => s.toggleWayfinder);
   const setPinnedQuestId = useGameStore((s) => s.setPinnedQuestId);
   const equipHeroItem = useGameStore((s) => s.equipHeroItem);
@@ -295,6 +299,14 @@ export default function GameOverlay() {
   const [editorStatusMsg, setEditorStatusMsg] = useState<string | null>(null);
   const [revealAllChapters, setRevealAllChapters] = useState(false);
   const [expandedHintIds, setExpandedHintIds] = useState<string[]>([]);
+  const [selectedAtlasZone, setSelectedAtlasZone] = useState<ZoneId>("overworld");
+  const [unlockAllWarpsPlaytest, setUnlockAllWarpsPlaytest] = useState(false);
+
+  React.useEffect(() => {
+    if (atlasOpen) {
+      setSelectedAtlasZone(zone);
+    }
+  }, [atlasOpen, zone]);
 
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -302,11 +314,21 @@ export default function GameOverlay() {
         if (shopOpen) setShopOpen(false);
         if (characterOpen) setCharacterOpen(false);
         if (questLogOpen) setQuestLogOpen(false);
+        if (atlasOpen) setAtlasOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [shopOpen, characterOpen, questLogOpen, setShopOpen, setCharacterOpen, setQuestLogOpen]);
+  }, [
+    shopOpen,
+    characterOpen,
+    questLogOpen,
+    atlasOpen,
+    setShopOpen,
+    setCharacterOpen,
+    setQuestLogOpen,
+    setAtlasOpen,
+  ]);
 
   const showEditorToast = (msg: string) => {
     setEditorStatusMsg(msg);
@@ -1048,6 +1070,14 @@ export default function GameOverlay() {
                   title="Open the Spoiler-Free Quest Chronicle & Rumor Log (Shortcut: L)"
                 >
                   📜 Quests (L)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAtlasOpen(!atlasOpen)}
+                  className={`char-toggle-btn ${atlasOpen ? "active" : ""}`}
+                  title="Open the Interactive World Atlas & Fast-Travel Warp Network (Shortcut: M)"
+                >
+                  🗺 Atlas (M)
                 </button>
                 <button
                   type="button"
@@ -2791,6 +2821,498 @@ export default function GameOverlay() {
       )}
 
       {/* =========================================================
+          INTERACTIVE WORLD ATLAS & FAST-TRAVEL WARP MONOLITHS MODAL (SHORTCUT: M)
+         ========================================================= */}
+      {phase === "playing" && !editorMode && atlasOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card char-sheet-card" style={{ maxWidth: "1060px" }}>
+            <div className="shop-header">
+              <div>
+                <div className="shop-pill">CARTOGRAPHER&apos;S SANCTUM • WAYPOINT NETWORK</div>
+                <h2 className="shop-title">WORLD ATLAS &amp; FAST-TRAVEL MONOLITHS</h2>
+              </div>
+              <div className="char-summary-badges" style={{ alignItems: "center", gap: "8px" }}>
+                <span className="char-stat-badge">
+                  Regions Charted:{" "}
+                  <strong>
+                    {unlockAllWarpsPlaytest
+                      ? "8 / 8"
+                      : `${(flags.discoveredZones ?? ["overworld"]).length} / 8`}
+                  </strong>
+                </span>
+                <span className="char-stat-badge">
+                  Warp Monoliths Awakened:{" "}
+                  <strong>
+                    {unlockAllWarpsPlaytest
+                      ? "8 / 8"
+                      : `${(flags.awakenedWarpZones ?? ["overworld"]).length} / 8`}
+                  </strong>
+                </span>
+                <label
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    fontSize: "0.75rem",
+                    color: "#a8c0e0",
+                    cursor: "pointer",
+                    padding: "4px 9px",
+                    borderRadius: "8px",
+                    background: "rgba(20, 26, 42, 0.75)",
+                    border: "1px solid rgba(120, 150, 200, 0.25)",
+                  }}
+                  title="Playtest: Reveal all 8 regions and allow instant Fast-Travel to any Warp Monolith"
+                >
+                  <input
+                    type="checkbox"
+                    checked={unlockAllWarpsPlaytest}
+                    onChange={(e) => setUnlockAllWarpsPlaytest(e.target.checked)}
+                  />
+                  <span>Playtest: Unlock All Warps</span>
+                </label>
+              </div>
+            </div>
+
+            {(() => {
+              const allZones: ZoneId[] = [
+                "grove",
+                "overworld",
+                "dungeon",
+                "frontier",
+                "caverns",
+                "citadel",
+                "desert",
+                "caldera",
+              ];
+              const discoveredList = flags.discoveredZones ?? ["overworld"];
+              const awakenedList = flags.awakenedWarpZones ?? ["overworld"];
+              const graphEdges: Array<[ZoneId, ZoneId]> = [
+                ["grove", "overworld"],
+                ["overworld", "dungeon"],
+                ["overworld", "frontier"],
+                ["dungeon", "frontier"],
+                ["frontier", "caverns"],
+                ["frontier", "citadel"],
+                ["frontier", "desert"],
+                ["citadel", "desert"],
+                ["desert", "caldera"],
+              ];
+
+              const selMeta = WARP_STONE_META[selectedAtlasZone];
+              const selDiscovered =
+                unlockAllWarpsPlaytest || discoveredList.includes(selectedAtlasZone);
+              const selAwakened =
+                unlockAllWarpsPlaytest || awakenedList.includes(selectedAtlasZone);
+              const selProps = mapProps.filter((p) => p.zone === selectedAtlasZone);
+              const selPortals = portals.filter((pt) => pt.zone === selectedAtlasZone);
+              const selEnemies = enemies.filter(
+                (e) => e.zone === selectedAtlasZone && e.state !== "dead" && !e.burrowed
+              );
+              const toTac = (coord: number, inv = false) => {
+                const norm = (coord + 40) / 80;
+                const clamped = Math.max(0.03, Math.min(0.97, norm));
+                return Math.round((inv ? 1 - clamped : clamped) * 220);
+              };
+
+              return (
+                <div className="char-equip-grid" style={{ gridTemplateColumns: "1.2fr 0.9fr" }}>
+                  {/* LEFT COLUMN: 8-REGION INTERCONNECTED WORLD GRAPH */}
+                  <div className="char-slot-panel">
+                    <div className="char-slot-header">
+                      <span className="char-slot-title">INTERCONNECTED REALM GRAPH (8 REGIONS)</span>
+                      <span className="char-slot-sub">
+                        Click any region to inspect its tactical radar &amp; Warp Monolith
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        position: "relative",
+                        width: "100%",
+                        height: "330px",
+                        borderRadius: "12px",
+                        background:
+                          "radial-gradient(circle at 50% 45%, rgba(26, 42, 72, 0.92) 0%, rgba(10, 14, 26, 0.98) 100%)",
+                        border: "1px solid rgba(112, 168, 235, 0.32)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {/* SVG Connection Lines between linked regions */}
+                      <svg
+                        width="100%"
+                        height="100%"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                        style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+                      >
+                        {graphEdges.map(([a, b]) => {
+                          const ma = WARP_STONE_META[a];
+                          const mb = WARP_STONE_META[b];
+                          const bothKnown =
+                            unlockAllWarpsPlaytest ||
+                            (discoveredList.includes(a) && discoveredList.includes(b));
+                          return (
+                            <line
+                              key={`${a}-${b}`}
+                              x1={ma.atlasX}
+                              y1={ma.atlasY}
+                              x2={mb.atlasX}
+                              y2={mb.atlasY}
+                              stroke={
+                                bothKnown
+                                  ? "rgba(116, 224, 255, 0.55)"
+                                  : "rgba(110, 128, 165, 0.22)"
+                              }
+                              strokeWidth={bothKnown ? "0.75" : "0.5"}
+                              strokeDasharray={bothKnown ? undefined : "1.8 1.8"}
+                            />
+                          );
+                        })}
+                      </svg>
+
+                      {/* Interactive Region Nodes */}
+                      {allZones.map((zid) => {
+                        const meta = WARP_STONE_META[zid];
+                        const isKnown =
+                          unlockAllWarpsPlaytest || discoveredList.includes(zid);
+                        const isAwakened =
+                          unlockAllWarpsPlaytest || awakenedList.includes(zid);
+                        const isCurrentZone = zone === zid;
+                        const isSelected = selectedAtlasZone === zid;
+                        const isQuestZone = activeQuest.targetZone === zid;
+
+                        return (
+                          <button
+                            key={zid}
+                            type="button"
+                            onClick={() => setSelectedAtlasZone(zid)}
+                            style={{
+                              position: "absolute",
+                              left: `${meta.atlasX}%`,
+                              top: `${meta.atlasY}%`,
+                              transform: "translate(-50%, -50%)",
+                              minWidth: "126px",
+                              padding: "6px 9px",
+                              borderRadius: "10px",
+                              cursor: "pointer",
+                              textAlign: "left",
+                              background: isSelected
+                                ? "rgba(28, 52, 86, 0.96)"
+                                : isKnown
+                                ? "rgba(15, 23, 40, 0.92)"
+                                : "rgba(12, 14, 22, 0.82)",
+                              border: isSelected
+                                ? "2px solid #7ef4ff"
+                                : isCurrentZone
+                                ? "1.5px solid #ffd24c"
+                                : isAwakened
+                                ? "1px solid rgba(110, 230, 255, 0.55)"
+                                : "1px dashed rgba(130, 145, 175, 0.35)",
+                              boxShadow: isSelected
+                                ? "0 0 16px rgba(92, 230, 255, 0.4)"
+                                : "0 4px 12px rgba(0,0,0,0.5)",
+                              transition: "all 140ms ease",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: "4px",
+                                fontSize: "0.66rem",
+                                fontWeight: 800,
+                                color: isAwakened ? "#7ef4ff" : "#8b9bb8",
+                              }}
+                            >
+                              <span>Map {meta.shortLabel.split("•")[0]?.trim()}</span>
+                              <span>{isAwakened ? "✦ WARP" : "◇ DORMANT"}</span>
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "0.76rem",
+                                fontWeight: 800,
+                                color: isKnown ? "#f4f8ff" : "#7d88a3",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                            >
+                              {isKnown
+                                ? meta.shortLabel.split("•")[1]?.trim() ?? meta.regionName
+                                : "??? Uncharted Realm"}
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "5px",
+                                marginTop: "2px",
+                                fontSize: "0.65rem",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {isCurrentZone && (
+                                <span style={{ color: "#5eff9e" }}>● YOU ARE HERE</span>
+                              )}
+                              {isQuestZone && (
+                                <span style={{ color: "#ffd978" }}>✦ QUEST LEAD</span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* RIGHT COLUMN: SELECTED REGION TACTICAL RADAR & FAST-TRAVEL */}
+                  <div className="char-slot-panel">
+                    <div className="char-slot-header">
+                      <span className="char-slot-title">
+                        {selDiscovered ? selMeta.regionName : "UNCHARTED REGION (FOG OF WAR)"}
+                      </span>
+                      <span className="char-slot-sub">
+                        {selAwakened
+                          ? `✦ ${selMeta.title} Awakened`
+                          : "◇ Approach Monolith in 3D World to Awaken"}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "12px",
+                        alignItems: "center",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      <svg
+                        width="196"
+                        height="196"
+                        viewBox="0 0 220 220"
+                        style={{
+                          flexShrink: 0,
+                          borderRadius: "10px",
+                          background: "rgba(9, 14, 24, 0.96)",
+                          border: "1px solid rgba(116, 214, 255, 0.35)",
+                        }}
+                      >
+                        {/* Radar Grid */}
+                        <line
+                          x1="110"
+                          y1="0"
+                          x2="110"
+                          y2="220"
+                          stroke="rgba(120, 160, 210, 0.14)"
+                          strokeWidth="1"
+                        />
+                        <line
+                          x1="0"
+                          y1="110"
+                          x2="220"
+                          y2="110"
+                          stroke="rgba(120, 160, 210, 0.14)"
+                          strokeWidth="1"
+                        />
+                        <circle
+                          cx="110"
+                          cy="110"
+                          r="82"
+                          fill="none"
+                          stroke="rgba(120, 160, 210, 0.12)"
+                          strokeDasharray="3 3"
+                        />
+
+                        {selDiscovered ? (
+                          <>
+                            {/* Terrain & Structural Props */}
+                            {selProps.map((p) => {
+                              const px = toTac(p.x);
+                              const py = toTac(p.z, true);
+                              if (p.prefab === "water_tile") {
+                                return (
+                                  <rect
+                                    key={p.id}
+                                    x={px - 5}
+                                    y={py - 5}
+                                    width="10"
+                                    height="10"
+                                    fill="rgba(42, 148, 235, 0.42)"
+                                    rx="2"
+                                  />
+                                );
+                              }
+                              if (
+                                p.prefab === "cliff_block" ||
+                                p.prefab === "stone_wall" ||
+                                p.prefab === "dungeon_pillar"
+                              ) {
+                                return (
+                                  <rect
+                                    key={p.id}
+                                    x={px - 3}
+                                    y={py - 3}
+                                    width="6"
+                                    height="6"
+                                    fill="rgba(148, 162, 188, 0.45)"
+                                  />
+                                );
+                              }
+                              return null;
+                            })}
+
+                            {/* Portals */}
+                            {selPortals.map((pt) => (
+                              <circle
+                                key={pt.id}
+                                cx={toTac(pt.x)}
+                                cy={toTac(pt.z, true)}
+                                r="4.5"
+                                fill="#c57bff"
+                                stroke="#ffffff"
+                                strokeWidth="1"
+                              />
+                            ))}
+
+                            {/* Live Enemies (when inspecting current or charted zone) */}
+                            {selEnemies.map((en) => (
+                              <circle
+                                key={en.id}
+                                cx={toTac(en.x)}
+                                cy={toTac(en.z, true)}
+                                r={en.kind === "boss" ? "5.5" : "2.8"}
+                                fill={en.kind === "boss" ? "#ff3860" : "#ff6b6b"}
+                              />
+                            ))}
+
+                            {/* Warp Monolith Diamond */}
+                            <polygon
+                              points={`${toTac(selMeta.x)},${toTac(selMeta.z, true) - 7} ${
+                                toTac(selMeta.x) + 6
+                              },${toTac(selMeta.z, true)} ${toTac(selMeta.x)},${
+                                toTac(selMeta.z, true) + 7
+                              } ${toTac(selMeta.x) - 6},${toTac(selMeta.z, true)}`}
+                              fill={selAwakened ? "#4ef2ff" : "#6c7a96"}
+                              stroke="#ffffff"
+                              strokeWidth="1.2"
+                            />
+
+                            {/* Active Quest Lead Star if in this Zone */}
+                            {activeQuest.targetZone === selectedAtlasZone && (
+                              <circle
+                                cx={toTac(activeQuest.targetX)}
+                                cy={toTac(activeQuest.targetZ, true)}
+                                r="5.5"
+                                fill="#ffd95e"
+                                stroke="#fff8d6"
+                                strokeWidth="1.5"
+                              />
+                            )}
+
+                            {/* Hero Position if in this Zone */}
+                            {zone === selectedAtlasZone && (
+                              <circle
+                                cx={toTac(hero.x)}
+                                cy={toTac(hero.z, true)}
+                                r="5"
+                                fill="#4eff91"
+                                stroke="#ffffff"
+                                strokeWidth="1.5"
+                              />
+                            )}
+                          </>
+                        ) : (
+                          <text
+                            x="110"
+                            y="114"
+                            textAnchor="middle"
+                            fill="#7d8aa6"
+                            fontSize="11"
+                            fontWeight="bold"
+                          >
+                            UNCHARTED REALM
+                          </text>
+                        )}
+                      </svg>
+
+                      <div style={{ fontSize: "0.78rem", color: "#d6e2f5", lineHeight: 1.45 }}>
+                        <div
+                          style={{
+                            fontWeight: 800,
+                            color: "#ffd978",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          {selDiscovered ? selMeta.title : "Shrouded Monolith"}
+                        </div>
+                        <p style={{ margin: "0 0 8px 0" }}>
+                          {selDiscovered
+                            ? `Ancient obsidian waypoint in ${selMeta.regionName} (${selMeta.x.toFixed(
+                                1
+                              )}, ${selMeta.z.toFixed(
+                                1
+                              )}). Walk within 3.4m or press F to attune for instant Fast-Travel.`
+                            : "Explore connecting portals or follow the Golden Wayfinder Trail to chart this region."}
+                        </p>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: "4px",
+                            fontSize: "0.7rem",
+                            color: "#a8c0e0",
+                          }}
+                        >
+                          <span>◆ Cyan: Warp Monolith</span>
+                          <span>● Purple: Portal</span>
+                          <span>● Green: Your Hero</span>
+                          <span>● Gold: Quest Lead</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={!selAwakened}
+                      onClick={() => warpToZone(selectedAtlasZone, unlockAllWarpsPlaytest)}
+                      className="shop-buy-btn"
+                      style={{
+                        width: "100%",
+                        padding: "10px 14px",
+                        fontSize: "0.86rem",
+                        background: selAwakened
+                          ? "linear-gradient(180deg, #4ef2ff 0%, #1982c4 100%)"
+                          : undefined,
+                        color: selAwakened ? "#071320" : undefined,
+                        fontWeight: 800,
+                      }}
+                    >
+                      {selAwakened
+                        ? `⚡ Fast-Travel to ${selMeta.title}`
+                        : "🔒 Walk Near This Region's Warp Monolith to Unlock Fast-Travel"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Walk within <strong>3.4m</strong> of any obsidian Warp Monolith to awaken it
+                permanently, or press <strong>M</strong> / <strong>Esc</strong> to close.
+              </span>
+              <button
+                type="button"
+                onClick={() => setAtlasOpen(false)}
+                className="shop-close-btn"
+              >
+                Close World Atlas (M)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
           HERO CHARACTER EQUIPMENT, ARMOR TUNICS, BOOTS & GLASS BOTTLES MODAL
          ========================================================= */}
       {phase === "playing" && !editorMode && characterOpen && (
@@ -3902,6 +4424,209 @@ export default function GameOverlay() {
         </div>
       )}
 
+      {/* LIVE CORNER MINIMAP RADAR (CLICK TO OPEN WORLD ATLAS [M]) */}
+      {phase === "playing" && !editorMode && (
+        <div
+          onClick={() => setAtlasOpen(true)}
+          title="Click or press M to open the Interactive World Atlas & Fast-Travel Network"
+          style={{
+            position: "fixed",
+            right: "18px",
+            bottom: "54px",
+            width: "164px",
+            padding: "7px",
+            borderRadius: "14px",
+            background: "rgba(11, 16, 28, 0.88)",
+            border: "1px solid rgba(126, 224, 255, 0.42)",
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.55)",
+            cursor: "pointer",
+            pointerEvents: "auto",
+            zIndex: 3,
+            userSelect: "none",
+          }}
+        >
+          {(() => {
+            const toMini = (coord: number, inv = false) => {
+              const norm = (coord + 40) / 80;
+              const clamped = Math.max(0.03, Math.min(0.97, norm));
+              return Math.round((inv ? 1 - clamped : clamped) * 148);
+            };
+            const zoneWarp = WARP_STONE_META[zone];
+            const warpAwakened = (flags.awakenedWarpZones ?? ["overworld"]).includes(zone);
+            const zoneProps = mapProps.filter((p) => p.zone === zone);
+            const zonePortals = portals.filter((pt) => pt.zone === zone);
+            const zoneEnemies = enemies.filter(
+              (e) => e.zone === zone && e.state !== "dead" && !e.burrowed
+            );
+            const hx = toMini(hero.x);
+            const hy = toMini(hero.z, true);
+            const wx = toMini(wayfinderRoute.destX);
+            const wy = toMini(wayfinderRoute.destZ, true);
+
+            return (
+              <>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    fontSize: "0.66rem",
+                    fontWeight: 800,
+                    color: "#9ee8ff",
+                    marginBottom: "4px",
+                    padding: "0 2px",
+                  }}
+                >
+                  <span>MAP {zoneWarp.shortLabel.split("•")[0]?.trim()} RADAR</span>
+                  <span style={{ color: "#ffd978" }}>[M] ATLAS</span>
+                </div>
+                <svg
+                  width="148"
+                  height="148"
+                  viewBox="0 0 148 148"
+                  style={{
+                    display: "block",
+                    borderRadius: "9px",
+                    background: "rgba(6, 10, 18, 0.95)",
+                    border: "1px solid rgba(90, 150, 210, 0.25)",
+                  }}
+                >
+                  <line
+                    x1="74"
+                    y1="0"
+                    x2="74"
+                    y2="148"
+                    stroke="rgba(120, 160, 210, 0.12)"
+                    strokeWidth="1"
+                  />
+                  <line
+                    x1="0"
+                    y1="74"
+                    x2="148"
+                    y2="74"
+                    stroke="rgba(120, 160, 210, 0.12)"
+                    strokeWidth="1"
+                  />
+
+                  {/* Water & Walls */}
+                  {zoneProps.map((p) => {
+                    const px = toMini(p.x);
+                    const py = toMini(p.z, true);
+                    if (p.prefab === "water_tile") {
+                      return (
+                        <rect
+                          key={p.id}
+                          x={px - 4}
+                          y={py - 4}
+                          width="8"
+                          height="8"
+                          fill="rgba(42, 148, 235, 0.42)"
+                        />
+                      );
+                    }
+                    if (
+                      p.prefab === "cliff_block" ||
+                      p.prefab === "stone_wall" ||
+                      p.prefab === "dungeon_pillar"
+                    ) {
+                      return (
+                        <rect
+                          key={p.id}
+                          x={px - 2}
+                          y={py - 2}
+                          width="4"
+                          height="4"
+                          fill="rgba(148, 162, 188, 0.42)"
+                        />
+                      );
+                    }
+                    return null;
+                  })}
+
+                  {/* Portals */}
+                  {zonePortals.map((pt) => (
+                    <circle
+                      key={pt.id}
+                      cx={toMini(pt.x)}
+                      cy={toMini(pt.z, true)}
+                      r="3.5"
+                      fill="#c57bff"
+                      stroke="#ffffff"
+                      strokeWidth="0.8"
+                    />
+                  ))}
+
+                  {/* Live Enemies */}
+                  {zoneEnemies.map((en) => (
+                    <circle
+                      key={en.id}
+                      cx={toMini(en.x)}
+                      cy={toMini(en.z, true)}
+                      r={en.kind === "boss" ? "4.5" : "2.2"}
+                      fill={en.kind === "boss" ? "#ff3860" : "#ff6b6b"}
+                    />
+                  ))}
+
+                  {/* Warp Monolith Diamond */}
+                  <polygon
+                    points={`${toMini(zoneWarp.x)},${toMini(zoneWarp.z, true) - 5} ${
+                      toMini(zoneWarp.x) + 4.5
+                    },${toMini(zoneWarp.z, true)} ${toMini(zoneWarp.x)},${
+                      toMini(zoneWarp.z, true) + 5
+                    } ${toMini(zoneWarp.x) - 4.5},${toMini(zoneWarp.z, true)}`}
+                    fill={warpAwakened ? "#4ef2ff" : "#6c7a96"}
+                    stroke="#ffffff"
+                    strokeWidth="0.9"
+                  />
+
+                  {/* Wayfinder Line & Target Star */}
+                  {wayfinderActive && (
+                    <>
+                      <line
+                        x1={hx}
+                        y1={hy}
+                        x2={wx}
+                        y2={wy}
+                        stroke="rgba(255, 217, 94, 0.75)"
+                        strokeWidth="1.5"
+                        strokeDasharray="3 2"
+                      />
+                      <circle
+                        cx={wx}
+                        cy={wy}
+                        r="4"
+                        fill="#ffd95e"
+                        stroke="#ffffff"
+                        strokeWidth="1"
+                      />
+                    </>
+                  )}
+
+                  {/* Hero Position + Facing Direction */}
+                  <line
+                    x1={hx}
+                    y1={hy}
+                    x2={hx + Math.sin(hero.facing) * 7}
+                    y2={hy - Math.cos(hero.facing) * 7}
+                    stroke="#ffffff"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                  />
+                  <circle
+                    cx={hx}
+                    cy={hy}
+                    r="3.8"
+                    fill="#4eff91"
+                    stroke="#ffffff"
+                    strokeWidth="1.2"
+                  />
+                </svg>
+              </>
+            );
+          })()}
+        </div>
+      )}
+
       {/* FLOATING DISCOVERY BANNER (FIXED BOTTOM OVERLAY — NEVER PUSHES SHOP UI!) */}
       {phase === "playing" && (banner || editorStatusMsg) && (
         <div key={banner?.id ?? editorStatusMsg} className="discovery-banner">
@@ -3948,19 +4673,15 @@ export default function GameOverlay() {
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>F</strong> Lift &amp; Throw Pots/Rocks
+                <strong>F</strong> Lift / Interact
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>B</strong> Bombs
+                <strong>L / N</strong> Quests &amp; Guide
               </span>
               <span className="dot-sep">•</span>
               <span>
-                <strong>R</strong> Flame Rod
-              </span>
-              <span className="dot-sep">•</span>
-              <span>
-                <strong>G</strong> Shovel
+                <strong>M</strong> World Atlas &amp; Warp
               </span>
               <span className="dot-sep">•</span>
               <span>

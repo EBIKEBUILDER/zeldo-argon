@@ -462,6 +462,127 @@ export const CALDERA_EXIT_GATE_POS = {
   z: 36.2,
 };
 
+export interface WarpStoneMeta {
+  zone: ZoneId;
+  title: string;
+  regionName: string;
+  shortLabel: string;
+  x: number;
+  z: number;
+  arrivalX: number;
+  arrivalZ: number;
+  atlasX: number;
+  atlasY: number;
+  themeColor: string;
+}
+
+export const WARP_STONE_META: Record<ZoneId, WarpStoneMeta> = {
+  overworld: {
+    zone: "overworld",
+    title: "Crossroads Hub Monolith",
+    regionName: "Crossroads Village Hub",
+    shortLabel: "1 • Crossroads Hub",
+    x: -6.2,
+    z: -13.5,
+    arrivalX: -6.2,
+    arrivalZ: -16.0,
+    atlasX: 34,
+    atlasY: 58,
+    themeColor: "#46e088",
+  },
+  grove: {
+    zone: "grove",
+    title: "Whispering Grove Monolith",
+    regionName: "Whispering Forest Grove",
+    shortLabel: "1B • Forest Grove",
+    x: 18.0,
+    z: -6.5,
+    arrivalX: 18.0,
+    arrivalZ: -9.0,
+    atlasX: 12,
+    atlasY: 58,
+    themeColor: "#3cd4a0",
+  },
+  dungeon: {
+    zone: "dungeon",
+    title: "Sunken Sanctum Monolith",
+    regionName: "The Sunken Sanctum",
+    shortLabel: "2 • Sunken Sanctum",
+    x: -6.5,
+    z: -8.5,
+    arrivalX: -6.5,
+    arrivalZ: -11.0,
+    atlasX: 34,
+    atlasY: 22,
+    themeColor: "#4fd8ff",
+  },
+  frontier: {
+    zone: "frontier",
+    title: "Highlands Watch Monolith",
+    regionName: "Elderwood Highlands",
+    shortLabel: "3 • Highlands Hub",
+    x: -20.5,
+    z: -6.5,
+    arrivalX: -20.5,
+    arrivalZ: -9.0,
+    atlasX: 58,
+    atlasY: 52,
+    themeColor: "#9be058",
+  },
+  caverns: {
+    zone: "caverns",
+    title: "Frostpeak Glacier Monolith",
+    regionName: "Frostpeak Caverns",
+    shortLabel: "4 • Frostpeak Caverns",
+    x: -20.5,
+    z: -5.5,
+    arrivalX: -20.5,
+    arrivalZ: -8.0,
+    atlasX: 84,
+    atlasY: 46,
+    themeColor: "#6be4ff",
+  },
+  citadel: {
+    zone: "citadel",
+    title: "Obsidian Courtyard Monolith",
+    regionName: "The Obsidian Citadel",
+    shortLabel: "5 • Obsidian Citadel",
+    x: -8.0,
+    z: -26.0,
+    arrivalX: -8.0,
+    arrivalZ: -28.5,
+    atlasX: 58,
+    atlasY: 16,
+    themeColor: "#c47aff",
+  },
+  desert: {
+    zone: "desert",
+    title: "Sunscorched Oasis Monolith",
+    regionName: "Sunscorched Oasis",
+    shortLabel: "6 • Sunscorched Oasis",
+    x: -5.5,
+    z: 24.5,
+    arrivalX: -5.5,
+    arrivalZ: 22.0,
+    atlasX: 62,
+    atlasY: 84,
+    themeColor: "#ffc84a",
+  },
+  caldera: {
+    zone: "caldera",
+    title: "Skyward Basalt Monolith",
+    regionName: "Skyward Caldera",
+    shortLabel: "7 • Skyward Caldera",
+    x: -18.5,
+    z: -6.0,
+    arrivalX: -18.5,
+    arrivalZ: -8.5,
+    atlasX: 88,
+    atlasY: 82,
+    themeColor: "#ff6b4a",
+  },
+};
+
 export const BOSS_MAX_LUNGE_RANGE = 14.5;
 
 export const INITIAL_PORTALS: MapPortal[] = [

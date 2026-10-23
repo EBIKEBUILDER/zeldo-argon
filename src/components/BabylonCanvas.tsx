@@ -67,6 +67,7 @@ import {
   SECRET_STASH_POS,
   SHOP_INTERACT_POS,
   SHOP_STALL_POS,
+  WARP_STONE_META,
   ZoneId,
 } from "@/game/worldData";
 
@@ -4959,6 +4960,112 @@ export default function BabylonCanvas() {
     wayfinderBeaconCrest.parent = wayfinderBeaconNode;
     wayfinderBeaconNode.setEnabled(false);
 
+    // --- 3D ANCIENT RUNIC WARP MONOLITH (FAST-TRAVEL LANDMARK IN EVERY ZONE) ---
+    const warpDormantMat = makeMat(
+      "warpDormantMat",
+      new Color3(0.42, 0.46, 0.56),
+      new Color3(0.14, 0.16, 0.24),
+      new Color3(0.6, 0.65, 0.75)
+    );
+    const warpAwakenedMat = makeMat(
+      "warpAwakenedMat",
+      new Color3(0.32, 0.94, 1.0),
+      new Color3(0.18, 0.78, 0.98),
+      new Color3(1.0, 1.0, 1.0)
+    );
+    const warpBeamMat = makeMat(
+      "warpBeamMat",
+      new Color3(0.45, 0.96, 1.0),
+      new Color3(0.32, 0.85, 1.0),
+      new Color3(0, 0, 0),
+      0.34
+    );
+
+    const warpMonolithNode = new TransformNode("warpMonolithNode", scene);
+    const warpDaisOuter = MeshBuilder.CreateCylinder(
+      "warpDaisOuter",
+      { diameterTop: 3.1, diameterBottom: 3.6, height: 0.24, tessellation: 16 },
+      scene
+    );
+    warpDaisOuter.position.set(0, 0.12, 0);
+    warpDaisOuter.material = dgPillarMat;
+    warpDaisOuter.isPickable = false;
+    warpDaisOuter.parent = warpMonolithNode;
+
+    const warpDaisInner = MeshBuilder.CreateCylinder(
+      "warpDaisInner",
+      { diameterTop: 2.1, diameterBottom: 2.4, height: 0.28, tessellation: 12 },
+      scene
+    );
+    warpDaisInner.position.set(0, 0.36, 0);
+    warpDaisInner.material = darkObsidianMat;
+    warpDaisInner.isPickable = false;
+    warpDaisInner.parent = warpMonolithNode;
+
+    const warpObelisk = MeshBuilder.CreateCylinder(
+      "warpObelisk",
+      { diameterTop: 0.68, diameterBottom: 1.15, height: 2.35, tessellation: 8 },
+      scene
+    );
+    warpObelisk.position.set(0, 1.55, 0);
+    warpObelisk.material = darkObsidianMat;
+    warpObelisk.isPickable = false;
+    warpObelisk.parent = warpMonolithNode;
+
+    const warpGroundSigil = MeshBuilder.CreateTorus(
+      "warpGroundSigil",
+      { diameter: 3.4, thickness: 0.095, tessellation: 28 },
+      scene
+    );
+    warpGroundSigil.position.set(0, 0.14, 0);
+    warpGroundSigil.material = warpAwakenedMat;
+    warpGroundSigil.isPickable = false;
+    warpGroundSigil.parent = warpMonolithNode;
+
+    const warpCoreMesh = MeshBuilder.CreatePolyhedron(
+      "warpCoreMesh",
+      { type: 1, size: 0.44 },
+      scene
+    );
+    warpCoreMesh.position.set(0, 3.3, 0);
+    warpCoreMesh.scaling.set(0.88, 1.48, 0.88);
+    warpCoreMesh.material = warpAwakenedMat;
+    warpCoreMesh.isPickable = false;
+    warpCoreMesh.parent = warpMonolithNode;
+
+    const warpRingOuter = MeshBuilder.CreateTorus(
+      "warpRingOuter",
+      { diameter: 1.55, thickness: 0.075, tessellation: 24 },
+      scene
+    );
+    warpRingOuter.position.set(0, 3.3, 0);
+    warpRingOuter.rotation.x = Math.PI / 3;
+    warpRingOuter.material = goldKeyMat;
+    warpRingOuter.isPickable = false;
+    warpRingOuter.parent = warpMonolithNode;
+
+    const warpRingInner = MeshBuilder.CreateTorus(
+      "warpRingInner",
+      { diameter: 1.12, thickness: 0.065, tessellation: 20 },
+      scene
+    );
+    warpRingInner.position.set(0, 3.3, 0);
+    warpRingInner.rotation.z = Math.PI / 3;
+    warpRingInner.material = warpAwakenedMat;
+    warpRingInner.isPickable = false;
+    warpRingInner.parent = warpMonolithNode;
+
+    const warpBeamCylinder = MeshBuilder.CreateCylinder(
+      "warpBeamCylinder",
+      { diameterTop: 1.4, diameterBottom: 2.2, height: 11.5, tessellation: 20 },
+      scene
+    );
+    warpBeamCylinder.position.set(0, 5.75, 0);
+    warpBeamCylinder.material = warpBeamMat;
+    warpBeamCylinder.isPickable = false;
+    warpBeamCylinder.setEnabled(false);
+    warpBeamCylinder.parent = warpMonolithNode;
+
     // =========================================================
     // DYNAMIC ENEMY, ARROW, PROJECTILE, HAZARD & RUPEE REGISTRIES
     // =========================================================
@@ -7939,6 +8046,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // M toggles Interactive World Atlas & Fast-Travel Map
+      if (code === "KeyM" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setAtlasOpen(!store.atlasOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -8773,6 +8887,35 @@ export default function BabylonCanvas() {
         for (let w = 0; w < wayfinderNodes.length; w++) {
           wayfinderNodes[w].setEnabled(false);
         }
+      }
+
+      // Sync 3D Ancient Runic Warp Monolith in Active Zone
+      const activeWarpMeta = WARP_STONE_META[snap.zone];
+      const warpGroundY = sampleTerrainHeight(activeCells, activeWarpMeta.x, activeWarpMeta.z);
+      const isWarpAwakened = Boolean(
+        snap.flags.awakenedWarpZones?.includes(snap.zone) || snap.zone === "overworld"
+      );
+      warpMonolithNode.position.set(activeWarpMeta.x, warpGroundY, activeWarpMeta.z);
+      warpCoreMesh.material = isWarpAwakened ? warpAwakenedMat : warpDormantMat;
+      warpGroundSigil.material = isWarpAwakened ? warpAwakenedMat : warpDormantMat;
+      warpRingInner.material = isWarpAwakened ? warpAwakenedMat : warpDormantMat;
+      warpCoreMesh.rotation.y = t * (isWarpAwakened ? 2.6 : 0.8);
+      warpCoreMesh.position.y = 3.3 + Math.sin(t * (isWarpAwakened ? 3.5 : 1.6)) * 0.16;
+      warpRingOuter.rotation.y = t * (isWarpAwakened ? 2.1 : 0.5);
+      warpRingInner.rotation.y = -t * (isWarpAwakened ? 2.9 : 0.6);
+      warpGroundSigil.rotation.y = -t * 1.2;
+
+      const distToWarp = Math.hypot(
+        activeWarpMeta.x - snap.hero.x,
+        activeWarpMeta.z - snap.hero.z
+      );
+      const showWarpBeam =
+        !snap.editorMode &&
+        ((snap.warpBeamTimer ?? 0) > 0 || (isWarpAwakened && distToWarp <= 4.0));
+      warpBeamCylinder.setEnabled(showWarpBeam);
+      if (showWarpBeam) {
+        const beamPulse = 0.92 + Math.sin(t * 12) * 0.1;
+        warpBeamCylinder.scaling.set(beamPulse, 1, beamPulse);
       }
 
       // 5. Camera Follow in Play Mode vs Free Orbit in Editor Mode

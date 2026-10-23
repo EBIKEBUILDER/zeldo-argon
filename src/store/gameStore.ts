@@ -56,6 +56,7 @@ import {
   RupeeTier,
   SECRET_STASH_POS,
   SHOP_INTERACT_POS,
+  WARP_STONE_META,
   ZoneId,
 } from "@/game/worldData";
 import { soundEngine } from "@/audio/soundEngine";
@@ -515,6 +516,8 @@ export interface GameFlags {
   calderaBossDefeated?: boolean;
   calderaBossHeartAwarded?: boolean;
   calderaVictoryChestOpened?: boolean;
+  discoveredZones?: ZoneId[];
+  awakenedWarpZones?: ZoneId[];
 }
 
 export interface GameStats {
@@ -582,6 +585,8 @@ export interface SerializableGameState {
   shopOpen: boolean;
   characterOpen: boolean;
   questLogOpen: boolean;
+  atlasOpen: boolean;
+  warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
   shopDismissedOnRug: boolean;
@@ -610,6 +615,8 @@ export interface GameActions {
   setShopOpen: (open: boolean) => void;
   setCharacterOpen: (open: boolean) => void;
   setQuestLogOpen: (open: boolean) => void;
+  setAtlasOpen: (open: boolean) => void;
+  warpToZone: (targetZone: ZoneId, forceAllow?: boolean) => void;
   toggleWayfinder: () => void;
   setPinnedQuestId: (questId: string | null) => void;
   buyShopItem: (item: ShopItemId) => void;
@@ -1084,6 +1091,8 @@ function createInitialState(
       calderaBossDefeated: false,
       calderaBossHeartAwarded: false,
       calderaVictoryChestOpened: false,
+      discoveredZones: ["overworld"],
+      awakenedWarpZones: ["overworld"],
     },
     stats: {
       enemiesDefeated: 0,
@@ -1096,7 +1105,7 @@ function createInitialState(
             id: 1,
             text: "Chapter I: Whispers at the Crossroads",
             subtext:
-              "An ancient lock seals the northern gate. Press [N] anytime to summon the Golden Guiding Path or [L] to open your Quest Chronicle.",
+              "An ancient lock seals the northern gate. Press [N] for the Golden Guiding Path, [L] for your Quest Chronicle, or [M] for the World Atlas.",
             timer: 6.5,
           }
         : null,
@@ -1104,6 +1113,8 @@ function createInitialState(
     shopOpen: false,
     characterOpen: false,
     questLogOpen: false,
+    atlasOpen: false,
+    warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
     shopDismissedOnRug: false,
@@ -1406,6 +1417,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       shopOpen: open,
       characterOpen: open ? false : state.characterOpen,
       questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
       shopDismissedOnRug: !open && state.nearShop,
     }));
   },
@@ -1415,6 +1427,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       characterOpen: open,
       shopOpen: open ? false : state.shopOpen,
       questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
     }));
   },
 
@@ -1423,7 +1436,78 @@ export const useGameStore = create<GameStore>((set, get) => ({
       questLogOpen: open,
       shopOpen: open ? false : state.shopOpen,
       characterOpen: open ? false : state.characterOpen,
+      atlasOpen: open ? false : state.atlasOpen,
     }));
+  },
+
+  setAtlasOpen: (open: boolean) => {
+    set((state) => ({
+      atlasOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+    }));
+  },
+
+  warpToZone: (targetZone: ZoneId, forceAllow = false) => {
+    const state = get();
+    const awakened = state.flags.awakenedWarpZones ?? ["overworld"];
+    if (!forceAllow && !awakened.includes(targetZone)) {
+      soundEngine.playGateLocked();
+      set({
+        banner: {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          text: "Warp Monolith Dormant",
+          subtext: "Discover and approach that region's Warp Monolith on foot to awaken it for Fast-Travel!",
+          timer: 3.6,
+        },
+      });
+      return;
+    }
+
+    const meta = WARP_STONE_META[targetZone];
+    soundEngine.unlock();
+    soundEngine.playPortalTransition();
+
+    const nextDiscovered = Array.from(
+      new Set([...(state.flags.discoveredZones ?? ["overworld"]), targetZone])
+    );
+    const nextAwakened = Array.from(
+      new Set([...awakened, targetZone])
+    );
+
+    set({
+      zone: targetZone,
+      dungeonRoom: targetZone === "dungeon" ? "hub" : state.dungeonRoom,
+      atlasOpen: false,
+      warpBeamTimer: 1.4,
+      hero: {
+        ...state.hero,
+        x: meta.arrivalX,
+        z: meta.arrivalZ,
+        facing: 0,
+        knockbackVx: 0,
+        knockbackVz: 0,
+        knockbackLockTimer: 0,
+        portalCooldown: 1.0,
+      },
+      boomerang: null,
+      hookshot: null,
+      arrows: [],
+      fireballs: [],
+      projectiles: [],
+      flags: {
+        ...state.flags,
+        discoveredZones: nextDiscovered,
+        awakenedWarpZones: nextAwakened,
+      },
+      banner: {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        text: `Warped to ${meta.regionName}`,
+        subtext: `${meta.title} • Press [M] anytime to open the World Atlas.`,
+        timer: 3.8,
+      },
+    });
   },
 
   toggleWayfinder: () => {
@@ -11378,7 +11462,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
         hero.interactPrompt =
           "Anchor Post — Face Post & Press [H] or [7] to Grapple Across!";
       } else {
-        hero.interactPrompt = null;
+        const warpMeta = WARP_STONE_META[zone];
+        if (Math.hypot(warpMeta.x - hero.x, warpMeta.z - hero.z) <= 3.6) {
+          hero.interactPrompt =
+            "Ancient Warp Monolith (Awakened) — Press [M] or [F] to Open World Atlas & Fast-Travel!";
+        } else {
+          hero.interactPrompt = null;
+        }
+      }
+    }
+
+    let warpBeamTimer = Math.max(0, (state.warpBeamTimer ?? 0) - dt);
+    let atlasOpen = state.atlasOpen;
+    if (!flags.discoveredZones?.includes(zone)) {
+      flags.discoveredZones = Array.from(
+        new Set([...(flags.discoveredZones ?? ["overworld"]), zone])
+      );
+    }
+    const currentWarpMeta = WARP_STONE_META[zone];
+    if (Math.hypot(currentWarpMeta.x - hero.x, currentWarpMeta.z - hero.z) <= 3.4) {
+      if (!flags.awakenedWarpZones?.includes(zone)) {
+        flags.awakenedWarpZones = Array.from(
+          new Set([...(flags.awakenedWarpZones ?? ["overworld"]), zone])
+        );
+        warpBeamTimer = 1.6;
+        soundEngine.playHeartPickup();
+        banner = {
+          id: Math.floor(stats.elapsedSeconds * 1000) + Math.floor(Math.random() * 1000),
+          text: `${currentWarpMeta.title} Awakened!`,
+          subtext: `Press [M] anytime to Fast-Travel to ${currentWarpMeta.regionName} via the World Atlas!`,
+          timer: 4.2,
+        };
+      } else if (input.interactPressed && !hero.heldObject) {
+        atlasOpen = true;
       }
     }
 
@@ -11409,6 +11525,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       banner,
       nearShop,
       shopOpen,
+      atlasOpen,
+      warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,
       chestNoticeCooldown,
