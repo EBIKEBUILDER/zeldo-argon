@@ -11,6 +11,10 @@ import {
   CAVERN_CREST_KEY_POS,
   CAVERN_HAMMER_CHEST_POS,
   CAVERN_SHOVEL_CHEST_POS,
+  CALDERA_BOSS_GATE_POS,
+  CALDERA_EXIT_GATE_POS,
+  CALDERA_FORGE_CHEST_POS,
+  CALDERA_VICTORY_CHEST_POS,
   CITADEL_ARMORY_CHEST_POS,
   CITADEL_BOSS_GATE_POS,
   CITADEL_EXIT_GATE_POS,
@@ -20,6 +24,9 @@ import {
   computePathfindingMoveDir,
   CRYPT_SHORTCUT_DOOR_POS,
   CustomModelAsset,
+  DESERT_CALDERA_GATE_POS,
+  DESERT_OASIS_CHEST_POS,
+  DESERT_SOLAR_KEY_POS,
   DG_SMALL_KEY_POS,
   DUNGEON_ENTRY_GATE_POS,
   DUNGEON_KEY_POS,
@@ -272,7 +279,8 @@ export interface EnemyState {
     | "grove_ambush"
     | "ember_guards"
     | "frontier_sappers"
-    | "cavern_wardens";
+    | "cavern_wardens"
+    | "desert_wardens";
   provoked?: boolean;
   // Boss & Goblin Lunge combat state
   chargeAngle: number;
@@ -296,6 +304,7 @@ export interface BoomerangState {
   carryingKey?: boolean;
   carryingDgSmallKey?: boolean;
   carryingGlacialKey?: boolean;
+  carryingSolarKey?: boolean;
 }
 
 export interface HookshotState {
@@ -313,6 +322,7 @@ export interface HookshotState {
   carryingKey?: boolean;
   carryingDgSmallKey?: boolean;
   carryingGlacialKey?: boolean;
+  carryingSolarKey?: boolean;
 }
 
 export interface ArrowProjectileState {
@@ -438,6 +448,7 @@ export interface GameFlags {
   dungeonCrystalPuzzleSolved?: boolean;
   frontierCrystalPuzzleSolved?: boolean;
   cavernsCrystalPuzzleSolved?: boolean;
+  desertCrystalPuzzleSolved?: boolean;
   dungeonEyeStatuesSolved?: boolean;
   secretStashClaimed?: boolean;
   heirloomQuestStarted?: boolean;
@@ -461,7 +472,7 @@ export interface GameFlags {
   bigKeyChestOpened?: boolean;
   bossState?: BossArmorState;
   bossArmorTimer?: number;
-  // Map 3 (Frontier), Map 4 (Frostpeak Caverns) & Map 5 (Obsidian Citadel) Progression Flags
+  // Map 3 (Frontier), Map 4 (Frostpeak Caverns), Map 5 (Obsidian Citadel), Map 6 (Sunscorched Oasis) & Map 7 (Skyward Caldera) Progression Flags
   frontierSappersCleared?: boolean;
   frontierBombChestOpened?: boolean;
   frontierHookshotChestOpened?: boolean;
@@ -485,6 +496,25 @@ export interface GameFlags {
   citadelBossDefeated?: boolean;
   citadelBossHeartAwarded?: boolean;
   citadelVictoryChestOpened?: boolean;
+  desertOasisChestOpened?: boolean;
+  desertWardensCleared?: boolean;
+  desertBossAwakened?: boolean;
+  desertBossPhase2?: boolean;
+  desertBossDefeated?: boolean;
+  desertBossHeartAwarded?: boolean;
+  desertSolarKeyPickedUp?: boolean;
+  hasSolarKey?: boolean;
+  desertCalderaGateUnlocked?: boolean;
+  calderaForgeChestOpened?: boolean;
+  calderaTorchPuzzleSolved?: boolean;
+  calderaEyeStatuesSolved?: boolean;
+  calderaPegsSolved?: boolean;
+  calderaGateUnlocked?: boolean;
+  calderaBossAwakened?: boolean;
+  calderaBossPhase2?: boolean;
+  calderaBossDefeated?: boolean;
+  calderaBossHeartAwarded?: boolean;
+  calderaVictoryChestOpened?: boolean;
 }
 
 export interface GameStats {
@@ -964,6 +994,8 @@ function createInitialState(
       frontier: {},
       caverns: {},
       citadel: {},
+      desert: {},
+      caldera: {},
     },
     terrainRevision: 1,
     flags: {
@@ -981,6 +1013,7 @@ function createInitialState(
       dungeonCrystalPuzzleSolved: false,
       frontierCrystalPuzzleSolved: false,
       cavernsCrystalPuzzleSolved: false,
+      desertCrystalPuzzleSolved: false,
       dungeonEyeStatuesSolved: false,
       secretStashClaimed: false,
       heirloomQuestStarted: false,
@@ -1026,6 +1059,25 @@ function createInitialState(
       citadelBossDefeated: false,
       citadelBossHeartAwarded: false,
       citadelVictoryChestOpened: false,
+      desertOasisChestOpened: false,
+      desertWardensCleared: false,
+      desertBossAwakened: false,
+      desertBossPhase2: false,
+      desertBossDefeated: false,
+      desertBossHeartAwarded: false,
+      desertSolarKeyPickedUp: false,
+      hasSolarKey: false,
+      desertCalderaGateUnlocked: false,
+      calderaForgeChestOpened: false,
+      calderaTorchPuzzleSolved: false,
+      calderaEyeStatuesSolved: false,
+      calderaPegsSolved: false,
+      calderaGateUnlocked: false,
+      calderaBossAwakened: false,
+      calderaBossPhase2: false,
+      calderaBossDefeated: false,
+      calderaBossHeartAwarded: false,
+      calderaVictoryChestOpened: false,
     },
     stats: {
       enemiesDefeated: 0,
@@ -1038,7 +1090,7 @@ function createInitialState(
             id: 1,
             text: "Map 1: Whispering Crossroads (Act I — The Adventure Begins)",
             subtext:
-              "West Exit -> Map 1B Grove (Sanctum Key) • North -> Map 2 Dungeon (Flame Rod) • East -> Map 3 Frontier (Bombs & Hookshot) • Map 4 Caverns (Shovel & War-Hammer) • Map 5 Citadel!",
+              "West Exit -> Map 1B Grove (Key) • North -> Map 2 Dungeon (Flame Rod) • East -> Map 3 Frontier (Bombs & Hookshot) • Map 4 Caverns • Map 5 Citadel • Map 6 Desert • Map 7 Caldera!",
             timer: 6.5,
           }
         : null,
@@ -1063,7 +1115,7 @@ function createInitialState(
   };
 }
 
-const MAP_STORAGE_KEY = "zeldo-authored-map-v12";
+const MAP_STORAGE_KEY = "zeldo-authored-map-v13";
 
 function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   if (p.prefab === "dirt_patch") {
@@ -1126,7 +1178,10 @@ function persistAuthoredMapToStorage(state: {
           !e.id.startsWith("ct-minion-wave2-") &&
           !e.id.startsWith("dungeon-minion-wave2-") &&
           !e.id.startsWith("caverns-minion-wave2-") &&
-          !e.id.startsWith("citadel-minion-wave2-")
+          !e.id.startsWith("citadel-minion-wave2-") &&
+          !e.id.startsWith("caverns-wraith-wave2-") &&
+          !e.id.startsWith("desert-minion-wave2-") &&
+          !e.id.startsWith("caldera-minion-wave2-")
       )
       .map((e) => ({
         ...e,
@@ -1152,7 +1207,7 @@ function persistAuthoredMapToStorage(state: {
       .map((r) => ({ ...r, collected: false, spawnBounceTimer: 0 }));
 
     const payload = {
-      version: 9,
+      version: 10,
       mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: cleanEnemies,
       rupees: cleanRupees,
@@ -1165,6 +1220,8 @@ function persistAuthoredMapToStorage(state: {
         frontier: state.terrainCells.frontier ?? {},
         caverns: state.terrainCells.caverns ?? {},
         citadel: state.terrainCells.citadel ?? {},
+        desert: state.terrainCells.desert ?? {},
+        caldera: state.terrainCells.caldera ?? {},
       },
     };
     window.localStorage.setItem(MAP_STORAGE_KEY, JSON.stringify(payload));
@@ -1241,7 +1298,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
             !e.id.startsWith("ct-minion-wave2-") &&
             !e.id.startsWith("dungeon-minion-wave2-") &&
             !e.id.startsWith("caverns-minion-wave2-") &&
-            !e.id.startsWith("citadel-minion-wave2-")
+            !e.id.startsWith("citadel-minion-wave2-") &&
+            !e.id.startsWith("caverns-wraith-wave2-") &&
+            !e.id.startsWith("desert-minion-wave2-") &&
+            !e.id.startsWith("caldera-minion-wave2-")
         )
         .map((e) => ({
           ...e,
@@ -1286,7 +1346,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
             !e.id.startsWith("ct-minion-wave2-") &&
             !e.id.startsWith("dungeon-minion-wave2-") &&
             !e.id.startsWith("caverns-minion-wave2-") &&
-            !e.id.startsWith("citadel-minion-wave2-")
+            !e.id.startsWith("citadel-minion-wave2-") &&
+            !e.id.startsWith("caverns-wraith-wave2-") &&
+            !e.id.startsWith("desert-minion-wave2-") &&
+            !e.id.startsWith("caldera-minion-wave2-")
         )
         .map((e) => ({
           ...e,
@@ -2171,7 +2234,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
             !e.id.startsWith("ct-minion-wave2-") &&
             !e.id.startsWith("dungeon-minion-wave2-") &&
             !e.id.startsWith("caverns-minion-wave2-") &&
-            !e.id.startsWith("citadel-minion-wave2-")
+            !e.id.startsWith("citadel-minion-wave2-") &&
+            !e.id.startsWith("caverns-wraith-wave2-") &&
+            !e.id.startsWith("desert-minion-wave2-") &&
+            !e.id.startsWith("caldera-minion-wave2-")
         )
         .map((e) => ({
           ...e,
@@ -2246,6 +2312,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         dungeonCrystalPuzzleSolved: false,
         frontierCrystalPuzzleSolved: false,
         cavernsCrystalPuzzleSolved: false,
+        desertCrystalPuzzleSolved: false,
         dungeonEyeStatuesSolved: false,
         secretStashClaimed: false,
         heirloomQuestStarted: false,
@@ -2291,6 +2358,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
         citadelBossDefeated: false,
         citadelBossHeartAwarded: false,
         citadelVictoryChestOpened: false,
+        desertOasisChestOpened: false,
+        desertWardensCleared: false,
+        desertBossAwakened: false,
+        desertBossPhase2: false,
+        desertBossDefeated: false,
+        desertBossHeartAwarded: false,
+        desertSolarKeyPickedUp: false,
+        hasSolarKey: false,
+        desertCalderaGateUnlocked: false,
+        calderaForgeChestOpened: false,
+        calderaTorchPuzzleSolved: false,
+        calderaEyeStatuesSolved: false,
+        calderaPegsSolved: false,
+        calderaGateUnlocked: false,
+        calderaBossAwakened: false,
+        calderaBossPhase2: false,
+        calderaBossDefeated: false,
+        calderaBossHeartAwarded: false,
+        calderaVictoryChestOpened: false,
       },
       hero: {
         ...state.hero,
@@ -2341,7 +2427,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
           !e.id.startsWith("ct-minion-wave2-") &&
           !e.id.startsWith("dungeon-minion-wave2-") &&
           !e.id.startsWith("caverns-minion-wave2-") &&
-          !e.id.startsWith("citadel-minion-wave2-")
+          !e.id.startsWith("citadel-minion-wave2-") &&
+          !e.id.startsWith("caverns-wraith-wave2-") &&
+          !e.id.startsWith("desert-minion-wave2-") &&
+          !e.id.startsWith("caldera-minion-wave2-")
       ),
       rupees: state.rupees.filter(
         (r) => !r.id.startsWith("drop-") && !r.id.startsWith("bush-drop-")
@@ -2365,6 +2454,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           frontier: data.terrainCells?.frontier ?? state.terrainCells.frontier ?? {},
           caverns: data.terrainCells?.caverns ?? state.terrainCells.caverns ?? {},
           citadel: data.terrainCells?.citadel ?? state.terrainCells.citadel ?? {},
+          desert: data.terrainCells?.desert ?? state.terrainCells.desert ?? {},
+          caldera: data.terrainCells?.caldera ?? state.terrainCells.caldera ?? {},
         };
         const nextState = {
           mapProps: data.mapProps,
@@ -2413,6 +2504,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           frontier: data.terrainCells?.frontier ?? {},
           caverns: data.terrainCells?.caverns ?? {},
           citadel: data.terrainCells?.citadel ?? {},
+          desert: data.terrainCells?.desert ?? {},
+          caldera: data.terrainCells?.caldera ?? {},
         },
         terrainRevision: state.terrainRevision + 1,
       }));
@@ -2443,6 +2536,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         frontier: {},
         caverns: {},
         citadel: {},
+        desert: {},
+        caldera: {},
       },
       terrainRevision: state.terrainRevision + 1,
       editorSelected: null,
@@ -3223,6 +3318,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           carryingKey: state.boomerang.carryingKey ?? false,
           carryingDgSmallKey: state.boomerang.carryingDgSmallKey ?? false,
           carryingGlacialKey: state.boomerang.carryingGlacialKey ?? false,
+          carryingSolarKey: state.boomerang.carryingSolarKey ?? false,
         }
       : null;
     let hookshot: HookshotState | null = state.hookshot
@@ -3232,6 +3328,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           carryingKey: state.hookshot.carryingKey ?? false,
           carryingDgSmallKey: state.hookshot.carryingDgSmallKey ?? false,
           carryingGlacialKey: state.hookshot.carryingGlacialKey ?? false,
+          carryingSolarKey: state.hookshot.carryingSolarKey ?? false,
         }
       : null;
     const hammerShockwaves: HammerShockwaveState[] = (state.hammerShockwaves ?? [])
@@ -3558,6 +3655,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
           );
           return true;
         }
+        if (targetZone === "desert" && !flags.desertCrystalPuzzleSolved) {
+          flags.desertCrystalPuzzleSolved = true;
+          soundEngine.playSecretSolve();
+          rupees.push(
+            {
+              id: `crystal-ds-reward-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "desert",
+              x: 14.5,
+              z: 6.0,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `crystal-ds-reward-2-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "desert",
+              x: 16.0,
+              z: 6.0,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            }
+          );
+          pushBanner(
+            "Sun Temple Crystal Switch Activated! (East Sun Temple Open!)",
+            "Cross the oasis bridge into the East Sun Temple and challenge Skorpius, the Sunscorched Dune-Colossus, for the Solar Crest Key!",
+            5.6
+          );
+          return true;
+        }
       }
       return false;
     };
@@ -3585,7 +3714,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return true;
     };
 
-    // Helper: Pierce Cyclops Eye Statues (`eye_statue`) with an Arrow in Dungeon Room 4, Map 4 Caverns, or Map 5 Citadel!
+    // Helper: Pierce Cyclops Eye Statues (`eye_statue`) with an Arrow in Dungeon Room 4, Map 4 Caverns, Map 5 Citadel, or Map 7 Caldera!
     const activateEyeStatue = (propId: string): boolean => {
       ensureMutableMapProps();
       const eyeProp = mapProps.find((p) => p.id === propId);
@@ -3674,6 +3803,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
           pushBanner(
             "Both Sovereign Eye Statues Pierced! (Throne Room Unsealed!)",
             "The Inner Sanctum Gate dropped — step North into the Sovereign's Throne Room to challenge Vaelkor!",
+            6.0
+          );
+          return true;
+        } else if (eyeProp.zone === "caldera" && !flags.calderaEyeStatuesSolved) {
+          flags.calderaEyeStatuesSolved = true;
+          flags.calderaGateUnlocked = true;
+          dynamicObstacles = getActiveObstacles(mapProps);
+          soundEngine.playGateUnlock();
+          soundEngine.playSecretSolve();
+          pushBanner(
+            "Both Caldera Eye Statues Pierced! (Dragon's Peak Unsealed!)",
+            "The Dragon's Peak Sanctum Gate dropped — step North to challenge Pyrax, the Skyward Dragon-Titan!",
             6.0
           );
           return true;
@@ -4458,6 +4599,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           carryingKey: false,
           carryingDgSmallKey: false,
           carryingGlacialKey: false,
+          carryingSolarKey: false,
         };
       }
     } else if (
@@ -4485,6 +4627,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         hitEnemyIds: [],
         carriedRupeeIds: [],
         carryingKey: false,
+        carryingSolarKey: false,
       };
     } else if (canUseWeapon && input.bowPressed && hero.bowCooldown <= 0) {
       // Trigger Hero Bow & Arrow Shot (E or 2)
@@ -4574,9 +4717,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ? Boolean(flags.frontierCitadelGateUnlocked || flags.hasGlacialKey || flags.cavernCrestKeyPickedUp)
         : zone === "citadel"
         ? Boolean(flags.citadelGateUnlocked && (!flags.citadelBossAwakened || flags.citadelBossDefeated))
+        : zone === "desert"
+        ? Boolean(flags.desertCalderaGateUnlocked || flags.hasSolarKey || flags.desertSolarKeyPickedUp)
+        : zone === "caldera"
+        ? Boolean(flags.calderaGateUnlocked && (!flags.calderaBossAwakened || flags.calderaBossDefeated))
         : Boolean(flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated));
     const initialBossExitOpen =
-      zone === "citadel" ? Boolean(flags.citadelBossDefeated) : Boolean(flags.bossDefeated);
+      zone === "caldera"
+        ? Boolean(flags.calderaBossDefeated)
+        : zone === "citadel"
+        ? Boolean(flags.citadelBossDefeated)
+        : Boolean(flags.bossDefeated);
 
     if (hookshot && hookshot.zone === zone && hookshot.state === "pulling_hero") {
       const toTx = hookshot.targetX - hero.x;
@@ -4652,7 +4803,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       const clampedNextHeroZ =
         (zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated) ||
-        (zone === "citadel" && flags.citadelBossAwakened && !flags.citadelBossDefeated)
+        (zone === "citadel" && flags.citadelBossAwakened && !flags.citadelBossDefeated) ||
+        (zone === "caldera" && flags.calderaBossAwakened && !flags.calderaBossDefeated)
           ? Math.max(13.55, nextHeroZ)
           : nextHeroZ;
       const resolvedHero = resolveWorldCollisions(
@@ -4671,7 +4823,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.x = resolvedHero.x;
       hero.z =
         (zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated) ||
-        (zone === "citadel" && flags.citadelBossAwakened && !flags.citadelBossDefeated)
+        (zone === "citadel" && flags.citadelBossAwakened && !flags.citadelBossDefeated) ||
+        (zone === "caldera" && flags.calderaBossAwakened && !flags.calderaBossDefeated)
           ? Math.max(13.55, resolvedHero.z)
           : resolvedHero.z;
     }
@@ -4755,7 +4908,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             rupees.push(
               {
                 id: `push-reward-fr-1-${stats.elapsedSeconds.toFixed(2)}`,
-                zone: "frontier",
+                zone: mp.zone,
                 x: mp.x,
                 z: mp.z + 1.9,
                 tier: "red",
@@ -4765,7 +4918,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               },
               {
                 id: `push-reward-fr-2-${stats.elapsedSeconds.toFixed(2)}`,
-                zone: "frontier",
+                zone: mp.zone,
                 x: mp.x + 1.2,
                 z: mp.z + 1.9,
                 tier: "red",
@@ -4931,6 +5084,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
               pushBanner(
                 "The Golden Return Portal is Sealed!",
                 "Vanquish Vaelkor, the Obsidian Sovereign, to unseal the Golden Return Portal!",
+                4.0
+              );
+            }
+            continue;
+          }
+          if (
+            portal.id === "portal-ds-caldera" &&
+            !flags.desertCalderaGateUnlocked &&
+            !flags.hasSolarKey &&
+            !flags.desertSolarKeyPickedUp
+          ) {
+            if (gateNoticeCooldown <= 0) {
+              gateNoticeCooldown = 3.2;
+              soundEngine.playGateLocked();
+              pushBanner(
+                "The East Sun-Gate is Sealed by Solar Runes!",
+                "Vanquish Skorpius in the East Sun Temple to claim the Solar Crest Key first!",
+                4.2
+              );
+            }
+            continue;
+          }
+          if (portal.id === "portal-ca-overworld-victory" && !flags.calderaBossDefeated) {
+            if (gateNoticeCooldown <= 0) {
+              gateNoticeCooldown = 3.2;
+              soundEngine.playGateLocked();
+              pushBanner(
+                "The Dragon's Peak Return Portal is Sealed!",
+                "Vanquish Pyrax, the Skyward Dragon-Titan, to unseal the Golden Return Portal!",
                 4.0
               );
             }
@@ -5520,7 +5702,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             soundEngine.playVictoryFanfare();
             pushBanner(
               "Claimed the Sovereign's Relic Chest! (Crimson Dragon Mail + Heart + 200 Rupees!)",
-              "You conquered all 5 Realms! Step through the North Golden Return Portal to travel back to Map 1 Crossroads as Champion!",
+              "Step East across the Magma Bridge into Map 7: Skyward Caldera, or take the North Golden Return Portal!",
               7.5
             );
           } else if (chestNoticeCooldown <= 0) {
@@ -5529,6 +5711,263 @@ export const useGameStore = create<GameStore>((set, get) => ({
             pushBanner(
               "The Sovereign's Relic Chest is Sealed!",
               "Vanquish Vaelkor, the Obsidian Sovereign, and his Shadow Guard to unseal the ultimate reward!",
+              4.0
+            );
+          }
+        }
+      }
+    }
+
+    // 4h. Map 6 (`desert` — Sunscorched Oasis & Shifting Sands):
+    // - SW Mirage Reliquary Chest (`DESERT_OASIS_CHEST_POS = -23.5, -21.0`): Unlocks Swiftwind Pegasus Boots (`swift_boots`), Bottled Blue Elixir (`blue_potion`), & +75 Rupees!
+    // - East Sun Temple (`x > 13.5 && z > 5.5`): Awakens Skorpius, the Sunscorched Dune-Colossus (`ds-boss`)!
+    // - East Sun Pedestal (`DESERT_SOLAR_KEY_POS = 22.0, 10.5`): Unlocks the Solar Crest Key (`hasSolarKey`) once Skorpius / Desert Wardens are vanquished!
+    // - East Sun-Gate (`DESERT_CALDERA_GATE_POS = 31.8, 0`): Unlocks the East Canyon Pass into Map 7 (`caldera`)!
+    if (zone === "desert") {
+      if (!flags.desertOasisChestOpened) {
+        const distToOasisChest = Math.hypot(
+          hero.x - DESERT_OASIS_CHEST_POS.x,
+          hero.z - DESERT_OASIS_CHEST_POS.z
+        );
+        const oasisWyrm = enemies.find(
+          (e) => e.id === "ds-oasis-wyrm" && e.state !== "dead"
+        );
+        if (distToOasisChest < 2.65) {
+          if (!oasisWyrm) {
+            flags.desertOasisChestOpened = true;
+            if (!hero.unlockedBoots.includes("swift_boots")) {
+              hero.unlockedBoots = [...hero.unlockedBoots, "swift_boots"];
+            }
+            hero.equippedBoots = "swift_boots";
+            const emptyBottleIdx = hero.bottles.findIndex((b) => b === "empty");
+            if (emptyBottleIdx !== -1) {
+              hero.bottles[emptyBottleIdx] = "blue_potion";
+            } else if (hero.bottles.length < 6) {
+              hero.bottles = [...hero.bottles, "blue_potion"];
+            }
+            hero.rupees += 75;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Acquired Swiftwind Pegasus Boots (+25% Speed), Blue Elixir & +75 Rupees!",
+              "You now sprint 25% faster and carry a Bottled Blue Elixir! Hit the Crystal Switch (12.5, 6) to enter the East Sun Temple!",
+              7.0
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Mirage Reliquary Chest is Guarded!",
+              "Unearth and defeat the SW Oasis Sand Wyrm [G / T / B] to unseal the Mirage Reliquary Chest!",
+              4.2
+            );
+          }
+        }
+      }
+
+      if (
+        !flags.desertBossAwakened &&
+        !flags.desertBossDefeated &&
+        hero.x > 13.5 &&
+        hero.z > 5.5
+      ) {
+        flags.desertBossAwakened = true;
+        flags.bossState = "ARMORED";
+        flags.bossArmorTimer = 0;
+        soundEngine.playBossRoar();
+        pushBanner(
+          "Skorpius, the Sunscorched Dune-Colossus Awakens!",
+          "Phase 1: Crack his Chitin Shell [R / B / T] • Phase 2: Pierce Open Eye [E / Q / H] • Phase 3: Slash with Sword [Space]!",
+          6.5
+        );
+      }
+
+      if (!flags.desertSolarKeyPickedUp) {
+        const distToSolarKey = Math.hypot(
+          hero.x - DESERT_SOLAR_KEY_POS.x,
+          hero.z - DESERT_SOLAR_KEY_POS.z
+        );
+        const remainingDesertWardens = enemies.filter(
+          (e) => e.questGroup === "desert_wardens" && e.state !== "dead"
+        );
+        const canClaimSolarKey =
+          Boolean(flags.desertWardensCleared || flags.desertBossDefeated) ||
+          remainingDesertWardens.length === 0;
+        if (distToSolarKey < 2.25) {
+          if (canClaimSolarKey) {
+            flags.desertSolarKeyPickedUp = true;
+            flags.hasSolarKey = true;
+            hero.hasDungeonKey = true;
+            soundEngine.playVictoryFanfare();
+            soundEngine.playKeyPickup();
+            pushBanner(
+              "Acquired the Solar Crest Key!",
+              "Head to the East Sun-Gate (31.8, 0) to unlock the East Canyon Pass into Map 7: Skyward Caldera!",
+              6.5
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Solar Crest Key Pedestal is Sealed!",
+              "Vanquish Skorpius, the Sunscorched Dune-Colossus, in the East Sun Temple to unseal the Solar Crest Key!",
+              4.5
+            );
+          }
+        }
+      }
+
+      if (!flags.desertCalderaGateUnlocked) {
+        const distToCalderaGate = Math.hypot(
+          hero.x - DESERT_CALDERA_GATE_POS.x,
+          hero.z - DESERT_CALDERA_GATE_POS.z
+        );
+        if (distToCalderaGate < 3.5) {
+          if (flags.hasSolarKey || flags.desertSolarKeyPickedUp) {
+            flags.desertCalderaGateUnlocked = true;
+            flags.hasSolarKey = false;
+            dynamicObstacles = getActiveObstacles(mapProps);
+            soundEngine.playGateUnlock();
+            pushBanner(
+              "East Sun-Gate Unlocked! (Map 7: Skyward Caldera)",
+              "The Solar Crest Key unsealed the volcanic pass — step East into Map 7: Skyward Caldera & Dragon's Peak!",
+              5.8
+            );
+          } else if (gateNoticeCooldown <= 0) {
+            gateNoticeCooldown = 3.2;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "East Sun-Gate Sealed! (Requires Solar Crest Key)",
+              "Hit the Crystal Switch (12.5, 6), cross into the East Sun Temple, and defeat Skorpius to win the Solar Crest Key!",
+              5.0
+            );
+          }
+        }
+      }
+    }
+
+    // 4i. Map 7 (`caldera` — Skyward Caldera & Dragon's Peak):
+    // - NW Dragon Forge Chest (`CALDERA_FORGE_CHEST_POS = -22.5, 20.0`): Unlocks Crimson Dragon Mail (-75% DMG), Titan Iron Greaves, & +100 Rupees!
+    // - North Dragon's Peak Sanctum Gate (`CALDERA_BOSS_GATE_POS = 0, 12.0`): Unlocked by pounding 2 Seal Stakes [T], piercing 2 Eye Statues [E], OR lighting 2 Braziers [R]!
+    // - Dragon's Peak Sanctum (`z > 13.05`): Awakens Pyrax, the Skyward Dragon-Titan (`ca-boss`)!
+    // - Dragon's Peak Victory Chest (`CALDERA_VICTORY_CHEST_POS = -6.5, 32.0`): Awards +1 Heart Container & +300 Rupees!
+    if (zone === "caldera") {
+      if (!flags.calderaForgeChestOpened) {
+        const distToForgeChest = Math.hypot(
+          hero.x - CALDERA_FORGE_CHEST_POS.x,
+          hero.z - CALDERA_FORGE_CHEST_POS.z
+        );
+        const forgeKnight = enemies.find(
+          (e) => e.id === "ca-forge-knight" && e.state !== "dead"
+        );
+        if (distToForgeChest < 2.65) {
+          if (!forgeKnight) {
+            flags.calderaForgeChestOpened = true;
+            if (!hero.unlockedTunics.includes("red_mail")) {
+              hero.unlockedTunics = [...hero.unlockedTunics, "red_mail"];
+            }
+            hero.equippedTunic = "red_mail";
+            if (!hero.unlockedBoots.includes("titan_greaves")) {
+              hero.unlockedBoots = [...hero.unlockedBoots, "titan_greaves"];
+            }
+            if (hero.equippedBoots === "leather_boots") {
+              hero.equippedBoots = "titan_greaves";
+            }
+            hero.rupees += 100;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Acquired Crimson Dragon Mail (-75% DMG), Titan Greaves & +100 Rupees!",
+              "You forged the ultimate armor in the NW Dragon Forge! Now unseal the North Dragon's Peak Gate (0, 12) to challenge Pyrax!",
+              7.0
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Dragon Forge Chest is Guarded!",
+              "Defeat the NW Forge Sentinel Knight to claim the Crimson Dragon Mail & Titan Greaves!",
+              4.2
+            );
+          }
+        }
+      }
+
+      if (!flags.calderaGateUnlocked) {
+        const distToCalderaBossGate = Math.hypot(
+          hero.x - CALDERA_BOSS_GATE_POS.x,
+          hero.z - CALDERA_BOSS_GATE_POS.z
+        );
+        if (distToCalderaBossGate < 3.2 && gateNoticeCooldown <= 0) {
+          gateNoticeCooldown = 3.2;
+          soundEngine.playGateLocked();
+          pushBanner(
+            "Dragon's Peak Sanctum Gate Sealed!",
+            "Pound the 2 Rusted Seal Stakes with War-Hammer [T / 8], shoot both Eye Statues with Bow [E / 2], OR light both Seal Braziers with Flame Rod [R / 3]!",
+            4.8
+          );
+        }
+      } else if (
+        flags.calderaGateUnlocked &&
+        flags.calderaBossAwakened &&
+        !flags.calderaBossDefeated
+      ) {
+        const distToCalderaBossGate = Math.hypot(
+          hero.x - CALDERA_BOSS_GATE_POS.x,
+          hero.z - CALDERA_BOSS_GATE_POS.z
+        );
+        if (distToCalderaBossGate < 2.8 && gateNoticeCooldown <= 0) {
+          gateNoticeCooldown = 3.5;
+          soundEngine.playGateLocked();
+          pushBanner(
+            "The Dragon's Peak Sanctum Door is Sealed Shut!",
+            "1. Crack Pyrax's Dragon Scales [R / B / T] -> 2. Pierce Open Eye [E / Q / H] -> 3. Slash with Tempered Blade [Space]!",
+            4.2
+          );
+        }
+      }
+
+      if (
+        flags.calderaGateUnlocked &&
+        !flags.calderaBossAwakened &&
+        hero.z > 13.05
+      ) {
+        flags.calderaBossAwakened = true;
+        flags.bossState = "ARMORED";
+        flags.bossArmorTimer = 0;
+        hero.z = Math.max(13.58, hero.z);
+        soundEngine.playGateLocked();
+        soundEngine.playBossRoar();
+        pushBanner(
+          "Pyrax, the Skyward Dragon-Titan Awakens!",
+          "Phase 1: Crack his Molten Dragon Scales [R / B / T] • Phase 2: Pierce Open Eye [E / Q / H] • Phase 3: Slash with Sword [Space]!",
+          6.8
+        );
+      }
+
+      if (!flags.calderaVictoryChestOpened) {
+        const distToCalderaVictoryChest = Math.hypot(
+          hero.x - CALDERA_VICTORY_CHEST_POS.x,
+          hero.z - CALDERA_VICTORY_CHEST_POS.z
+        );
+        if (distToCalderaVictoryChest < 2.6) {
+          if (flags.calderaBossDefeated) {
+            flags.calderaVictoryChestOpened = true;
+            hero.maxHp += 2;
+            hero.hp = hero.maxHp;
+            hero.mp = hero.maxMp;
+            hero.damageFractionAcc = 0;
+            hero.rupees += 300;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Claimed the Dragon's Peak Victory Chest! (+1 Heart Container & +300 Rupees!)",
+              "You conquered all 7 Realms of Zeldo! Step through the North Golden Return Portal to return to Map 1 Crossroads as Grand Champion!",
+              8.0
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Dragon's Peak Victory Chest is Sealed!",
+              "Vanquish Pyrax, the Skyward Dragon-Titan, and his Caldera Wyrms to unseal the grand finale chest!",
               4.0
             );
           }
@@ -5618,9 +6057,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ? Boolean(flags.frontierCitadelGateUnlocked || flags.hasGlacialKey || flags.cavernCrestKeyPickedUp)
         : zone === "citadel"
         ? Boolean(flags.citadelGateUnlocked && (!flags.citadelBossAwakened || flags.citadelBossDefeated))
+        : zone === "desert"
+        ? Boolean(flags.desertCalderaGateUnlocked || flags.hasSolarKey || flags.desertSolarKeyPickedUp)
+        : zone === "caldera"
+        ? Boolean(flags.calderaGateUnlocked && (!flags.calderaBossAwakened || flags.calderaBossDefeated))
         : Boolean(flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated));
     const bossExitOpen =
-      zone === "citadel" ? Boolean(flags.citadelBossDefeated) : Boolean(flags.bossDefeated);
+      zone === "caldera"
+        ? Boolean(flags.calderaBossDefeated)
+        : zone === "citadel"
+        ? Boolean(flags.citadelBossDefeated)
+        : Boolean(flags.bossDefeated);
 
     // 7. Update Arcing Boss Projectiles & Toxic Ground Hazards (Magical Damage!)
     const projectiles: BossProjectileState[] = [];
@@ -5733,7 +6180,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const toHz = hero.z - boomerang.z;
           const distH = Math.hypot(toHx, toHz);
           if (distH < 1.2) {
-            // Deliver any snagged Sanctum Key, Room 2 Small Key, Map 4 Glacial Key, or Rupees directly into the Hero's hands!
+            // Deliver any snagged Sanctum Key, Room 2 Small Key, Map 4 Glacial Key, Map 6 Solar Key, or Rupees directly into the Hero's hands!
             if (boomerang.carryingKey && !flags.keyPickedUp) {
               flags.keyPickedUp = true;
               hero.hasDungeonKey = true;
@@ -5767,6 +6214,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 6.2
               );
             }
+            if (boomerang.carryingSolarKey && !flags.desertSolarKeyPickedUp) {
+              flags.desertSolarKeyPickedUp = true;
+              flags.hasSolarKey = true;
+              hero.hasDungeonKey = true;
+              soundEngine.playVictoryFanfare();
+              soundEngine.playKeyPickup();
+              pushBanner(
+                "Boomerang Fetched the Solar Crest Key!",
+                "Head to the East Sun-Gate (31.8, 0) to unlock the East Canyon Pass into Map 7: Skyward Caldera!",
+                6.2
+              );
+            }
             for (const cId of boomerang.carriedRupeeIds) {
               const r = rupees.find((item) => item.id === cId);
               if (r && !r.collected) {
@@ -5794,7 +6253,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
         }
 
-        // Boomerang snags & drags the Map 1B Grove Key, Room 2 Dungeon Small Key, Map 4 Glacial Key, and Rupees/Recovery Hearts in flight!
+        // Boomerang snags & drags the Map 1B Grove Key, Room 2 Dungeon Small Key, Map 4 Glacial Key, Map 6 Solar Key, and Rupees/Recovery Hearts in flight!
         if (boomerang) {
           if (
             zone === "grove" &&
@@ -5841,6 +6300,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
             pushBanner(
               "Boomerang Snagged the Glacial Crest Key!",
               "Pulling the Glacial Crest Key from the East Sanctum pedestal...",
+              3.4
+            );
+          }
+
+          if (
+            zone === "desert" &&
+            !flags.desertSolarKeyPickedUp &&
+            !boomerang.carryingSolarKey &&
+            (flags.desertWardensCleared || flags.desertBossDefeated) &&
+            Math.hypot(DESERT_SOLAR_KEY_POS.x - boomerang.x, DESERT_SOLAR_KEY_POS.z - boomerang.z) < 1.85
+          ) {
+            boomerang.carryingSolarKey = true;
+            boomerang.returning = true;
+            soundEngine.playLift();
+            pushBanner(
+              "Boomerang Snagged the Solar Crest Key!",
+              "Pulling the Solar Crest Key from the East Sun Pedestal...",
               3.4
             );
           }
@@ -6202,6 +6678,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
+      // Check if all 3 Map 6 Sunscorched Oasis Wardens (`questGroup === "desert_wardens"`) are defeated!
+      if (enemy.questGroup === "desert_wardens" && !flags.desertWardensCleared) {
+        const remainingDesertWardens = enemies.filter(
+          (e) => e.questGroup === "desert_wardens" && e.state !== "dead"
+        );
+        if (remainingDesertWardens.length === 0) {
+          flags.desertWardensCleared = true;
+          soundEngine.playSecretSolve();
+          pushBanner(
+            "Sun Temple Wardens Vanquished! (Solar Crest Key Unsealed!)",
+            "Claim the Solar Crest Key at the East Sun Temple Pedestal (or toggle the 2 Solar Crystal Switches for +20 Rupees)!",
+            5.8
+          );
+        }
+      }
+
       if (enemy.id === "fr-hookshot-guard" && !flags.frontierHookshotChestOpened) {
         soundEngine.playSecretSolve();
         pushBanner(
@@ -6219,15 +6711,43 @@ export const useGameStore = create<GameStore>((set, get) => ({
           5.5
         );
       }
+
+      if (enemy.id === "ds-oasis-wyrm" && !flags.desertOasisChestOpened) {
+        soundEngine.playSecretSolve();
+        pushBanner(
+          "Mirage Wyrm Vanquished! (Oasis Reliquary Chest Unsealed!)",
+          "Walk up to the SW Mirage Oasis Chest to claim +1 Heart Container, Fairy in a Bottle, & +100 Rupees!",
+          5.5
+        );
+      }
+
+      if (enemy.id === "ca-forge-knight" && !flags.calderaForgeChestOpened) {
+        soundEngine.playSecretSolve();
+        pushBanner(
+          "Magma Forge Sentinel Vanquished! (NW Magma Forge Chest Unsealed!)",
+          "Walk up to the NW Magma Forge Chest to claim Crimson Dragon Mail (-75% Damage) & +100 Rupees!",
+          5.5
+        );
+      }
     };
 
     const getBossName = (z: ZoneId = zone): string =>
-      z === "citadel" ? "Vaelkor" : z === "caverns" ? "Cryos" : "Ignis";
+      z === "caldera"
+        ? "Pyrax"
+        : z === "desert"
+        ? "Skorpius"
+        : z === "citadel"
+        ? "Vaelkor"
+        : z === "caverns"
+        ? "Cryos"
+        : "Ignis";
 
     const isBossRoomSealed = (e: EnemyState): boolean =>
       (e.zone === "dungeon" && (e.kind === "boss" || e.spawnZ > 13) && !flags.bossAwakened) ||
       (e.zone === "citadel" && (e.kind === "boss" || e.spawnZ > 13) && !flags.citadelBossAwakened) ||
-      (e.zone === "caverns" && e.kind === "boss" && !flags.cavernBossAwakened);
+      (e.zone === "caldera" && (e.kind === "boss" || e.spawnZ > 13) && !flags.calderaBossAwakened) ||
+      (e.zone === "caverns" && e.kind === "boss" && !flags.cavernBossAwakened) ||
+      (e.zone === "desert" && e.kind === "boss" && !flags.desertBossAwakened);
 
     // 8c-2. Resolve Titan War-Hammer Overhead Slam + Radial Seismic Shockwave (`hammerSlamImpactPos`)
     if (hammerSlamImpactPos) {
@@ -6296,14 +6816,42 @@ export const useGameStore = create<GameStore>((set, get) => ({
         dynamicObstacles = getActiveObstacles(mapProps);
       }
       if (poundedPegCount > 0) {
-        soundEngine.playSecretSolve();
-        pushBanner(
-          poundedPegCount > 1
-            ? `Pounded ${poundedPegCount} Rusted Iron Stakes Flat!`
-            : "Pounded the Rusted Iron Stake Flat!",
-          "The barrier stake was driven flush into the earth — the path is clear!",
-          3.8
-        );
+        // Check if pounding Rusted Iron Stakes in Map 7 (`caldera`) solved the Sanctum Seal!
+        if (zone === "caldera" && !flags.calderaPegsSolved) {
+          const calderaSealPegs = mapProps.filter(
+            (p) =>
+              p.zone === "caldera" &&
+              (p.id === "prop-ca-seal-peg-1" || p.id === "prop-ca-seal-peg-2")
+          );
+          if (calderaSealPegs.length > 0 && calderaSealPegs.every((p) => p.pounded)) {
+            flags.calderaPegsSolved = true;
+            flags.calderaGateUnlocked = true;
+            dynamicObstacles = getActiveObstacles(mapProps);
+            soundEngine.playGateUnlock();
+            soundEngine.playSecretSolve();
+            pushBanner(
+              "Both Sanctum Iron Stakes Pounded! (Dragon's Peak Sanctum Gate Unsealed!)",
+              "Step North through the open Sanctum Gate to challenge Pyrax, the Magma Wyrm!",
+              6.0
+            );
+          } else {
+            soundEngine.playSecretSolve();
+            pushBanner(
+              "Pounded a Sanctum Iron Stake Flat! (1 of 2)",
+              "Pound the other Rusted Iron Stake with your War-Hammer [T] to unseal the Dragon's Peak Sanctum Gate!",
+              4.2
+            );
+          }
+        } else {
+          soundEngine.playSecretSolve();
+          pushBanner(
+            poundedPegCount > 1
+              ? `Pounded ${poundedPegCount} Rusted Iron Stakes Flat!`
+              : "Pounded the Rusted Iron Stake Flat!",
+            "The barrier stake was driven flush into the earth — the path is clear!",
+            3.8
+          );
+        }
       } else if (smashedBoulderCount > 0) {
         pushBanner(
           "War-Hammer Shattered the Cracked Boulder!",
@@ -6674,6 +7222,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 5.8
               );
             }
+            if (hookshot.carryingSolarKey && !flags.desertSolarKeyPickedUp) {
+              flags.desertSolarKeyPickedUp = true;
+              flags.hasSolarKey = true;
+              hero.hasDungeonKey = true;
+              soundEngine.playVictoryFanfare();
+              soundEngine.playKeyPickup();
+              pushBanner(
+                "Hookshot Snagged the Solar Crest Key!",
+                "Head to the East Caldera Gate to unlock Map 7: Skyward Caldera & Dragon's Peak!",
+                5.8
+              );
+            }
             for (const cId of hookshot.carriedRupeeIds) {
               const r = rupees.find((item) => item.id === cId);
               if (r && !r.collected) {
@@ -6724,6 +7284,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
             Math.hypot(CAVERN_CREST_KEY_POS.x - hookshot.x, CAVERN_CREST_KEY_POS.z - hookshot.z) < 1.85
           ) {
             hookshot.carryingGlacialKey = true;
+            hookshot.state = "retracting";
+            soundEngine.playHookshotLatch();
+          }
+          if (
+            zone === "desert" &&
+            !flags.desertSolarKeyPickedUp &&
+            !hookshot.carryingSolarKey &&
+            (flags.desertCrystalPuzzleSolved || flags.desertWardensCleared || flags.desertBossDefeated) &&
+            Math.hypot(DESERT_SOLAR_KEY_POS.x - hookshot.x, DESERT_SOLAR_KEY_POS.z - hookshot.z) < 1.85
+          ) {
+            hookshot.carryingSolarKey = true;
             hookshot.state = "retracting";
             soundEngine.playHookshotLatch();
           }
@@ -6853,12 +7424,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
               if (armorNoticeCooldown <= 0) {
                 armorNoticeCooldown = 3.5;
                 pushBanner(
-                  zone === "citadel"
+                  zone === "caldera"
+                    ? "Enter Dragon's Peak Sanctum!"
+                    : zone === "desert"
+                    ? "Cross into the East Sun Temple!"
+                    : zone === "citadel"
                     ? "Enter the Sovereign's Throne!"
                     : zone === "caverns"
                     ? "Cross into the East Glacial Sanctum!"
                     : "Enter Room 5: Lair of Ignis!",
-                  zone === "citadel"
+                  zone === "caldera"
+                    ? "Step through the Sanctum Gate to challenge Pyrax, the Magma Wyrm!"
+                    : zone === "desert"
+                    ? "Grapple across to the East Sun Temple to challenge Skorpius, the Sun-Scorpion Behemoth!"
+                    : zone === "citadel"
                     ? "Step through the Inner Sanctum Gate to challenge Vaelkor, the Obsidian Sovereign!"
                     : zone === "caverns"
                     ? "Step across the frozen bridge to challenge Cryos, the Glacial Colossus!"
@@ -7322,6 +7901,53 @@ export const useGameStore = create<GameStore>((set, get) => ({
             "Ember Sanctum Lanterns Lit! (West Door Reopened!)",
             "Now shoot the Thick Spiderwebs on the South Door with your Flame Rod [R / 3] to enter Room 4 (The Dark Archery Crypt)!",
             5.8
+          );
+        }
+      } else if (zone === "caldera" && !flags.calderaTorchPuzzleSolved) {
+        // Map 7 (Skyward Caldera): Lighting the 2 Sanctum Seal Braziers (`prop-ca-seal-torch-w`, `prop-ca-seal-torch-e`) unseals Dragon's Peak Sanctum Gate!
+        const caPuzzleTorches = mapProps.filter(
+          (p) =>
+            p.zone === "caldera" &&
+            p.prefab === "wall_torch" &&
+            (p.puzzleTarget === "lit" || p.puzzleTarget === "unlit")
+        );
+        if (
+          caPuzzleTorches.length > 0 &&
+          caPuzzleTorches.every(
+            (p) => (p.lit !== false ? "lit" : "unlit") === p.puzzleTarget
+          )
+        ) {
+          flags.calderaTorchPuzzleSolved = true;
+          flags.calderaGateUnlocked = true;
+          dynamicObstacles = getActiveObstacles(mapProps);
+          soundEngine.playGateUnlock();
+          soundEngine.playSecretSolve();
+          rupees.push(
+            {
+              id: `ca-torch-secret-1-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "caldera",
+              x: -0.8,
+              z: 10.0,
+              tier: "red",
+              value: 20,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            },
+            {
+              id: `ca-torch-secret-heart-${stats.elapsedSeconds.toFixed(2)}`,
+              zone: "caldera",
+              x: 0.8,
+              z: 10.0,
+              tier: "heart",
+              value: 2,
+              collected: false,
+              spawnBounceTimer: 0.45,
+            }
+          );
+          pushBanner(
+            "Both Sanctum Seal Braziers Lit! (Dragon's Peak Sanctum Gate Unsealed!)",
+            "The Dragon's Peak Sanctum Gate is open — step North to challenge Pyrax, the Magma Wyrm!",
+            6.0
           );
         }
       }
@@ -8253,6 +8879,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 "Step North into the NW Reliquary Vault to claim the Explorer's Iron Shovel [G] & Sapphire Mail!",
                 5.5
               );
+            } else if (prop.id === "prop-ds-temple-cracked-rock") {
+              pushBanner(
+                "East Sun Temple Shortcut Unsealed!",
+                "The cracked sandstone boulder blocking the East Sun Temple bridge is shattered!",
+                5.0
+              );
+            } else if (prop.id === "prop-ca-forge-cracked-rock") {
+              pushBanner(
+                "NW Magma Forge Entrance Unsealed!",
+                "Defeat the Magma Forge Sentinel inside to claim Crimson Dragon Mail & +100 Rupees!",
+                5.2
+              );
             } else {
               pushBanner(
                 "Cracked Boulder Shattered!",
@@ -8717,15 +9355,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
       }
 
-      // Boss Rage Phase at 50% HP (spawns 2 Guards & intensifies Ignis / Cryos / Vaelkor!)
+      // Boss Rage Phase at 50% HP (spawns 2 Guards & intensifies Ignis / Cryos / Vaelkor / Skorpius / Pyrax!)
       if (
         enemy.kind === "boss" &&
         enemy.hp <= Math.ceil(enemy.maxHp / 2) &&
         ((zone === "dungeon" && !flags.bossPhase2) ||
           (zone === "caverns" && !flags.cavernBossPhase2) ||
-          (zone === "citadel" && !flags.citadelBossPhase2))
+          (zone === "citadel" && !flags.citadelBossPhase2) ||
+          (zone === "desert" && !flags.desertBossPhase2) ||
+          (zone === "caldera" && !flags.calderaBossPhase2))
       ) {
-        if (zone === "citadel") {
+        if (zone === "caldera") {
+          flags.calderaBossPhase2 = true;
+        } else if (zone === "desert") {
+          flags.desertBossPhase2 = true;
+        } else if (zone === "citadel") {
           flags.citadelBossPhase2 = true;
         } else if (zone === "caverns") {
           flags.cavernBossPhase2 = true;
@@ -8737,9 +9381,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         pushBanner(
           zone === "caverns"
             ? `${bossName} Enters His Blizzard Rage Phase!`
+            : zone === "desert"
+            ? `${bossName} Enters His Sandstorm Rage Phase!`
             : `${bossName} Enters His Molten Rage Phase!`,
           zone === "caverns"
             ? "Two Frost Wraiths materialize in the sanctum — melt his ice shell [R / B], stun his Eye [E], and slash [Space]!"
+            : zone === "desert"
+            ? "Two Dune Sentinels emerge in the Sun Temple — crack his chitin [T / B / R], stun his Eye [E / H], and slash [Space]!"
             : "Two Shadow Guards rise in the corners — keep burning his shell [R], stunning his Eye [E], and slashing [Space]!",
           4.2
         );
@@ -8748,6 +9396,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
             ? [
                 { id: `${zone}-wraith-wave2-1`, x: 18.5, z: 24.5, kind: "wraith" as EnemyKind },
                 { id: `${zone}-wraith-wave2-2`, x: 29.5, z: 24.5, kind: "wraith" as EnemyKind },
+              ]
+            : zone === "desert"
+            ? [
+                { id: `${zone}-minion-wave2-1`, x: 18.5, z: 24.5, kind: "minion" as EnemyKind },
+                { id: `${zone}-minion-wave2-2`, x: 29.5, z: 24.5, kind: "minion" as EnemyKind },
               ]
             : [
                 { id: `${zone}-minion-wave2-1`, x: -8.5, z: 28.5, kind: "minion" as EnemyKind },
@@ -8792,31 +9445,43 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const toHeroZ = hero.z - enemy.z;
       const distToHero = Math.hypot(toHeroX, toHeroZ);
       const isSanctumEnemy =
-        ((enemy.zone === "dungeon" || enemy.zone === "citadel") && enemy.spawnZ > 13) ||
-        (enemy.zone === "caverns" && enemy.spawnX > 13.5 && enemy.spawnZ > 5.5);
+        ((enemy.zone === "dungeon" || enemy.zone === "citadel" || enemy.zone === "caldera") &&
+          enemy.spawnZ > 13) ||
+        ((enemy.zone === "caverns" || enemy.zone === "desert") &&
+          enemy.spawnX > 13.5 &&
+          enemy.spawnZ > 5.5);
       const enemyWeight = enemy.weight ?? getDefaultEnemyWeight(enemy.kind);
 
       // =====================================================
-      // DEDICATED BOSS AI STATE MACHINE ("IGNIS", "CRYOS", & "VAELKOR")
+      // DEDICATED BOSS AI STATE MACHINE ("IGNIS", "CRYOS", "VAELKOR", "SKORPIUS", & "PYRAX")
       // =====================================================
       if (enemy.kind === "boss") {
         const bossName = getBossName(zone);
         const isCurrentBossAwakened =
-          zone === "citadel"
+          zone === "caldera"
+            ? Boolean(flags.calderaBossAwakened)
+            : zone === "desert"
+            ? Boolean(flags.desertBossAwakened)
+            : zone === "citadel"
             ? Boolean(flags.citadelBossAwakened)
             : zone === "caverns"
             ? Boolean(flags.cavernBossAwakened)
             : Boolean(flags.bossAwakened);
         const isCurrentBossPhase2 =
-          zone === "citadel"
+          zone === "caldera"
+            ? Boolean(flags.calderaBossPhase2)
+            : zone === "desert"
+            ? Boolean(flags.desertBossPhase2)
+            : zone === "citadel"
             ? Boolean(flags.citadelBossPhase2)
             : zone === "caverns"
             ? Boolean(flags.cavernBossPhase2)
             : Boolean(flags.bossPhase2);
-        const bossMinX = zone === "caverns" ? 13.8 : -14.5;
-        const bossMaxX = zone === "caverns" ? 31.5 : 14.5;
-        const bossMinZ = zone === "caverns" ? 6.5 : 14.5;
-        const bossMaxZ = zone === "caverns" ? 29.5 : 33.5;
+        const isEastSanctumBoss = zone === "caverns" || zone === "desert";
+        const bossMinX = isEastSanctumBoss ? 13.8 : -14.5;
+        const bossMaxX = isEastSanctumBoss ? 31.5 : 14.5;
+        const bossMinZ = isEastSanctumBoss ? 6.5 : 14.5;
+        const bossMaxZ = isEastSanctumBoss ? 29.5 : 33.5;
 
         // Tick Phase 2 Exposed Eye countdown -> regenerates carapace if not stunned in time!
         if (flags.bossState === "EXPOSED_EYE" && enemy.state !== "stunned") {
@@ -8826,7 +9491,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             soundEngine.playArmorDeflect();
             pushBanner(
               `${bossName}'s Outer Carapace Regenerated!`,
-              `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3] or Bomb [B / 4] to crack his shell again!`,
+              `Phase 1: Shoot ${bossName} with your Flame Rod [R / 3], War-Hammer [T / 8], or Bomb [B / 4] to crack his shell again!`,
               3.4
             );
           }
@@ -8929,8 +9594,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
               directHitRadius: 1.45,
             });
 
-            // Cryos (Map 4) & Vaelkor (Map 5) also fire a direct Frost / Sovereign Arcane Bolt that can be blocked or Mirror-Shield Reflected!
-            if (zone === "caverns" || zone === "citadel") {
+            // Cryos (Map 4), Vaelkor (Map 5), Skorpius (Map 6), & Pyrax (Map 7) also fire a direct Bolt that can be blocked or Mirror-Shield Reflected!
+            if (
+              zone === "caverns" ||
+              zone === "citadel" ||
+              zone === "desert" ||
+              zone === "caldera"
+            ) {
               arrows.push({
                 id: `boss-bolt-${enemy.id}-${stats.elapsedSeconds.toFixed(3)}`,
                 zone,
@@ -9051,12 +9721,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
             }
           }
 
-          const minBarrierZ = zone === "caverns" ? 6.0 : 12.85;
+          const minBarrierZ = isEastSanctumBoss ? 6.0 : 12.85;
           const hitArenaBoundary =
             nextBz - enemyRadius < minBarrierZ ||
-            (zone === "caverns" && nextBx - enemyRadius < bossMinX);
+            (isEastSanctumBoss && nextBx - enemyRadius < bossMinX);
           const resolvedB = resolveWorldCollisions(
-            zone === "caverns" ? Math.max(bossMinX + enemyRadius, nextBx) : nextBx,
+            isEastSanctumBoss ? Math.max(bossMinX + enemyRadius, nextBx) : nextBx,
             Math.max(minBarrierZ + enemyRadius, nextBz),
             enemyRadius,
             zone,
@@ -10108,6 +10778,59 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    if (zone === "desert" && !flags.desertBossDefeated) {
+      const desertBossEnemy = enemies.find((e) => e.zone === "desert" && e.kind === "boss");
+      if (desertBossEnemy && desertBossEnemy.state === "dead") {
+        flags.desertBossDefeated = true;
+        flags.desertWardensCleared = true;
+        flags.bossState = "DEAD";
+        flags.bossArmorTimer = 0;
+        if (!flags.desertBossHeartAwarded) {
+          flags.desertBossHeartAwarded = true;
+          hero.maxHp += 2;
+          hero.hp = hero.maxHp;
+          hero.damageFractionAcc = 0;
+        }
+        soundEngine.playVictoryFanfare();
+        soundEngine.playGateUnlock();
+        pushBanner(
+          "Skorpius, the Sun-Scorpion Behemoth Vanquished! (+1 Full Heart Container!)",
+          "Max HP permanently increased & the Solar Crest Key Pedestal is unsealed! Claim the key at the East Sun Temple Pedestal!",
+          7.0
+        );
+      }
+    }
+
+    if (zone === "caldera" && !flags.calderaBossDefeated) {
+      const calderaBossEnemy = enemies.find((e) => e.zone === "caldera" && e.kind === "boss");
+      const aliveCalderaMinions = enemies.filter(
+        (e) => e.zone === "caldera" && e.kind === "minion" && e.spawnZ > 13 && e.state !== "dead"
+      );
+      if (
+        calderaBossEnemy &&
+        calderaBossEnemy.state === "dead" &&
+        aliveCalderaMinions.length === 0
+      ) {
+        flags.calderaBossDefeated = true;
+        flags.bossState = "DEAD";
+        flags.bossArmorTimer = 0;
+        if (!flags.calderaBossHeartAwarded) {
+          flags.calderaBossHeartAwarded = true;
+          hero.maxHp += 2;
+          hero.hp = hero.maxHp;
+          hero.damageFractionAcc = 0;
+        }
+        dynamicObstacles = getActiveObstacles(mapProps);
+        soundEngine.playVictoryFanfare();
+        soundEngine.playGateUnlock();
+        pushBanner(
+          "Pyrax, the Magma Wyrm Vanquished! (+1 Full Heart Container!)",
+          "Open Dragon's Peak Relic Chest (+1 Heart Container + 300 Rupees) and step through the North Golden Return Portal!",
+          7.5
+        );
+      }
+    }
+
     // 12. Rupee & Recovery Heart Magnet & Pickup (waits until initial pop-up bounce settles so player sees drops!)
     for (const rupee of rupees) {
       if (rupee.zone !== zone || rupee.collected) continue;
@@ -10442,6 +11165,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
         zone === "caverns" &&
         !flags.cavernHammerChestOpened &&
         Math.hypot(CAVERN_HAMMER_CHEST_POS.x - hero.x, CAVERN_HAMMER_CHEST_POS.z - hero.z) <= 5.5;
+      const nearDesertOasisChest =
+        zone === "desert" &&
+        !flags.desertOasisChestOpened &&
+        Math.hypot(DESERT_OASIS_CHEST_POS.x - hero.x, DESERT_OASIS_CHEST_POS.z - hero.z) <= 5.5;
+      const nearDesertSolarKey =
+        zone === "desert" &&
+        !flags.desertSolarKeyPickedUp &&
+        Math.hypot(DESERT_SOLAR_KEY_POS.x - hero.x, DESERT_SOLAR_KEY_POS.z - hero.z) <= 6.5;
+      const nearDesertCalderaGate =
+        zone === "desert" &&
+        !flags.desertCalderaGateUnlocked &&
+        Math.hypot(DESERT_CALDERA_GATE_POS.x - hero.x, DESERT_CALDERA_GATE_POS.z - hero.z) <= 5.5;
+      const nearCalderaForgeChest =
+        zone === "caldera" &&
+        !flags.calderaForgeChestOpened &&
+        Math.hypot(CALDERA_FORGE_CHEST_POS.x - hero.x, CALDERA_FORGE_CHEST_POS.z - hero.z) <= 5.5;
+      const nearCalderaBossGate =
+        zone === "caldera" &&
+        !flags.calderaGateUnlocked &&
+        Math.hypot(CALDERA_BOSS_GATE_POS.x - hero.x, CALDERA_BOSS_GATE_POS.z - hero.z) <= 5.5;
+      const nearCalderaVictoryChest =
+        zone === "caldera" &&
+        !flags.calderaVictoryChestOpened &&
+        Math.hypot(CALDERA_VICTORY_CHEST_POS.x - hero.x, CALDERA_VICTORY_CHEST_POS.z - hero.z) <= 5.5;
       const nearRustedPeg = mapProps.find(
         (p) =>
           p.zone === zone &&
@@ -10472,6 +11219,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
       } else if (nearHammerChest) {
         hero.interactPrompt =
           "SW Glacial Forge Chest (Titan War-Hammer) — Defeat Sentinel & Walk Up to Open!";
+      } else if (nearDesertOasisChest) {
+        hero.interactPrompt =
+          "SW Mirage Oasis Chest (+1 Heart Container & Fairy) — Unearth Wyrm [G / T / B] & Walk Up to Open!";
+      } else if (nearDesertSolarKey) {
+        hero.interactPrompt =
+          flags.desertCrystalPuzzleSolved || flags.desertWardensCleared || flags.desertBossDefeated
+            ? "Solar Crest Key Pedestal — Walk Up or Snag with Boomerang [Q] / Hookshot [H]!"
+            : "Solar Crest Key Pedestal (Sealed) — Toggle 2 Solar Switches, Clear 3 Wardens, or Defeat Skorpius!";
+      } else if (nearDesertCalderaGate) {
+        hero.interactPrompt =
+          flags.hasSolarKey || flags.desertSolarKeyPickedUp
+            ? "East Caldera Gate Ready — Walk Forward to Unlock Map 7: Skyward Caldera!"
+            : "East Caldera Gate (Locked) — Claim the Solar Crest Key at the East Sun Temple Pedestal!";
+      } else if (nearCalderaForgeChest) {
+        hero.interactPrompt =
+          "NW Magma Forge Chest (Crimson Dragon Mail) — Defeat Sentinel & Walk Up to Open!";
+      } else if (nearCalderaBossGate) {
+        hero.interactPrompt =
+          "Dragon's Peak Sanctum Gate — Pound 2 Rusted Stakes [T], Shoot 2 Eye Statues [E], OR Light 2 Braziers [R]!";
+      } else if (nearCalderaVictoryChest) {
+        hero.interactPrompt = flags.calderaBossDefeated
+          ? "Dragon's Peak Relic Chest (Unsealed!) — Walk Up to Claim +1 Heart Container & 300 Rupees!"
+          : "Dragon's Peak Relic Chest (Sealed) — Defeat Pyrax, the Magma Wyrm to Unseal!";
       } else if (nearRustedPeg) {
         hero.interactPrompt = hero.hasHammer
           ? "Rusted Iron Stake — Press [T] or [8] to Pound Flat with Titan War-Hammer!"

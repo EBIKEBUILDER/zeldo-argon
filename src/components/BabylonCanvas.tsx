@@ -28,6 +28,10 @@ import {
   BIG_KEY_CHEST_POS,
   BOSS_CHEST_POS,
   BOSS_EXIT_GATE_POS,
+  CALDERA_BOSS_GATE_POS,
+  CALDERA_EXIT_GATE_POS,
+  CALDERA_FORGE_CHEST_POS,
+  CALDERA_VICTORY_CHEST_POS,
   CAVERN_CREST_KEY_POS,
   CAVERN_HAMMER_CHEST_POS,
   CAVERN_SHOVEL_CHEST_POS,
@@ -37,6 +41,9 @@ import {
   CITADEL_VICTORY_CHEST_POS,
   CRYPT_SHORTCUT_DOOR_POS,
   CustomModelAsset,
+  DESERT_CALDERA_GATE_POS,
+  DESERT_OASIS_CHEST_POS,
+  DESERT_SOLAR_KEY_POS,
   DG_SMALL_KEY_POS,
   DUNGEON_ENTRY_GATE_POS,
   DUNGEON_KEY_POS,
@@ -479,6 +486,8 @@ export default function BabylonCanvas() {
     const frontierRoot = new TransformNode("frontierRoot", scene);
     const cavernsRoot = new TransformNode("cavernsRoot", scene);
     const citadelRoot = new TransformNode("citadelRoot", scene);
+    const desertRoot = new TransformNode("desertRoot", scene);
+    const calderaRoot = new TransformNode("calderaRoot", scene);
 
     const owBaseColor = new Color3(0.24, 0.55, 0.28);
     const grBaseColor = new Color3(0.19, 0.48, 0.27);
@@ -486,6 +495,8 @@ export default function BabylonCanvas() {
     const frBaseColor = new Color3(0.18, 0.46, 0.32);
     const cvBaseColor = new Color3(0.22, 0.34, 0.46);
     const ctBaseColor = new Color3(0.16, 0.14, 0.22);
+    const dsBaseColor = new Color3(0.82, 0.66, 0.36);
+    const caBaseColor = new Color3(0.22, 0.12, 0.12);
 
     const owGroundMat = makeMat(
       "owGroundMat",
@@ -522,6 +533,18 @@ export default function BabylonCanvas() {
       new Color3(1, 1, 1),
       undefined,
       new Color3(0.12, 0.08, 0.16)
+    );
+    const dsGroundMat = makeMat(
+      "dsGroundMat",
+      new Color3(1, 1, 1),
+      undefined,
+      new Color3(0.14, 0.11, 0.06)
+    );
+    const caGroundMat = makeMat(
+      "caGroundMat",
+      new Color3(1, 1, 1),
+      undefined,
+      new Color3(0.18, 0.08, 0.06)
     );
 
     // Subdivided updatable ground meshes for real-time Terrain Brush sculpting & painting!
@@ -584,6 +607,26 @@ export default function BabylonCanvas() {
     ctGround.parent = citadelRoot;
     ctGround.isPickable = true;
     applyTerrainCellsToGroundMesh(ctGround, ctBaseColor, {});
+
+    const dsGround = MeshBuilder.CreateGround(
+      "dsGround",
+      { width: 84, height: 84, subdivisions: 42, updatable: true },
+      scene
+    );
+    dsGround.material = dsGroundMat;
+    dsGround.parent = desertRoot;
+    dsGround.isPickable = true;
+    applyTerrainCellsToGroundMesh(dsGround, dsBaseColor, {});
+
+    const caGround = MeshBuilder.CreateGround(
+      "caGround",
+      { width: 84, height: 84, subdivisions: 42, updatable: true },
+      scene
+    );
+    caGround.material = caGroundMat;
+    caGround.parent = calderaRoot;
+    caGround.isPickable = true;
+    applyTerrainCellsToGroundMesh(caGround, caBaseColor, {});
 
     // Shared Prop Materials
     const pathMat = makeMat("owPathMat", new Color3(0.75, 0.65, 0.46), undefined, new Color3(0.08, 0.08, 0.06));
@@ -2426,6 +2469,447 @@ export default function BabylonCanvas() {
         vParts.push(shard);
       }
       mergeGroupWithMaterial("mergedCtVictoryCrest", vParts, goldKeyMat, citadelVictoryCrestNode);
+    }
+
+    // =========================================================
+    // MAP 6 (DESERT): SW OASIS CHEST, EAST SOLAR KEY PEDESTAL & EAST CALDERA GATE
+    // =========================================================
+    // SW Oasis Spring Chest (`DESERT_OASIS_CHEST_POS = -23.5, -21.0`)
+    const desertOasisChestRoot = new TransformNode("desertOasisChestRoot", scene);
+    desertOasisChestRoot.parent = desertRoot;
+    desertOasisChestRoot.position.set(DESERT_OASIS_CHEST_POS.x, 0, DESERT_OASIS_CHEST_POS.z);
+
+    const dsOasisDais = MeshBuilder.CreateBox(
+      "dsOasisDais",
+      { width: 3.6, height: 0.36, depth: 2.8 },
+      scene
+    );
+    dsOasisDais.position.set(0, 0.18, 0);
+    dsOasisDais.material = dgPillarMat;
+    dsOasisDais.parent = desertOasisChestRoot;
+
+    const dsOasisBase = MeshBuilder.CreateBox(
+      "dsOasisBase",
+      { width: 1.9, height: 0.95, depth: 1.3 },
+      scene
+    );
+    dsOasisBase.position.set(0, 0.84, 0);
+    dsOasisBase.material = darkObsidianMat;
+    dsOasisBase.parent = desertOasisChestRoot;
+
+    const dsOasisTrim = MeshBuilder.CreateBox(
+      "dsOasisTrim",
+      { width: 2.0, height: 0.22, depth: 1.36 },
+      scene
+    );
+    dsOasisTrim.position.set(0, 1.22, 0);
+    dsOasisTrim.material = goldKeyMat;
+    dsOasisTrim.parent = desertOasisChestRoot;
+
+    const desertOasisChestLid = MeshBuilder.CreateCylinder(
+      "desertOasisChestLid",
+      { diameter: 1.3, height: 1.92, tessellation: 16 },
+      scene
+    );
+    desertOasisChestLid.rotation.z = Math.PI / 2;
+    desertOasisChestLid.position.set(0, 1.34, 0);
+    desertOasisChestLid.material = goldKeyMat;
+    desertOasisChestLid.parent = desertOasisChestRoot;
+
+    const desertOasisChestRing = MeshBuilder.CreateTorus(
+      "desertOasisChestRing",
+      { diameter: 3.0, thickness: 0.13, tessellation: 24 },
+      scene
+    );
+    desertOasisChestRing.position.set(0, 0.45, 0);
+    desertOasisChestRing.material = glacialIceMat;
+    desertOasisChestRing.parent = desertOasisChestRoot;
+
+    const desertOasisRelicNode = new TransformNode("desertOasisRelicNode", scene);
+    desertOasisRelicNode.parent = desertOasisChestRoot;
+    desertOasisRelicNode.position.set(0, 2.3, 0);
+    {
+      const vesselBody = MeshBuilder.CreateCylinder(
+        "dsOasisVesselBody",
+        { diameterTop: 0.36, diameterBottom: 0.56, height: 0.72, tessellation: 14 },
+        scene
+      );
+      vesselBody.material = glacialIceMat;
+      vesselBody.parent = desertOasisRelicNode;
+
+      const vesselHalo = MeshBuilder.CreateTorus(
+        "dsOasisVesselHalo",
+        { diameter: 0.9, thickness: 0.1, tessellation: 20 },
+        scene
+      );
+      vesselHalo.rotation.x = Math.PI / 2;
+      vesselHalo.material = goldKeyMat;
+      vesselHalo.parent = desertOasisRelicNode;
+    }
+
+    // East Sun-Pyramid Pedestal & Floating Solar Crest Key (`DESERT_SOLAR_KEY_POS = 22.0, 10.5`)
+    const dsKeyPedestal = MeshBuilder.CreateCylinder(
+      "dsKeyPedestal",
+      { diameterTop: 2.2, diameterBottom: 2.7, height: 0.72, tessellation: 16 },
+      scene
+    );
+    dsKeyPedestal.position.set(DESERT_SOLAR_KEY_POS.x, 0.36, DESERT_SOLAR_KEY_POS.z);
+    dsKeyPedestal.material = dgPillarMat;
+    dsKeyPedestal.parent = desertRoot;
+
+    const solarKeyBeaconRing = MeshBuilder.CreateTorus(
+      "solarKeyBeaconRing",
+      { diameter: 2.7, thickness: 0.12, tessellation: 28 },
+      scene
+    );
+    solarKeyBeaconRing.position.set(DESERT_SOLAR_KEY_POS.x, 0.14, DESERT_SOLAR_KEY_POS.z);
+    solarKeyBeaconRing.material = goldKeyMat;
+    solarKeyBeaconRing.parent = desertRoot;
+
+    const solarKeyNode = new TransformNode("solarKeyNode", scene);
+    solarKeyNode.parent = desertRoot;
+    solarKeyNode.position.set(DESERT_SOLAR_KEY_POS.x, 1.65, DESERT_SOLAR_KEY_POS.z);
+    {
+      const skParts: Mesh[] = [];
+      const skBow = MeshBuilder.CreateTorus(
+        "solarKeyBow",
+        { diameter: 0.86, thickness: 0.18, tessellation: 20 },
+        scene
+      );
+      skBow.rotation.x = Math.PI / 2;
+      skBow.position.set(0, 0.48, 0);
+      skParts.push(skBow);
+
+      const skShaft = MeshBuilder.CreateCylinder(
+        "solarKeyShaft",
+        { diameter: 0.18, height: 1.0, tessellation: 12 },
+        scene
+      );
+      skShaft.position.set(0, -0.12, 0);
+      skParts.push(skShaft);
+
+      const skBit1 = MeshBuilder.CreateBox(
+        "solarKeyBit1",
+        { width: 0.38, height: 0.15, depth: 0.14 },
+        scene
+      );
+      skBit1.position.set(0.2, -0.38, 0);
+      skParts.push(skBit1);
+
+      const skBit2 = MeshBuilder.CreateBox(
+        "solarKeyBit2",
+        { width: 0.3, height: 0.15, depth: 0.14 },
+        scene
+      );
+      skBit2.position.set(0.16, -0.16, 0);
+      skParts.push(skBit2);
+
+      mergeGroupWithMaterial("mergedSolarKey", skParts, goldKeyMat, solarKeyNode);
+    }
+
+    // East Caldera Gate (`DESERT_CALDERA_GATE_POS = 31.8, 0`)
+    const dsCalderaGateNode = new TransformNode("dsCalderaGateNode", scene);
+    dsCalderaGateNode.parent = desertRoot;
+    dsCalderaGateNode.position.set(DESERT_CALDERA_GATE_POS.x, 0, DESERT_CALDERA_GATE_POS.z);
+    dsCalderaGateNode.rotation.y = Math.PI / 2;
+    {
+      const h = 4.6;
+      const w = 6.8;
+      const parts: Mesh[] = [];
+      const barCount = 9;
+      for (let b = 0; b < barCount; b++) {
+        const bx = -3.0 + (b / (barCount - 1)) * 6.0;
+        const bar = MeshBuilder.CreateCylinder(
+          `dsCalderaGateBar-${b}`,
+          { diameter: 0.24, height: h, tessellation: 12 },
+          scene
+        );
+        bar.position.set(bx, h / 2, 0);
+        parts.push(bar);
+      }
+      const beamTop = MeshBuilder.CreateBox(
+        "dsCalderaGateBeamTop",
+        { width: w, height: 0.38, depth: 0.48 },
+        scene
+      );
+      beamTop.position.set(0, h - 0.5, 0);
+      parts.push(beamTop);
+
+      mergeGroupWithMaterial("mergedDsCalderaGateIron", parts, ironGateMat, dsCalderaGateNode);
+
+      const lockPlate = MeshBuilder.CreateBox(
+        "dsCalderaGateLockPlate",
+        { width: 1.1, height: 1.2, depth: 0.62 },
+        scene
+      );
+      lockPlate.position.set(0, h * 0.45, 0);
+      lockPlate.material = goldKeyMat;
+      lockPlate.parent = dsCalderaGateNode;
+    }
+
+    // =========================================================
+    // MAP 7 (CALDERA): NW FORGE CHEST, INNER SANCTUM GATE, VICTORY CHEST & EXIT GATE
+    // =========================================================
+    const caRunner = MeshBuilder.CreateBox(
+      "caRunner",
+      { width: 5.4, height: 0.05, depth: 68 },
+      scene
+    );
+    caRunner.position.set(0, 0.025, 0);
+    caRunner.material = glowingCrimsonMat;
+    caRunner.parent = calderaRoot;
+    caRunner.isPickable = false;
+
+    const caBossArenaRing = MeshBuilder.CreateTorus(
+      "caBossArenaRing",
+      { diameter: 16, thickness: 0.26, tessellation: 36 },
+      scene
+    );
+    caBossArenaRing.position.set(0, 0.06, 23);
+    caBossArenaRing.material = goldKeyMat;
+    caBossArenaRing.parent = calderaRoot;
+    caBossArenaRing.isPickable = false;
+
+    // NW Dragon Forge Chest (`CALDERA_FORGE_CHEST_POS = -22.5, 20.0`)
+    const calderaForgeChestRoot = new TransformNode("calderaForgeChestRoot", scene);
+    calderaForgeChestRoot.parent = calderaRoot;
+    calderaForgeChestRoot.position.set(CALDERA_FORGE_CHEST_POS.x, 0, CALDERA_FORGE_CHEST_POS.z);
+
+    const caForgeDais = MeshBuilder.CreateBox(
+      "caForgeDais",
+      { width: 3.6, height: 0.36, depth: 2.8 },
+      scene
+    );
+    caForgeDais.position.set(0, 0.18, 0);
+    caForgeDais.material = dgPillarMat;
+    caForgeDais.parent = calderaForgeChestRoot;
+
+    const caForgeBase = MeshBuilder.CreateBox(
+      "caForgeBase",
+      { width: 1.9, height: 0.95, depth: 1.3 },
+      scene
+    );
+    caForgeBase.position.set(0, 0.84, 0);
+    caForgeBase.material = glowingCrimsonMat;
+    caForgeBase.parent = calderaForgeChestRoot;
+
+    const caForgeTrim = MeshBuilder.CreateBox(
+      "caForgeTrim",
+      { width: 2.0, height: 0.22, depth: 1.36 },
+      scene
+    );
+    caForgeTrim.position.set(0, 1.22, 0);
+    caForgeTrim.material = goldKeyMat;
+    caForgeTrim.parent = calderaForgeChestRoot;
+
+    const calderaForgeChestLid = MeshBuilder.CreateCylinder(
+      "calderaForgeChestLid",
+      { diameter: 1.3, height: 1.92, tessellation: 16 },
+      scene
+    );
+    calderaForgeChestLid.rotation.z = Math.PI / 2;
+    calderaForgeChestLid.position.set(0, 1.34, 0);
+    calderaForgeChestLid.material = goldKeyMat;
+    calderaForgeChestLid.parent = calderaForgeChestRoot;
+
+    const calderaForgeChestRing = MeshBuilder.CreateTorus(
+      "calderaForgeChestRing",
+      { diameter: 3.0, thickness: 0.13, tessellation: 24 },
+      scene
+    );
+    calderaForgeChestRing.position.set(0, 0.45, 0);
+    calderaForgeChestRing.material = goldKeyMat;
+    calderaForgeChestRing.parent = calderaForgeChestRoot;
+
+    const calderaForgeRelicNode = new TransformNode("calderaForgeRelicNode", scene);
+    calderaForgeRelicNode.parent = calderaForgeChestRoot;
+    calderaForgeRelicNode.position.set(0, 2.3, 0);
+    {
+      const dragonPlate = MeshBuilder.CreateBox(
+        "caForgeDragonPlate",
+        { width: 0.72, height: 0.86, depth: 0.28 },
+        scene
+      );
+      dragonPlate.material = glowingCrimsonMat;
+      dragonPlate.parent = calderaForgeRelicNode;
+
+      const dragonTrim = MeshBuilder.CreateTorus(
+        "caForgeDragonTrim",
+        { diameter: 1.05, thickness: 0.1, tessellation: 20 },
+        scene
+      );
+      dragonTrim.rotation.x = Math.PI / 2;
+      dragonTrim.material = goldKeyMat;
+      dragonTrim.parent = calderaForgeRelicNode;
+    }
+
+    // Inner Sanctum Gate (`CALDERA_BOSS_GATE_POS = 0, 12.0`)
+    const calderaBossGateNode = new TransformNode("calderaBossGateNode", scene);
+    calderaBossGateNode.parent = calderaRoot;
+    calderaBossGateNode.position.set(CALDERA_BOSS_GATE_POS.x, 0, CALDERA_BOSS_GATE_POS.z);
+    {
+      const h = 4.6;
+      const w = 7.4;
+      const parts: Mesh[] = [];
+      const barCount = 9;
+      for (let b = 0; b < barCount; b++) {
+        const bx = -3.2 + (b / (barCount - 1)) * 6.4;
+        const bar = MeshBuilder.CreateCylinder(
+          `caBossGateBar-${b}`,
+          { diameter: 0.26, height: h, tessellation: 12 },
+          scene
+        );
+        bar.position.set(bx, h / 2, 0);
+        parts.push(bar);
+      }
+      const beamTop = MeshBuilder.CreateBox(
+        "caBossGateBeamTop",
+        { width: w, height: 0.38, depth: 0.5 },
+        scene
+      );
+      beamTop.position.set(0, h - 0.5, 0);
+      parts.push(beamTop);
+
+      const beamMid = MeshBuilder.CreateBox(
+        "caBossGateBeamMid",
+        { width: w, height: 0.34, depth: 0.45 },
+        scene
+      );
+      beamMid.position.set(0, h * 0.45, 0);
+      parts.push(beamMid);
+
+      mergeGroupWithMaterial("mergedCaBossGateIron", parts, ironGateMat, calderaBossGateNode);
+
+      const lockPlate = MeshBuilder.CreateBox(
+        "caBossGateLockPlate",
+        { width: 1.15, height: 1.25, depth: 0.65 },
+        scene
+      );
+      lockPlate.position.set(0, h * 0.45, 0);
+      lockPlate.material = goldKeyMat;
+      lockPlate.parent = calderaBossGateNode;
+    }
+
+    // North Exit Gate (`CALDERA_EXIT_GATE_POS = 0, 36.2`)
+    const calderaExitGateNode = new TransformNode("calderaExitGateNode", scene);
+    calderaExitGateNode.parent = calderaRoot;
+    calderaExitGateNode.position.set(CALDERA_EXIT_GATE_POS.x, 0, CALDERA_EXIT_GATE_POS.z);
+    {
+      const h = 4.8;
+      const w = 7.4;
+      const parts: Mesh[] = [];
+      const barCount = 9;
+      for (let b = 0; b < barCount; b++) {
+        const bx = -3.2 + (b / (barCount - 1)) * 6.4;
+        const bar = MeshBuilder.CreateCylinder(
+          `caExitGateBar-${b}`,
+          { diameter: 0.26, height: h, tessellation: 12 },
+          scene
+        );
+        bar.position.set(bx, h / 2, 0);
+        parts.push(bar);
+      }
+      const beamTop = MeshBuilder.CreateBox(
+        "caExitGateBeamTop",
+        { width: w, height: 0.4, depth: 0.52 },
+        scene
+      );
+      beamTop.position.set(0, h - 0.5, 0);
+      parts.push(beamTop);
+
+      mergeGroupWithMaterial("mergedCaExitGateIron", parts, ironGateMat, calderaExitGateNode);
+
+      const sealEmblem = MeshBuilder.CreateTorus(
+        "caExitGateSealEmblem",
+        { diameter: 1.5, thickness: 0.18, tessellation: 20 },
+        scene
+      );
+      sealEmblem.rotation.x = Math.PI / 2;
+      sealEmblem.position.set(0, h * 0.48, 0);
+      sealEmblem.material = goldKeyMat;
+      sealEmblem.parent = calderaExitGateNode;
+    }
+
+    // Dragon Peak Victory Chest (`CALDERA_VICTORY_CHEST_POS = -6.5, 32.0`)
+    const calderaVictoryChestRoot = new TransformNode("calderaVictoryChestRoot", scene);
+    calderaVictoryChestRoot.parent = calderaRoot;
+    calderaVictoryChestRoot.position.set(
+      CALDERA_VICTORY_CHEST_POS.x,
+      0,
+      CALDERA_VICTORY_CHEST_POS.z
+    );
+
+    const caVicDais = MeshBuilder.CreateBox(
+      "caVicDais",
+      { width: 4.4, height: 0.45, depth: 3.4 },
+      scene
+    );
+    caVicDais.position.set(0, 0.225, 0);
+    caVicDais.material = dgPillarMat;
+    caVicDais.parent = calderaVictoryChestRoot;
+
+    const caVicBase = MeshBuilder.CreateBox(
+      "caVicBase",
+      { width: 2.1, height: 1.05, depth: 1.4 },
+      scene
+    );
+    caVicBase.position.set(0, 0.95, 0);
+    caVicBase.material = glowingCrimsonMat;
+    caVicBase.parent = calderaVictoryChestRoot;
+
+    const caVicTrim = MeshBuilder.CreateBox(
+      "caVicTrim",
+      { width: 2.2, height: 0.25, depth: 1.48 },
+      scene
+    );
+    caVicTrim.position.set(0, 1.38, 0);
+    caVicTrim.material = goldKeyMat;
+    caVicTrim.parent = calderaVictoryChestRoot;
+
+    const calderaVictoryChestLid = MeshBuilder.CreateCylinder(
+      "calderaVictoryChestLid",
+      { diameter: 1.4, height: 2.12, tessellation: 18 },
+      scene
+    );
+    calderaVictoryChestLid.rotation.z = Math.PI / 2;
+    calderaVictoryChestLid.position.set(0, 1.5, 0);
+    calderaVictoryChestLid.material = goldKeyMat;
+    calderaVictoryChestLid.parent = calderaVictoryChestRoot;
+
+    const calderaVictorySealRing = MeshBuilder.CreateTorus(
+      "calderaVictorySealRing",
+      { diameter: 3.4, thickness: 0.16, tessellation: 28 },
+      scene
+    );
+    calderaVictorySealRing.position.set(0, 1.1, 0);
+    calderaVictorySealRing.material = glowingCrimsonMat;
+    calderaVictorySealRing.parent = calderaVictoryChestRoot;
+
+    const calderaVictoryUnsealedRing = MeshBuilder.CreateTorus(
+      "calderaVictoryUnsealedRing",
+      { diameter: 3.6, thickness: 0.14, tessellation: 32 },
+      scene
+    );
+    calderaVictoryUnsealedRing.position.set(0, 0.55, 0);
+    calderaVictoryUnsealedRing.material = goldKeyMat;
+    calderaVictoryUnsealedRing.parent = calderaVictoryChestRoot;
+
+    const calderaVictoryCrestNode = new TransformNode("calderaVictoryCrestNode", scene);
+    calderaVictoryCrestNode.parent = calderaVictoryChestRoot;
+    calderaVictoryCrestNode.position.set(0, 2.75, 0);
+    {
+      const vParts: Mesh[] = [];
+      for (let idx = 0; idx < crestOffsets.length; idx++) {
+        const pos = crestOffsets[idx];
+        const shard = MeshBuilder.CreatePolyhedron(
+          `caVictoryCrestShard-${idx}`,
+          { type: 1, size: 0.36 },
+          scene
+        );
+        shard.position.set(pos.x, pos.y, 0);
+        vParts.push(shard);
+      }
+      mergeGroupWithMaterial("mergedCaVictoryCrest", vParts, goldKeyMat, calderaVictoryCrestNode);
     }
 
     // =========================================================
@@ -5756,20 +6240,32 @@ export default function BabylonCanvas() {
         // - Map 2 (`dungeon`): IGNIS, THE ARMORED EYE-GOLEM (Crimson-Iron Plate)
         // - Map 4 (`caverns`): CRYOS, THE GLACIAL COLOSSUS (Sapphire-Cyan Ice Plate)
         // - Map 5 (`citadel`): VAELKOR, THE OBSIDIAN SOVEREIGN (Obsidian-Gold Royal Plate)
+        // - Map 6 (`desert`): SKORPIUS, THE SUN-SCORPION BEHEMOTH (Solar-Amber Chitin Plate)
+        // - Map 7 (`caldera`): PYRAX, THE MAGMA WYRM (Molten Crimson-Gold Dragon Plate)
         // =====================================================
         const isCryos = zone === "caverns";
         const isVaelkor = zone === "citadel";
+        const isSkorpius = zone === "desert";
+        const isPyrax = zone === "caldera";
         const bossArmorMat = registerMat(
           `bossMat-${id}`,
           isCryos
             ? new Color3(0.16, 0.62, 0.96)
             : isVaelkor
             ? new Color3(0.28, 0.12, 0.44)
+            : isSkorpius
+            ? new Color3(0.92, 0.62, 0.14)
+            : isPyrax
+            ? new Color3(0.96, 0.26, 0.08)
             : new Color3(0.76, 0.11, 0.19),
           isCryos
             ? new Color3(0.06, 0.24, 0.45)
             : isVaelkor
             ? new Color3(0.12, 0.04, 0.22)
+            : isSkorpius
+            ? new Color3(0.32, 0.18, 0.03)
+            : isPyrax
+            ? new Color3(0.42, 0.08, 0.02)
             : new Color3(0.24, 0.03, 0.06),
           new Color3(0.92, 0.85, 0.95),
           1.0,
@@ -5797,6 +6293,10 @@ export default function BabylonCanvas() {
             ? new Color3(0.08, 0.32, 0.64)
             : isVaelkor
             ? new Color3(0.68, 0.08, 0.18)
+            : isSkorpius
+            ? new Color3(0.14, 0.52, 0.68)
+            : isPyrax
+            ? new Color3(0.18, 0.06, 0.04)
             : new Color3(0.34, 0.07, 0.44),
           new Color3(0.11, 0.02, 0.16),
           new Color3(0.45, 0.28, 0.55),
@@ -7227,6 +7727,10 @@ export default function BabylonCanvas() {
           ? cvGround
           : snap.zone === "citadel"
           ? ctGround
+          : snap.zone === "desert"
+          ? dsGround
+          : snap.zone === "caldera"
+          ? caGround
           : dgGround;
       const pick = scene.pick(
         scene.pointerX,
@@ -7575,6 +8079,8 @@ export default function BabylonCanvas() {
         applyTerrainCellsToGroundMesh(frGround, frBaseColor, snap.terrainCells.frontier ?? {});
         applyTerrainCellsToGroundMesh(cvGround, cvBaseColor, snap.terrainCells.caverns ?? {});
         applyTerrainCellsToGroundMesh(ctGround, ctBaseColor, snap.terrainCells.citadel ?? {});
+        applyTerrainCellsToGroundMesh(dsGround, dsBaseColor, snap.terrainCells.desert ?? {});
+        applyTerrainCellsToGroundMesh(caGround, caBaseColor, snap.terrainCells.caldera ?? {});
       }
 
       // 1. Zone visibility & lighting atmosphere
@@ -7584,12 +8090,16 @@ export default function BabylonCanvas() {
       const isFrontier = snap.zone === "frontier";
       const isCaverns = snap.zone === "caverns";
       const isCitadel = snap.zone === "citadel";
+      const isDesert = snap.zone === "desert";
+      const isCaldera = snap.zone === "caldera";
       overworldRoot.setEnabled(isOverworld);
       groveRoot.setEnabled(isGrove);
       dungeonRoot.setEnabled(isDungeon);
       frontierRoot.setEnabled(isFrontier);
       cavernsRoot.setEnabled(isCaverns);
       citadelRoot.setEnabled(isCitadel);
+      desertRoot.setEnabled(isDesert);
+      calderaRoot.setEnabled(isCaldera);
 
       if (isOverworld) {
         scene.clearColor.set(0.08, 0.16, 0.11, 1);
@@ -7620,6 +8130,18 @@ export default function BabylonCanvas() {
         hemiLight.intensity = 0.64;
         dirLight.intensity = 0.54;
         sanctumPointLight.intensity = snap.flags.citadelBossDefeated ? 1.45 : 0.85;
+        heroLanternDisc.setEnabled(false);
+      } else if (isDesert) {
+        scene.clearColor.set(0.18, 0.13, 0.06, 1);
+        hemiLight.intensity = 0.96;
+        dirLight.intensity = 0.84;
+        sanctumPointLight.intensity = 0.25;
+        heroLanternDisc.setEnabled(false);
+      } else if (isCaldera) {
+        scene.clearColor.set(0.14, 0.04, 0.03, 1);
+        hemiLight.intensity = 0.72;
+        dirLight.intensity = 0.64;
+        sanctumPointLight.intensity = snap.flags.calderaBossDefeated ? 1.55 : 0.95;
         heroLanternDisc.setEnabled(false);
       } else {
         // Dark Room Visibility Cone & Lantern Illumination in Dungeon Room 4 (The Dark Archery Crypt)
@@ -8353,6 +8875,90 @@ export default function BabylonCanvas() {
       } else {
         citadelVictoryChestLid.position.set(0, 1.5, 0);
         citadelVictoryCrestNode.setEnabled(false);
+      }
+
+      // 6d. Sync Map 6 (Sunscorched Oasis) & Map 7 (Skyward Caldera) Progression Landmarks
+      if (snap.flags.desertOasisChestOpened) {
+        desertOasisChestLid.position.set(0, 1.68, 0.44);
+        desertOasisChestRing.setEnabled(false);
+        desertOasisRelicNode.setEnabled(false);
+      } else {
+        desertOasisChestLid.position.set(0, 1.34, 0);
+        desertOasisChestRing.setEnabled(true);
+        desertOasisChestRing.rotation.y = t * 2.2;
+        desertOasisRelicNode.setEnabled(true);
+        desertOasisRelicNode.rotation.y = t * 2.7;
+        desertOasisRelicNode.position.y = 2.3 + Math.sin(t * 3.4) * 0.16;
+      }
+
+      const showSolarKey = isDesert && !snap.flags.desertSolarKeyPickedUp;
+      solarKeyNode.setEnabled(showSolarKey);
+      solarKeyBeaconRing.setEnabled(showSolarKey);
+      if (showSolarKey) {
+        solarKeyNode.rotation.y = t * 2.4;
+        if (snap.boomerang?.carryingSolarKey && snap.boomerang.zone === "desert") {
+          solarKeyNode.position.set(snap.boomerang.x, 1.35, snap.boomerang.z);
+        } else if (snap.hookshot?.carryingSolarKey && snap.hookshot.zone === "desert") {
+          solarKeyNode.position.set(snap.hookshot.x, 1.35, snap.hookshot.z);
+        } else {
+          solarKeyNode.position.set(
+            DESERT_SOLAR_KEY_POS.x,
+            1.65 + Math.sin(t * 3.4) * 0.18,
+            DESERT_SOLAR_KEY_POS.z
+          );
+        }
+      }
+
+      const isDsCalderaGateOpen = Boolean(
+        snap.flags.desertCalderaGateUnlocked ||
+          snap.flags.desertSolarKeyPickedUp ||
+          snap.flags.hasSolarKey
+      );
+      const targetDsCalderaGateY = isDsCalderaGateOpen ? -4.8 : 0;
+      dsCalderaGateNode.position.y +=
+        (targetDsCalderaGateY - dsCalderaGateNode.position.y) *
+        Math.min(1, dt * (isDsCalderaGateOpen ? 6 : 26));
+
+      if (snap.flags.calderaForgeChestOpened) {
+        calderaForgeChestLid.position.set(0, 1.68, 0.44);
+        calderaForgeChestRing.setEnabled(false);
+        calderaForgeRelicNode.setEnabled(false);
+      } else {
+        calderaForgeChestLid.position.set(0, 1.34, 0);
+        calderaForgeChestRing.setEnabled(true);
+        calderaForgeChestRing.rotation.y = t * 2.2;
+        calderaForgeRelicNode.setEnabled(true);
+        calderaForgeRelicNode.rotation.y = t * 2.7;
+        calderaForgeRelicNode.position.y = 2.3 + Math.sin(t * 3.4) * 0.16;
+      }
+
+      const isCaBossGateOpen = Boolean(
+        snap.flags.calderaGateUnlocked &&
+          (!snap.flags.calderaBossAwakened || snap.flags.calderaBossDefeated)
+      );
+      const targetCaBossGateY = isCaBossGateOpen ? -4.8 : 0;
+      calderaBossGateNode.position.y +=
+        (targetCaBossGateY - calderaBossGateNode.position.y) *
+        Math.min(1, dt * (isCaBossGateOpen ? 6 : 26));
+
+      const targetCaExitGateY = snap.flags.calderaBossDefeated ? -5.0 : 0;
+      calderaExitGateNode.position.y +=
+        (targetCaExitGateY - calderaExitGateNode.position.y) *
+        Math.min(1, dt * 6);
+
+      calderaVictorySealRing.setEnabled(!snap.flags.calderaBossDefeated);
+      calderaVictorySealRing.rotation.y = t * 1.8;
+      calderaVictoryUnsealedRing.setEnabled(Boolean(snap.flags.calderaBossDefeated));
+      calderaVictoryUnsealedRing.scaling.setAll(1 + Math.sin(t * 4) * 0.06);
+
+      if (snap.flags.calderaVictoryChestOpened) {
+        calderaVictoryChestLid.position.set(0, 1.85, 0.45);
+        calderaVictoryCrestNode.setEnabled(true);
+        calderaVictoryCrestNode.rotation.y = t * 2.4;
+        calderaVictoryCrestNode.position.y = 2.85 + Math.sin(t * 3.0) * 0.18;
+      } else {
+        calderaVictoryChestLid.position.set(0, 1.5, 0);
+        calderaVictoryCrestNode.setEnabled(false);
       }
 
       // 7. Sync Enemies & Billboard Floating Health Bars

@@ -4,7 +4,9 @@ export type ZoneId =
   | "dungeon"
   | "frontier"
   | "caverns"
-  | "citadel";
+  | "citadel"
+  | "desert"
+  | "caldera";
 export type DungeonRoomId = "hub" | "west_wing" | "east_wing" | "crypt" | "sanctum";
 export type BossArmorState = "ARMORED" | "EXPOSED_EYE" | "STUNNED" | "DEAD";
 export type EnemyKind =
@@ -180,7 +182,8 @@ export interface EnemySpawn {
     | "grove_ambush"
     | "ember_guards"
     | "frontier_sappers"
-    | "cavern_wardens"; // Marks monsters belonging to quests or dungeon room ambushes
+    | "cavern_wardens"
+    | "desert_wardens"; // Marks monsters belonging to quests or dungeon room ambushes
 }
 
 export interface WorldRupeeSpawn {
@@ -411,6 +414,50 @@ export const CITADEL_VICTORY_CHEST_POS = {
 };
 
 export const CITADEL_EXIT_GATE_POS = {
+  x: 0,
+  z: 36.2,
+};
+
+// =========================================================
+// MAP 6 (SUNSCORCHED OASIS & SHIFTING SANDS) & MAP 7 (SKYWARD CALDERA & DRAGON'S PEAK) POSITIONS
+// =========================================================
+// Map 6 ("desert") South-West Mirage Reliquary Chest (Guarded by Rusted Pegs [T] & Sand Wyrm — rewards Swiftwind Pegasus Boots, Bottled Blue Elixir & +75 Rupees!)
+export const DESERT_OASIS_CHEST_POS = {
+  x: -23.5,
+  z: -21.0,
+};
+
+// Map 6 ("desert") East Sun Temple Pedestal (Rewards the Solar Crest Key after defeating Skorpius or solving the Sun Switch!)
+export const DESERT_SOLAR_KEY_POS = {
+  x: 22.0,
+  z: 10.5,
+};
+
+// Map 6 ("desert") East Sun-Gate (`31.8, 0` -> Map 7 Skyward Caldera, unlocked with Solar Crest Key!)
+export const DESERT_CALDERA_GATE_POS = {
+  x: 31.8,
+  z: 0,
+};
+
+// Map 7 ("caldera") North-West Dragon Forge Chest (Reached via Hookshot [H] & War-Hammer [T] — rewards Crimson Dragon Mail, Titan Iron Greaves & +100 Rupees!)
+export const CALDERA_FORGE_CHEST_POS = {
+  x: -22.5,
+  z: 20.0,
+};
+
+// Map 7 ("caldera") North Dragon's Peak Sanctum Gate (`0, 12.0` -> Pyrax Boss Arena!)
+export const CALDERA_BOSS_GATE_POS = {
+  x: 0,
+  z: 12.0,
+};
+
+// Map 7 ("caldera") Dragon's Peak Victory Chest & North Golden Exit Gate
+export const CALDERA_VICTORY_CHEST_POS = {
+  x: -6.5,
+  z: 32.0,
+};
+
+export const CALDERA_EXIT_GATE_POS = {
   x: 0,
   z: 36.2,
 };
@@ -647,6 +694,92 @@ export const INITIAL_PORTALS: MapPortal[] = [
     targetFacing: Math.PI,
     label: "Map 1: Whispering Crossroads (Champion's Return)",
     sublabel: "Returned to the Crossroads in triumph with the Sovereign's treasures!",
+    color: "gold",
+  },
+  // MAP 3 SE CANYON PASS <-> MAP 6 (SUNSCORCHED OASIS & SHIFTING SANDS)
+  {
+    id: "portal-fr-desert",
+    zone: "frontier",
+    x: 28.5,
+    z: -34.2,
+    radius: 2.1,
+    targetZone: "desert",
+    targetX: -28.0,
+    targetZ: 28.0,
+    targetFacing: Math.PI,
+    label: "Map 6: Sunscorched Oasis & Shifting Sands",
+    sublabel: "Grapple across the Emerald Oasis [H], pound the Mirage Stakes [T], and defeat Skorpius in the East Sun Temple for the Solar Crest Key!",
+    color: "gold",
+  },
+  {
+    id: "portal-ds-frontier",
+    zone: "desert",
+    x: -32.8,
+    z: 28.0,
+    radius: 2.1,
+    targetZone: "frontier",
+    targetX: 25.0,
+    targetZ: -31.0,
+    targetFacing: 0,
+    label: "Map 3: Elderwood Highlands (SE Canyon Pass)",
+    sublabel: "Returned North-West from the Sunscorched Oasis to the Elderwood Highlands.",
+    color: "gold",
+  },
+  // MAP 6 EAST SUN-GATE & MAP 5 EAST MAGMA BRIDGE <-> MAP 7 (SKYWARD CALDERA & DRAGON'S PEAK)
+  {
+    id: "portal-ds-caldera",
+    zone: "desert",
+    x: 34.8,
+    z: 0,
+    radius: 2.2,
+    targetZone: "caldera",
+    targetX: -30.0,
+    targetZ: 0,
+    targetFacing: Math.PI / 2,
+    label: "Map 7: Skyward Caldera & Dragon's Peak",
+    sublabel: "Grapple to the NW Dragon Forge for Crimson Mail, unseal the Peak Sanctum Gate, and conquer Pyrax, the Skyward Dragon-Titan!",
+    color: "crimson",
+  },
+  {
+    id: "portal-ca-desert",
+    zone: "caldera",
+    x: -34.8,
+    z: 0,
+    radius: 2.1,
+    targetZone: "desert",
+    targetX: 28.0,
+    targetZ: 0,
+    targetFacing: -Math.PI / 2,
+    label: "Map 6: Sunscorched Oasis (East Sun-Gate)",
+    sublabel: "Returned West from the Skyward Caldera to the Sunscorched Oasis.",
+    color: "crimson",
+  },
+  {
+    id: "portal-ct-caldera",
+    zone: "citadel",
+    x: 32.8,
+    z: 0,
+    radius: 2.1,
+    targetZone: "caldera",
+    targetX: -30.0,
+    targetZ: 0,
+    targetFacing: Math.PI / 2,
+    label: "Map 7: Skyward Caldera & Dragon's Peak",
+    sublabel: "Crossed the East Magma Bridge from the Obsidian Citadel into the Skyward Caldera!",
+    color: "crimson",
+  },
+  {
+    id: "portal-ca-overworld-victory",
+    zone: "caldera",
+    x: 0,
+    z: 34.8,
+    radius: 2.1,
+    targetZone: "overworld",
+    targetX: 0,
+    targetZ: -8.5,
+    targetFacing: Math.PI,
+    label: "Map 1: Whispering Crossroads (Dragon-Slayer's Return)",
+    sublabel: "Returned to the Crossroads in eternal glory from Dragon's Peak!",
     color: "gold",
   },
 ];
@@ -1775,6 +1908,258 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     damage: 2,
     rupeeDrop: "boss",
   },
+
+  // =========================================================
+  // MAP 6: SUNSCORCHED OASIS & SHIFTING SANDS (`zone: "desert"`)
+  // =========================================================
+  {
+    id: "ds-entry-bomber-1",
+    kind: "bomber",
+    zone: "desert",
+    x: -18.0,
+    z: 18.0,
+    hp: 5,
+    weight: 1.4,
+    aggroRadius: 11.5,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  {
+    id: "ds-oasis-wyrm",
+    kind: "burrower",
+    zone: "desert",
+    x: -20.5,
+    z: -16.5,
+    hp: 6,
+    weight: 3.5,
+    aggroRadius: 11.0,
+    speed: 4.8,
+    damage: 1,
+    rupeeDrop: "red",
+    isBounty: true,
+  },
+  {
+    id: "ds-oasis-burrower-2",
+    kind: "burrower",
+    zone: "desert",
+    x: -8.5,
+    z: 4.5,
+    hp: 5,
+    weight: 3.5,
+    aggroRadius: 10.5,
+    speed: 4.7,
+    damage: 1,
+    rupeeDrop: "blue",
+  },
+  {
+    id: "ds-dune-wraith-1",
+    kind: "wraith",
+    zone: "desert",
+    x: 4.5,
+    z: -16.0,
+    hp: 6,
+    weight: 1.2,
+    aggroRadius: 12.0,
+    speed: 5.4,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ds-dune-knight-1",
+    kind: "knight",
+    zone: "desert",
+    x: 8.5,
+    z: 2.5,
+    hp: 9,
+    weight: 12.0,
+    aggroRadius: 9.0,
+    speed: 5.1,
+    damage: 1,
+    rupeeDrop: "red",
+    shieldArmor: "wood",
+  },
+  // East Sun Temple Wardens & Boss Skorpius (`questGroup: "desert_wardens"`)
+  {
+    id: "ds-sun-warden-1",
+    kind: "bomber",
+    zone: "desert",
+    x: 18.0,
+    z: 12.5,
+    hp: 5,
+    weight: 1.4,
+    aggroRadius: 11.5,
+    speed: 5.0,
+    damage: 1,
+    rupeeDrop: "red",
+    questGroup: "desert_wardens",
+  },
+  {
+    id: "ds-sun-warden-2",
+    kind: "wraith",
+    zone: "desert",
+    x: 26.0,
+    z: 12.5,
+    hp: 6,
+    weight: 1.2,
+    aggroRadius: 11.5,
+    speed: 5.4,
+    damage: 1,
+    rupeeDrop: "red",
+    questGroup: "desert_wardens",
+  },
+  {
+    id: "ds-boss",
+    kind: "boss",
+    zone: "desert",
+    x: 22.0,
+    z: 19.5,
+    hp: 28,
+    weight: 100.0,
+    aggroRadius: 14.0,
+    speed: 4.0,
+    damage: 1,
+    rupeeDrop: "boss",
+    questGroup: "desert_wardens",
+  },
+
+  // =========================================================
+  // MAP 7: SKYWARD CALDERA & DRAGON'S PEAK (`zone: "caldera"`)
+  // =========================================================
+  {
+    id: "ca-entry-burrower-1",
+    kind: "burrower",
+    zone: "caldera",
+    x: -16.0,
+    z: -8.5,
+    hp: 6,
+    weight: 3.5,
+    aggroRadius: 11.0,
+    speed: 4.9,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ca-entry-bomber-1",
+    kind: "bomber",
+    zone: "caldera",
+    x: -14.0,
+    z: 6.5,
+    hp: 6,
+    weight: 1.4,
+    aggroRadius: 11.5,
+    speed: 5.1,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  // NW Dragon Forge Guardian (guards the Crimson Mail & Titan Greaves Chest!)
+  {
+    id: "ca-forge-knight",
+    kind: "knight",
+    zone: "caldera",
+    x: -22.5,
+    z: 16.5,
+    hp: 10,
+    weight: 12.0,
+    aggroRadius: 9.0,
+    speed: 5.2,
+    damage: 2,
+    rupeeDrop: "red",
+    shieldArmor: "ice",
+    isBounty: true,
+  },
+  {
+    id: "ca-courtyard-turret-w",
+    kind: "turret",
+    zone: "caldera",
+    x: -9.5,
+    z: 4.5,
+    hp: 6,
+    weight: 18.0,
+    aggroRadius: 16.5,
+    speed: 0,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ca-courtyard-turret-e",
+    kind: "turret",
+    zone: "caldera",
+    x: 9.5,
+    z: 4.5,
+    hp: 6,
+    weight: 18.0,
+    aggroRadius: 16.5,
+    speed: 0,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ca-courtyard-wraith-w",
+    kind: "wraith",
+    zone: "caldera",
+    x: -10.5,
+    z: -4.5,
+    hp: 6,
+    weight: 1.2,
+    aggroRadius: 12.0,
+    speed: 5.5,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ca-courtyard-wraith-e",
+    kind: "wraith",
+    zone: "caldera",
+    x: 10.5,
+    z: -4.5,
+    hp: 6,
+    weight: 1.2,
+    aggroRadius: 12.0,
+    speed: 5.5,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  // North Dragon's Peak Sanctum Boss Encounter ("Pyrax, the Skyward Dragon-Titan" + 2 Volcanic Minions)
+  {
+    id: "ca-minion-1",
+    kind: "minion",
+    zone: "caldera",
+    x: -8.5,
+    z: 21.5,
+    hp: 6,
+    weight: 2.2,
+    aggroRadius: 13.0,
+    speed: 5.9,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ca-minion-2",
+    kind: "minion",
+    zone: "caldera",
+    x: 8.5,
+    z: 21.5,
+    hp: 6,
+    weight: 2.2,
+    aggroRadius: 13.0,
+    speed: 5.9,
+    damage: 1,
+    rupeeDrop: "red",
+  },
+  {
+    id: "ca-boss",
+    kind: "boss",
+    zone: "caldera",
+    x: 0,
+    z: 26.0,
+    hp: 36,
+    weight: 100.0,
+    aggroRadius: 14.5,
+    speed: 4.2,
+    damage: 2,
+    rupeeDrop: "boss",
+  },
 ];
 
 export const INITIAL_WORLD_RUPEES: WorldRupeeSpawn[] = [
@@ -1823,6 +2208,16 @@ export const INITIAL_WORLD_RUPEES: WorldRupeeSpawn[] = [
   { id: "rupee-ct-2", zone: "citadel", x: 24.0, z: -10.5, tier: "red", value: 20 },
   { id: "rupee-ct-heart-1", zone: "citadel", x: -12.0, z: -26.0, tier: "heart", value: 2 },
   { id: "rupee-ct-heart-2", zone: "citadel", x: 12.0, z: -26.0, tier: "heart", value: 2 },
+  // Map 6 (Sunscorched Oasis) pickups
+  { id: "rupee-ds-oasis-1", zone: "desert", x: 0, z: -4.0, tier: "red", value: 20 },
+  { id: "rupee-ds-2", zone: "desert", x: -25.0, z: -16.0, tier: "red", value: 20 },
+  { id: "rupee-ds-3", zone: "desert", x: 15.0, z: -18.0, tier: "red", value: 20 },
+  { id: "rupee-ds-heart", zone: "desert", x: -12.0, z: 22.0, tier: "heart", value: 2 },
+  // Map 7 (Skyward Caldera) pickups
+  { id: "rupee-ca-1", zone: "caldera", x: -26.0, z: 18.0, tier: "red", value: 20 },
+  { id: "rupee-ca-2", zone: "caldera", x: 22.0, z: -14.0, tier: "red", value: 20 },
+  { id: "rupee-ca-heart-1", zone: "caldera", x: -12.0, z: -22.0, tier: "heart", value: 2 },
+  { id: "rupee-ca-heart-2", zone: "caldera", x: 12.0, z: -22.0, tier: "heart", value: 2 },
 ];
 
 /**
@@ -4749,6 +5144,50 @@ export function buildInitialMapProps(): MapPropInstance[] {
       x: 14.5,
       z: 8.5,
     },
+    // Map 6 (Sunscorched Oasis): Central Emerald Oasis Crossing Grapple Posts
+    {
+      id: "prop-ds-grapple-post-oasis-w",
+      name: "Emerald Oasis West Grapple Post (Hookshot [H] Across Pool!)",
+      zone: "desert",
+      x: -9.5,
+      z: -4.0,
+    },
+    {
+      id: "prop-ds-grapple-post-oasis-e",
+      name: "Emerald Oasis East Grapple Post (Hookshot [H] Across Pool!)",
+      zone: "desert",
+      x: 9.5,
+      z: -4.0,
+    },
+    // Map 7 (Skyward Caldera): NW Dragon Forge Magma Moat Grapple Posts & Boss Arena Grapple Posts
+    {
+      id: "prop-ca-grapple-post-forge-s",
+      name: "Dragon Forge South Grapple Post (Hookshot [H] Across Magma!)",
+      zone: "caldera",
+      x: -22.5,
+      z: 8.2,
+    },
+    {
+      id: "prop-ca-grapple-post-forge-n",
+      name: "Dragon Forge North Grapple Post (Hookshot [H] Across Magma!)",
+      zone: "caldera",
+      x: -22.5,
+      z: 14.8,
+    },
+    {
+      id: "prop-ca-grapple-post-arena-w",
+      name: "Dragon's Peak West Grapple Post (Hookshot [H]!)",
+      zone: "caldera",
+      x: -14.5,
+      z: 22.0,
+    },
+    {
+      id: "prop-ca-grapple-post-arena-e",
+      name: "Dragon's Peak East Grapple Post (Hookshot [H]!)",
+      zone: "caldera",
+      x: 14.5,
+      z: 22.0,
+    },
   ];
   grapplePosts.forEach((gp) => {
     props.push({
@@ -4770,7 +5209,7 @@ export function buildInitialMapProps(): MapPropInstance[] {
     });
   });
 
-  // 23. RUSTED IRON FLOOR PEGS ("rusted_peg") ACROSS MAPS 1-5 (Pound Flat into the Ground with Titan War-Hammer [T / 8]!)
+  // 23. RUSTED IRON FLOOR PEGS ("rusted_peg") ACROSS MAPS 1-7 (Pound Flat into the Ground with Titan War-Hammer [T / 8]!)
   const rustedPegs: Array<{
     id: string;
     name: string;
@@ -4846,6 +5285,50 @@ export function buildInitialMapProps(): MapPropInstance[] {
       x: 16.5,
       z: -7.2,
     },
+    // Map 6 (Sunscorched Oasis): SW Mirage Reliquary Guard Stakes (Pound with War-Hammer [T]!)
+    {
+      id: "prop-ds-oasis-peg-1",
+      name: "Mirage Reliquary Stake N (Pound with War-Hammer [T]!)",
+      zone: "desert",
+      x: -20.0,
+      z: -19.8,
+    },
+    {
+      id: "prop-ds-oasis-peg-2",
+      name: "Mirage Reliquary Stake S (Pound with War-Hammer [T]!)",
+      zone: "desert",
+      x: -20.0,
+      z: -22.2,
+    },
+    // Map 7 (Skyward Caldera): NW Dragon Forge Guard Stakes & Central Sanctum Seal Stakes!
+    {
+      id: "prop-ca-forge-peg-1",
+      name: "Dragon Forge Stake W (Pound with War-Hammer [T]!)",
+      zone: "caldera",
+      x: -23.8,
+      z: 17.2,
+    },
+    {
+      id: "prop-ca-forge-peg-2",
+      name: "Dragon Forge Stake E (Pound with War-Hammer [T]!)",
+      zone: "caldera",
+      x: -21.2,
+      z: 17.2,
+    },
+    {
+      id: "prop-ca-seal-peg-1",
+      name: "Caldera Sanctum Seal Stake W (Pound with War-Hammer [T] to Unseal Gate!)",
+      zone: "caldera",
+      x: -5.5,
+      z: 9.8,
+    },
+    {
+      id: "prop-ca-seal-peg-2",
+      name: "Caldera Sanctum Seal Stake E (Pound with War-Hammer [T] to Unseal Gate!)",
+      zone: "caldera",
+      x: 5.5,
+      z: 9.8,
+    },
   ];
   rustedPegs.forEach((rp) => {
     props.push({
@@ -4907,6 +5390,545 @@ export function buildInitialMapProps(): MapPropInstance[] {
       potReward: "red_rupee",
     }
   );
+
+  // 24. MAP 6 ("desert") — SUNSCORCHED OASIS & SHIFTING SANDS
+  // Also add framing archways in Map 3 SE Canyon Pass (28.5, -35.2) & Map 5 East Magma Bridge (34.5, 0)
+  props.push(
+    {
+      id: "prop-fr-desert-arch",
+      prefab: "temple_arch",
+      name: "SE Canyon Pass: Sunscorched Oasis Archway (Map 6)",
+      zone: "frontier",
+      x: 28.5,
+      y: 0,
+      z: -35.2,
+      rotY: 0,
+      scaleX: 0.9,
+      scaleY: 0.9,
+      scaleZ: 0.9,
+      hasCollider: false,
+      colliderWidth: 9.0,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-ct-caldera-arch",
+      prefab: "temple_arch",
+      name: "East Magma Bridge: Skyward Caldera Archway (Map 7)",
+      zone: "citadel",
+      x: 34.5,
+      y: 0,
+      z: 0,
+      rotY: -Math.PI / 2,
+      scaleX: 0.92,
+      scaleY: 0.92,
+      scaleZ: 0.92,
+      hasCollider: false,
+      colliderWidth: 9.2,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    }
+  );
+
+  const desertCliffs: Array<{
+    name: string;
+    x: number;
+    z: number;
+    w: number;
+    d: number;
+    h?: number;
+  }> = [
+    { name: "Desert South Sandstone Ridge", x: 0, z: -37.5, w: 74.0, d: 4.5, h: 1.4 },
+    { name: "Desert North Sandstone Ridge", x: 0, z: 37.5, w: 74.0, d: 4.5, h: 1.4 },
+    { name: "Desert West Ridge S", x: -37.5, z: -6.0, w: 4.5, d: 56.0, h: 1.4 },
+    { name: "Desert West Ridge N", x: -37.5, z: 34.5, w: 4.5, d: 7.0, h: 1.4 },
+    { name: "Desert East Ridge S", x: 37.5, z: -21.0, w: 4.5, d: 30.0, h: 1.4 },
+    { name: "Desert East Ridge N", x: 37.5, z: 21.0, w: 4.5, d: 30.0, h: 1.4 },
+    // SW Mirage Reliquary Sandstone Enclosure (east entrance at x = -20.0, z = -21.0 guarded by 2 Rusted Pegs!)
+    { name: "Mirage Reliquary Wall N", x: -24.5, z: -17.2, w: 10.0, d: 2.0, h: 1.2 },
+    { name: "Mirage Reliquary Wall S", x: -24.5, z: -24.8, w: 10.0, d: 2.0, h: 1.2 },
+    { name: "Mirage Reliquary Wall W", x: -28.5, z: -21.0, w: 2.0, d: 9.6, h: 1.2 },
+  ];
+  desertCliffs.forEach((dc, idx) => {
+    props.push({
+      id: `prop-ds-cliff-${idx}`,
+      prefab: "cliff_block",
+      name: dc.name,
+      zone: "desert",
+      x: dc.x,
+      y: 0,
+      z: dc.z,
+      rotY: 0,
+      scaleX: dc.w,
+      scaleY: dc.h ?? 1.35,
+      scaleZ: dc.d,
+      hasCollider: true,
+      colliderWidth: dc.w,
+      colliderDepth: dc.d,
+      colliderKind: "cliff",
+    });
+  });
+
+  // Central Emerald Oasis Pool (Grapple across with Hookshot [H]!)
+  props.push({
+    id: "prop-ds-oasis-pool",
+    prefab: "water_tile",
+    name: "Central Emerald Oasis Pool (Hookshot [H] Across!)",
+    zone: "desert",
+    x: 0,
+    y: 0,
+    z: -4.0,
+    rotY: 0,
+    scaleX: 13.0,
+    scaleY: 1,
+    scaleZ: 9.0,
+    hasCollider: true,
+    colliderWidth: 13.0,
+    colliderDepth: 9.0,
+    colliderKind: "water",
+  });
+
+  // Sandstone Walkways & Portal Archways in Map 6 ("desert")
+  const desertPaths: Array<{ name: string; x: number; z: number; w: number; d: number }> = [
+    { name: "NW Canyon Arrival Trail", x: -20.0, z: 28.0, w: 24.0, d: 4.0 },
+    { name: "West Dune Spine", x: -12.0, z: 4.0, w: 4.0, d: 48.0 },
+    { name: "East Sun-Gate Causeway", x: 14.0, z: 0, w: 42.0, d: 4.2 },
+    { name: "East Sun Temple Approach", x: 22.0, z: 14.0, w: 4.4, d: 28.0 },
+  ];
+  desertPaths.forEach((dp, idx) => {
+    props.push({
+      id: `prop-ds-path-${idx}`,
+      prefab: "path_tile",
+      name: dp.name,
+      zone: "desert",
+      x: dp.x,
+      y: 0,
+      z: dp.z,
+      rotY: 0,
+      scaleX: dp.w,
+      scaleY: 1,
+      scaleZ: dp.d,
+      hasCollider: false,
+      colliderWidth: dp.w,
+      colliderDepth: dp.d,
+      colliderKind: "wall",
+    });
+  });
+
+  props.push(
+    {
+      id: "prop-ds-nw-arch",
+      prefab: "temple_arch",
+      name: "NW Canyon Return Arch (Map 3)",
+      zone: "desert",
+      x: -34.0,
+      y: 0,
+      z: 28.0,
+      rotY: Math.PI / 2,
+      scaleX: 0.95,
+      scaleY: 0.95,
+      scaleZ: 0.95,
+      hasCollider: false,
+      colliderWidth: 9.2,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-ds-east-arch",
+      prefab: "temple_arch",
+      name: "East Sun-Gate Archway (Map 7: Skyward Caldera)",
+      zone: "desert",
+      x: 34.5,
+      y: 0,
+      z: 0,
+      rotY: -Math.PI / 2,
+      scaleX: 1.0,
+      scaleY: 1.0,
+      scaleZ: 1.0,
+      hasCollider: false,
+      colliderWidth: 9.5,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    // Sun Temple Crystal Switch & Retractable Crystal Barrier
+    {
+      id: "prop-ds-crystal-switch",
+      prefab: "crystal_switch",
+      name: "Sun Temple Crystal Orb Switch (Strike to Unseal Solar Key!)",
+      zone: "desert",
+      x: 12.5,
+      y: 0,
+      z: 6.0,
+      rotY: 0,
+      scaleX: 1.1,
+      scaleY: 1.1,
+      scaleZ: 1.1,
+      hasCollider: true,
+      colliderWidth: 1.4,
+      colliderDepth: 1.4,
+      colliderKind: "pillar",
+      switchState: "blue",
+      switchTarget: "orange",
+    },
+    {
+      id: "prop-ds-crystal-barrier",
+      prefab: "crystal_barrier",
+      name: "Sun Temple Crystal Barrier",
+      zone: "desert",
+      x: 22.0,
+      y: 0,
+      z: 6.5,
+      rotY: 0,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 4.2,
+      colliderDepth: 2.2,
+      colliderKind: "pillar",
+      switchTarget: "orange",
+    }
+  );
+
+  // Sun Temple Ruin Pillars, Oasis Trees, Soft Sand Dirt Mounds & Supply Pots
+  const desertPillars: Array<{ x: number; z: number }> = [
+    { x: 17.5, z: 10.5 },
+    { x: 26.5, z: 10.5 },
+    { x: 17.5, z: 22.5 },
+    { x: 26.5, z: 22.5 },
+  ];
+  desertPillars.forEach((dp, idx) => {
+    props.push({
+      id: `prop-ds-pillar-${idx}`,
+      prefab: "ruin_pillar",
+      name: `Sun Temple Pillar #${idx + 1}`,
+      zone: "desert",
+      x: dp.x,
+      y: 0,
+      z: dp.z,
+      rotY: 0,
+      scaleX: 1.1,
+      scaleY: 1.15,
+      scaleZ: 1.1,
+      hasCollider: true,
+      colliderWidth: 2.0,
+      colliderDepth: 2.0,
+      colliderKind: "pillar",
+    });
+  });
+
+  const desertDirtPatches: Array<{ x: number; z: number; name: string; reward: BuriedRewardKind }> = [
+    { x: -11.5, z: -11.5, name: "Oasis Bank Soft Sand (Woodland Fairy)", reward: "fairy" },
+    { x: 11.5, z: -11.5, name: "Dune Ridge Soft Sand (Red Rupee)", reward: "rupee_red" },
+    { x: 22.0, z: -14.0, name: "Sun Canyon Soft Sand (Empty Bottle)", reward: "bottle" },
+  ];
+  desertDirtPatches.forEach((dd, idx) => {
+    props.push({
+      id: `prop-ds-dirt-${idx}`,
+      prefab: "dirt_patch",
+      name: dd.name,
+      zone: "desert",
+      x: dd.x,
+      y: 0,
+      z: dd.z,
+      rotY: idx * 0.8,
+      scaleX: 1.15,
+      scaleY: 1,
+      scaleZ: 1.15,
+      hasCollider: false,
+      colliderWidth: 1.8,
+      colliderDepth: 1.8,
+      colliderKind: "ruin",
+      dug: false,
+      buriedReward: dd.reward,
+    });
+  });
+
+  const desertPots: Array<{ x: number; z: number; reward: PotRewardKind }> = [
+    { x: -25.5, z: -23.0, reward: "red_rupee" },
+    { x: 16.0, z: 25.0, reward: "arrows_10" },
+    { x: 28.0, z: 25.0, reward: "heart" },
+    { x: 28.0, z: -4.0, reward: "bombs_5" },
+  ];
+  desertPots.forEach((dp, idx) => {
+    props.push({
+      id: `prop-ds-pot-${idx}`,
+      prefab: "clay_pot",
+      name: `Oasis Supply Pot #${idx + 1}`,
+      zone: "desert",
+      x: dp.x,
+      y: 0,
+      z: dp.z,
+      rotY: idx * 0.6,
+      scaleX: 1.05,
+      scaleY: 1.05,
+      scaleZ: 1.05,
+      hasCollider: true,
+      colliderWidth: 1.0,
+      colliderDepth: 1.0,
+      colliderKind: "ruin",
+      potReward: dp.reward,
+    });
+  });
+
+  // 25. MAP 7 ("caldera") — SKYWARD CALDERA & DRAGON'S PEAK
+  const calderaWalls: Array<{ name: string; x: number; z: number; w: number; d: number }> = [
+    { name: "Caldera South Wall", x: 0, z: -36.5, w: 74.0, d: 3.0 },
+    { name: "Caldera North Wall W", x: -21.0, z: 36.5, w: 30.0, d: 3.0 },
+    { name: "Caldera North Wall E", x: 21.0, z: 36.5, w: 30.0, d: 3.0 },
+    { name: "Caldera West Wall S", x: -36.5, z: -21.0, w: 3.0, d: 30.0 },
+    { name: "Caldera West Wall N", x: -36.5, z: 21.0, w: 3.0, d: 30.0 },
+    { name: "Caldera East Wall", x: 36.5, z: 0, w: 3.0, d: 74.0 },
+    // Dragon's Peak Sanctum Dividing Wall at z = 12.0 (center doorway at x = -3.8..3.8 guarded by CALDERA_BOSS_GATE_POS)
+    { name: "Dragon's Peak Divider Wall W", x: -12.0, z: 12.0, w: 16.0, d: 2.5 },
+    { name: "Dragon's Peak Divider Wall E", x: 19.5, z: 12.0, w: 31.0, d: 2.5 },
+  ];
+  calderaWalls.forEach((cw, idx) => {
+    props.push({
+      id: `prop-ca-wall-${idx}`,
+      prefab: "stone_wall",
+      name: cw.name,
+      zone: "caldera",
+      x: cw.x,
+      y: 0,
+      z: cw.z,
+      rotY: 0,
+      scaleX: cw.w,
+      scaleY: 1.25,
+      scaleZ: cw.d,
+      hasCollider: true,
+      colliderWidth: cw.w,
+      colliderDepth: cw.d,
+      colliderKind: "wall",
+    });
+  });
+
+  // NW Dragon Forge Magma Moat (Grapple across with Hookshot [H]!)
+  props.push({
+    id: "prop-ca-forge-moat",
+    prefab: "water_tile",
+    name: "NW Dragon Forge Magma Moat (Hookshot [H] Across!)",
+    zone: "caldera",
+    x: -25.0,
+    y: 0,
+    z: 11.5,
+    rotY: 0,
+    scaleX: 16.0,
+    scaleY: 1,
+    scaleZ: 3.6,
+    hasCollider: true,
+    colliderWidth: 16.0,
+    colliderDepth: 3.6,
+    colliderKind: "water",
+  });
+
+  const calderaPaths: Array<{ name: string; x: number; z: number; w: number; d: number }> = [
+    { name: "Caldera West Basalt Causeway", x: -16.0, z: 0, w: 36.0, d: 4.5 },
+    { name: "Dragon's Peak Grand Spine", x: 0, z: 6.0, w: 5.5, d: 56.0 },
+  ];
+  calderaPaths.forEach((cp, idx) => {
+    props.push({
+      id: `prop-ca-path-${idx}`,
+      prefab: "path_tile",
+      name: cp.name,
+      zone: "caldera",
+      x: cp.x,
+      y: 0,
+      z: cp.z,
+      rotY: 0,
+      scaleX: cp.w,
+      scaleY: 1,
+      scaleZ: cp.d,
+      hasCollider: false,
+      colliderWidth: cp.w,
+      colliderDepth: cp.d,
+      colliderKind: "wall",
+    });
+  });
+
+  // Caldera Archways, Seal Eye Statues & Seal Braziers
+  props.push(
+    {
+      id: "prop-ca-west-arch",
+      prefab: "temple_arch",
+      name: "Caldera West Arrival Arch (Map 6)",
+      zone: "caldera",
+      x: -34.5,
+      y: 0,
+      z: 0,
+      rotY: Math.PI / 2,
+      scaleX: 1.0,
+      scaleY: 1.0,
+      scaleZ: 1.0,
+      hasCollider: false,
+      colliderWidth: 9.5,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-ca-sanctum-arch",
+      prefab: "temple_arch",
+      name: "Dragon's Peak Sanctum Gate Arch",
+      zone: "caldera",
+      x: 0,
+      y: 0,
+      z: 12.0,
+      rotY: 0,
+      scaleX: 1.0,
+      scaleY: 1.0,
+      scaleZ: 1.0,
+      hasCollider: false,
+      colliderWidth: 9.5,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-ca-north-arch",
+      prefab: "temple_arch",
+      name: "Dragon's Peak Victory Return Arch",
+      zone: "caldera",
+      x: 0,
+      y: 0,
+      z: 35.0,
+      rotY: 0,
+      scaleX: 1.0,
+      scaleY: 1.0,
+      scaleZ: 1.0,
+      hasCollider: false,
+      colliderWidth: 9.5,
+      colliderDepth: 3.0,
+      colliderKind: "ruin",
+    },
+    {
+      id: "prop-ca-eye-statue-w",
+      prefab: "eye_statue",
+      name: "West Dragon Eye Statue (Pierce with Bow [E]!)",
+      zone: "caldera",
+      x: -10.5,
+      y: 0,
+      z: 10.2,
+      rotY: Math.PI,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 2.0,
+      colliderDepth: 1.6,
+      colliderKind: "wall",
+      eyeActivated: false,
+    },
+    {
+      id: "prop-ca-eye-statue-e",
+      prefab: "eye_statue",
+      name: "East Dragon Eye Statue (Pierce with Bow [E]!)",
+      zone: "caldera",
+      x: 10.5,
+      y: 0,
+      z: 10.2,
+      rotY: Math.PI,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 2.0,
+      colliderDepth: 1.6,
+      colliderKind: "wall",
+      eyeActivated: false,
+    },
+    {
+      id: "prop-ca-seal-torch-w",
+      prefab: "wall_torch",
+      name: "Caldera West Seal Brazier (Light with Flame Rod [R]!)",
+      zone: "caldera",
+      x: -6.5,
+      y: 0,
+      z: 4.5,
+      rotY: 0,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 1.1,
+      colliderDepth: 1.1,
+      colliderKind: "pillar",
+      lit: false,
+      puzzleTarget: "lit",
+    },
+    {
+      id: "prop-ca-seal-torch-e",
+      prefab: "wall_torch",
+      name: "Caldera East Seal Brazier (Light with Flame Rod [R]!)",
+      zone: "caldera",
+      x: 6.5,
+      y: 0,
+      z: 4.5,
+      rotY: 0,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      scaleZ: 1.15,
+      hasCollider: true,
+      colliderWidth: 1.1,
+      colliderDepth: 1.1,
+      colliderKind: "pillar",
+      lit: false,
+      puzzleTarget: "lit",
+    }
+  );
+
+  // Dragon's Peak Boss Arena Braziers & Supply Pots
+  const calderaBossTorches: Array<{ x: number; z: number }> = [
+    { x: -16.0, z: 16.0 },
+    { x: 16.0, z: 16.0 },
+    { x: -16.0, z: 31.0 },
+    { x: 16.0, z: 31.0 },
+  ];
+  calderaBossTorches.forEach((bt, idx) => {
+    props.push({
+      id: `prop-ca-boss-torch-${idx}`,
+      prefab: "wall_torch",
+      name: `Dragon's Peak Brazier #${idx + 1}`,
+      zone: "caldera",
+      x: bt.x,
+      y: 0,
+      z: bt.z,
+      rotY: 0,
+      scaleX: 1.1,
+      scaleY: 1.1,
+      scaleZ: 1.1,
+      hasCollider: true,
+      colliderWidth: 1.1,
+      colliderDepth: 1.1,
+      colliderKind: "pillar",
+      lit: true,
+    });
+  });
+
+  const calderaBossPots: Array<{ x: number; z: number; reward: PotRewardKind }> = [
+    { x: -22.0, z: 24.0, reward: "arrows_10" },
+    { x: 22.0, z: 16.0, reward: "heart" },
+    { x: -18.0, z: 31.0, reward: "bombs_5" },
+    { x: 22.0, z: 31.0, reward: "red_rupee" },
+  ];
+  calderaBossPots.forEach((bp, idx) => {
+    props.push({
+      id: `prop-ca-boss-pot-${idx}`,
+      prefab: "clay_pot",
+      name: `Dragon's Peak Supply Pot #${idx + 1}`,
+      zone: "caldera",
+      x: bp.x,
+      y: 0,
+      z: bp.z,
+      rotY: idx * 0.6,
+      scaleX: 1.05,
+      scaleY: 1.05,
+      scaleZ: 1.05,
+      hasCollider: true,
+      colliderWidth: 1.0,
+      colliderDepth: 1.0,
+      colliderKind: "ruin",
+      potReward: bp.reward,
+    });
+  });
 
   return props;
 }
@@ -5015,6 +6037,39 @@ export function buildObstaclesFromMapProps(mapProps: MapPropInstance[]): RectObs
       kind: "gate",
       height: 4.6,
     },
+    // Map 6 ("desert") East Sun-Gate -> Map 7 ("caldera") (unlocks with Solar Crest Key!)
+    {
+      id: "ds-caldera-gate",
+      zone: "desert",
+      minX: DESERT_CALDERA_GATE_POS.x - 0.8,
+      maxX: DESERT_CALDERA_GATE_POS.x + 0.8,
+      minZ: DESERT_CALDERA_GATE_POS.z - 3.6,
+      maxZ: DESERT_CALDERA_GATE_POS.z + 3.6,
+      kind: "gate",
+      height: 4.6,
+    },
+    // Map 7 ("caldera") North Dragon's Peak Sanctum Gate -> Pyrax Boss Arena
+    {
+      id: "ca-locked-gate",
+      zone: "caldera",
+      minX: CALDERA_BOSS_GATE_POS.x - 3.6,
+      maxX: CALDERA_BOSS_GATE_POS.x + 3.6,
+      minZ: CALDERA_BOSS_GATE_POS.z - 0.8,
+      maxZ: CALDERA_BOSS_GATE_POS.z + 0.8,
+      kind: "gate",
+      height: 4.6,
+    },
+    // Map 7 ("caldera") North Victory Return Gate -> Map 1 ("overworld")
+    {
+      id: "ca-boss-exit-gate",
+      zone: "caldera",
+      minX: CALDERA_EXIT_GATE_POS.x - 3.6,
+      maxX: CALDERA_EXIT_GATE_POS.x + 3.6,
+      minZ: CALDERA_EXIT_GATE_POS.z - 0.8,
+      maxZ: CALDERA_EXIT_GATE_POS.z + 0.8,
+      kind: "gate",
+      height: 4.6,
+    },
   ];
 
   for (const prop of mapProps) {
@@ -5102,6 +6157,9 @@ export function resolveWorldCollisions(
     if (obs.id === "fr-citadel-gate" && gateUnlocked) continue;
     if (obs.id === "ct-locked-gate" && gateUnlocked) continue;
     if (obs.id === "ct-boss-exit-gate" && bossExitUnlocked) continue;
+    if (obs.id === "ds-caldera-gate" && gateUnlocked) continue;
+    if (obs.id === "ca-locked-gate" && gateUnlocked) continue;
+    if (obs.id === "ca-boss-exit-gate" && bossExitUnlocked) continue;
     const res = resolveCircleRectCollision(curX, curZ, radius, obs);
     if (res.collided) {
       hitObstacle = true;
@@ -5145,6 +6203,9 @@ export function computeEnemyChargePathLength(
       if (obs.id === "fr-citadel-gate" && gateUnlocked) continue;
       if (obs.id === "ct-locked-gate" && gateUnlocked) continue;
       if (obs.id === "ct-boss-exit-gate" && bossExitUnlocked) continue;
+      if (obs.id === "ds-caldera-gate" && gateUnlocked) continue;
+      if (obs.id === "ca-locked-gate" && gateUnlocked) continue;
+      if (obs.id === "ca-boss-exit-gate" && bossExitUnlocked) continue;
       const res = resolveCircleRectCollision(testX, testZ, radius, obs);
       if (res.collided) {
         return d;

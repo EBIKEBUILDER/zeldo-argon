@@ -392,11 +392,57 @@ export default function GameOverlay() {
 
   let currentObjective =
     "Act I (Crossroads Hub): Take the West Path to Forest Grove (Map 1B) to earn the Sanctum Entry Key!";
-  if (zone === "citadel") {
+  if (zone === "caldera") {
+    if (flags.calderaVictoryChestOpened || flags.calderaBossDefeated) {
+      currentObjective = !flags.calderaVictoryChestOpened
+        ? "Act VII (Skyward Caldera): Open the Dragon Peak Victory Chest (-6.5, 32) for +1 Heart Container & +500 Rupees!"
+        : "Grand 7-Map Campaign Complete! Step into the North Golden Return Portal (0, 34.8) to return to the Crossroads Hub!";
+    } else if (flags.calderaBossAwakened) {
+      currentObjective =
+        flags.bossState === "ARMORED"
+          ? "Boss Pyrax (Phase 1): Shatter Pyrax's Molten Carapace with War-Hammer (T), Bombs (B), or Reflect Bolts with Mirror Shield (RMB)!"
+          : flags.bossState === "EXPOSED_EYE"
+          ? "Boss Pyrax (Phase 2): Pyrax's Core Eye is OPEN! Shoot it with Bow (E), Boomerang (Q), or Reflect a Bolt (RMB)!"
+          : "Boss Pyrax (Phase 3): PYRAX IS STUNNED! Slash with Tempered Sun-Blade (Space / LMB) for 3x Damage!";
+    } else if (!flags.calderaForgeChestOpened) {
+      currentObjective =
+        "Act VII (Skyward Caldera): Pound NW Rusted Pegs with War-Hammer (T) & Grapple across the Lava Rift (H) to claim the NW Dragon Forge Chest!";
+    } else if (!flags.calderaGateUnlocked) {
+      currentObjective =
+        "Act VII (Skyward Caldera): Light all 4 Center Braziers in 8s with Flame Rod (R) OR shoot both Eye Statues with Bow (E) to unseal Dragon's Peak!";
+    } else {
+      currentObjective =
+        "Act VII (Skyward Caldera): Step North into the Dragon's Peak Arena to confront Pyrax, the Magma Wyrm!";
+    }
+  } else if (zone === "desert") {
+    if (flags.desertBossAwakened && !flags.desertBossDefeated) {
+      currentObjective =
+        flags.bossState === "ARMORED"
+          ? "Boss Skorpius (Phase 1): Crack Skorpius's Solar Chitin Shell with War-Hammer (T), Bombs (B), or Flame Rod (R)!"
+          : flags.bossState === "EXPOSED_EYE"
+          ? "Boss Skorpius (Phase 2): Skorpius's Eye is OPEN! Shoot it with Bow (E) or Boomerang (Q) to topple it!"
+          : "Boss Skorpius (Phase 3): SKORPIUS IS STUNNED! Slash with Sword (Space / LMB) for 3x Melee Damage!";
+    } else if (!flags.desertOasisChestOpened) {
+      currentObjective =
+        "Act VI (Sunscorched Oasis): Grapple across the SW Quicksand Basin with Hookshot (H) & pound the Rusted Peg (T) to open the Oasis Spring Chest!";
+    } else if (!flags.desertBossDefeated) {
+      currentObjective =
+        "Act VI (Sunscorched Oasis): Shoot both East Sun-Pyramid Eye Statues with Bow (E) or hit the Crystal Orb (Q) & defeat Skorpius (22, 16)!";
+    } else if (!flags.desertSolarKeyPickedUp) {
+      currentObjective =
+        "Skorpius Defeated (+1 Heart Container)! Claim the unsealed Solar Crest Key from the East Pyramid Pedestal (22, 10.5)!";
+    } else if (!flags.desertCalderaGateUnlocked) {
+      currentObjective =
+        "Solar Crest Key Acquired! Approach the East Caldera Gate (31.8, 0) to unlock Map 7: Skyward Caldera!";
+    } else {
+      currentObjective =
+        "East Caldera Gate Open! Step East into Map 7: Skyward Caldera & Dragon's Peak!";
+    }
+  } else if (zone === "citadel") {
     if (flags.citadelVictoryChestOpened || flags.citadelBossDefeated) {
       currentObjective = !flags.citadelVictoryChestOpened
         ? "Act V (Obsidian Citadel): Open the Sovereign's Victory Chest (-6.5, 32) for +1 Heart Container, Crimson Mail & +200 Rupees!"
-        : "Campaign Complete! Step into the North Golden Return Portal (0, 34.8) to return to the Crossroads Hub with all your relics!";
+        : "Vaelkor Defeated! Step into the NE Sun-Portal (12, 34.8) to enter Map 6: Sunscorched Oasis (or North Portal to Crossroads Hub)!";
     } else if (flags.citadelBossAwakened) {
       currentObjective =
         flags.bossState === "ARMORED"
@@ -448,7 +494,7 @@ export default function GameOverlay() {
         "Act III (Elderwood Highlands): Approach the North Glacial Gate (0, 31.8) to unlock Map 5: The Obsidian Citadel!";
     } else {
       currentObjective =
-        "North Citadel Gate Open! Step North into Map 5: The Obsidian Citadel (or travel East to Caverns / West to Crossroads)!";
+        "North Citadel Gate Open! Step North into Map 5: The Obsidian Citadel (or travel South to Map 6: Sunscorched Oasis)!";
     }
   } else if (zone === "grove") {
     currentObjective = !flags.grovePuzzleSolved
@@ -459,7 +505,7 @@ export default function GameOverlay() {
   } else if (flags.chestUnlocked || flags.bossDefeated) {
     currentObjective = !flags.eastExitBurned
       ? "Act II Complete (+1 Heart)! Take the North Sanctum Portal to Map 3 OR burn the East Vines in Map 1 with Flame Rod (R)!"
-      : "Explore Map 3 (East), Map 4: Frostpeak Caverns, and Map 5: The Obsidian Citadel!";
+      : "Explore Map 3 (Highlands), Map 4 (Caverns), Map 5 (Citadel), Map 6 (Oasis) & Map 7 (Caldera)!";
   } else if (zone === "dungeon" && dungeonRoom === "sanctum") {
     currentObjective =
       flags.bossState === "ARMORED"
@@ -521,6 +567,10 @@ export default function GameOverlay() {
       ? "Map 4: Frostpeak Caverns & Glacial Reliquary"
       : zone === "citadel"
       ? "Map 5: The Obsidian Citadel & Sovereign's Throne"
+      : zone === "desert"
+      ? "Map 6: Sunscorched Oasis & Shifting Sands"
+      : zone === "caldera"
+      ? "Map 7: Skyward Caldera & Dragon's Peak"
       : dungeonRoom === "hub"
       ? "Map 2: Sunken Sanctum — Room 1: Central Lantern Hub"
       : dungeonRoom === "west_wing"
@@ -939,12 +989,22 @@ export default function GameOverlay() {
                 !flags.cavernBossDefeated) ||
               (zone === "citadel" &&
                 flags.citadelBossAwakened &&
-                !flags.citadelBossDefeated)) &&
+                !flags.citadelBossDefeated) ||
+              (zone === "desert" &&
+                flags.desertBossAwakened &&
+                !flags.desertBossDefeated) ||
+              (zone === "caldera" &&
+                flags.calderaBossAwakened &&
+                !flags.calderaBossDefeated)) &&
             bossEnemy && (
               <div className="hud-panel boss-bar-panel">
                 <div className="boss-bar-header">
                   <span className="boss-name">
-                    {zone === "citadel"
+                    {zone === "caldera"
+                      ? "PYRAX, THE MAGMA WYRM"
+                      : zone === "desert"
+                      ? "SKORPIUS, THE SUN-SCORPION BEHEMOTH"
+                      : zone === "citadel"
                       ? "VAELKOR, THE OBSIDIAN SOVEREIGN"
                       : zone === "caverns"
                       ? "CRYOS, THE GLACIAL COLOSSUS"
@@ -956,11 +1016,15 @@ export default function GameOverlay() {
                       : flags.bossState === "EXPOSED_EYE"
                       ? `PHASE 2: EYE OPEN (${(flags.bossArmorTimer ?? 0).toFixed(1)}s) — SHOOT WITH BOW (E) OR BOOMERANG (Q)!`
                       : activeMinions > 0
-                      ? `PHASE 1: ELEMENTAL SHELL — BURN WITH FLAME ROD (R)${
-                          zone === "citadel" ? " OR REFLECT BOLTS (RMB)" : ""
+                      ? `PHASE 1: ELEMENTAL SHELL — CRACK WITH FLAME ROD (R), HAMMER (T), OR BOMBS (B)${
+                          zone === "citadel" || zone === "caldera"
+                            ? " / REFLECT BOLTS (RMB)"
+                            : ""
                         }! • +${activeMinions} Minion${activeMinions > 1 ? "s" : ""}`
-                      : `PHASE 1: ELEMENTAL SHELL — BURN WITH FLAME ROD (R)${
-                          zone === "citadel" ? " OR REFLECT BOLTS (RMB)" : ""
+                      : `PHASE 1: ELEMENTAL SHELL — CRACK WITH FLAME ROD (R), HAMMER (T), OR BOMBS (B)${
+                          zone === "citadel" || zone === "caldera"
+                            ? " / REFLECT BOLTS (RMB)"
+                            : ""
                         }!`}
                   </span>
                 </div>
@@ -996,12 +1060,14 @@ export default function GameOverlay() {
 
             <div
               className={`counter-chip ${
+                flags.hasSolarKey ||
                 flags.hasGlacialKey ||
                 flags.hasBigKey ||
                 flags.hasSmallKey ||
                 hero.hasDungeonKey
                   ? "key-chip-active"
-                  : flags.frontierCitadelGateUnlocked ||
+                  : flags.desertCalderaGateUnlocked ||
+                    flags.frontierCitadelGateUnlocked ||
                     flags.gateUnlocked ||
                     flags.eastWingDoorUnlocked ||
                     flags.dungeonEntryUnlocked
@@ -1017,6 +1083,7 @@ export default function GameOverlay() {
                   r="5"
                   fill="none"
                   stroke={
+                    flags.hasSolarKey ||
                     flags.hasGlacialKey ||
                     flags.hasBigKey ||
                     flags.hasSmallKey ||
@@ -1030,6 +1097,7 @@ export default function GameOverlay() {
                 <path
                   d="M13 12H22M18 12V16M21 12V15"
                   stroke={
+                    flags.hasSolarKey ||
                     flags.hasGlacialKey ||
                     flags.hasBigKey ||
                     flags.hasSmallKey ||
@@ -1043,7 +1111,9 @@ export default function GameOverlay() {
                 />
               </svg>
               <span className="key-status-text">
-                {flags.hasGlacialKey && !flags.frontierCitadelGateUnlocked
+                {flags.hasSolarKey && !flags.desertCalderaGateUnlocked
+                  ? "Solar Key"
+                  : flags.hasGlacialKey && !flags.frontierCitadelGateUnlocked
                   ? "Glacial Key"
                   : flags.hasBigKey
                   ? "Big Boss Key"
@@ -1051,6 +1121,8 @@ export default function GameOverlay() {
                   ? "Small Key (1)"
                   : hero.hasDungeonKey && !flags.dungeonEntryUnlocked
                   ? "Entry Key"
+                  : flags.desertCalderaGateUnlocked
+                  ? "Caldera Open"
                   : flags.frontierCitadelGateUnlocked
                   ? "Citadel Open"
                   : flags.gateUnlocked
@@ -1152,6 +1224,20 @@ export default function GameOverlay() {
                   className={`zone-switch-btn ${zone === "citadel" ? "active" : ""}`}
                 >
                   Citadel (5)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorZone("desert", true)}
+                  className={`zone-switch-btn ${zone === "desert" ? "active" : ""}`}
+                >
+                  Oasis (6)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorZone("caldera", true)}
+                  className={`zone-switch-btn ${zone === "caldera" ? "active" : ""}`}
+                >
+                  Caldera (7)
                 </button>
               </div>
             </div>
@@ -2297,6 +2383,8 @@ export default function GameOverlay() {
                     <option value="frontier">Map 3: Elderwood Highlands &amp; Quarry</option>
                     <option value="caverns">Map 4: Frostpeak Caverns &amp; Reliquary</option>
                     <option value="citadel">Map 5: The Obsidian Citadel</option>
+                    <option value="desert">Map 6: Sunscorched Oasis &amp; Shifting Sands</option>
+                    <option value="caldera">Map 7: Skyward Caldera &amp; Dragon&apos;s Peak</option>
                   </select>
                 </label>
 
