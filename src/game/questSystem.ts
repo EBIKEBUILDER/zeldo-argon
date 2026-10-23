@@ -1,4 +1,6 @@
 import {
+  ATOLL_PEARL_CHEST_POS,
+  ATOLL_VICTORY_CHEST_POS,
   BIG_KEY_CHEST_POS,
   BOSS_CHEST_POS,
   CAVERN_CREST_KEY_POS,
@@ -23,9 +25,13 @@ import {
   FRONTIER_CITADEL_GATE_POS,
   FRONTIER_HOOKSHOT_CHEST_POS,
   HEIRLOOM_NPC_POS,
+  HOLLOW_SPORE_CHEST_POS,
+  HOLLOW_VICTORY_CHEST_POS,
   LOCKED_GATE_POS,
   MapPortal,
   SECRET_STASH_POS,
+  SKY_CELESTIAL_CHEST_POS,
+  SKY_VICTORY_CHEST_POS,
   ZoneId,
 } from "@/game/worldData";
 import type { GameFlags, HeroState } from "@/store/gameStore";
@@ -87,6 +93,9 @@ export function buildQuestChronicle(params: {
   const ch5Done = Boolean(flags.citadelVictoryChestOpened || flags.citadelBossDefeated);
   const ch6Done = Boolean(flags.desertCalderaGateUnlocked || flags.desertSolarKeyPickedUp);
   const ch7Done = Boolean(flags.calderaVictoryChestOpened || flags.calderaBossDefeated);
+  const ch8Done = Boolean(flags.atollVictoryChestOpened || flags.atollBossDefeated);
+  const ch9Done = Boolean(flags.hollowVictoryChestOpened || flags.hollowBossDefeated);
+  const ch10Done = Boolean(flags.skyVictoryChestOpened || flags.skyBossDefeated);
 
   // Chapter I dynamic step
   let ch1TargetZone: ZoneId = "grove";
@@ -487,6 +496,57 @@ export function buildQuestChronicle(params: {
       targetLabel: ch7TargetLabel,
       done: ch7Done,
     },
+    {
+      id: "chapter-8",
+      category: "chapter",
+      chapterNumber: "Chapter VIII",
+      title: "Tides of the Sunken Atoll",
+      regionLabel: "Sunken Coral Atoll",
+      summary: flags.atollBossDefeated
+        ? "The turquoise waters of the Sunken Coral Atoll have grown tranquil. An unsealed tidal reliquary gleams at the northern reef."
+        : "Southeast of Crossroads Village and south of the desert dunes lies a turquoise lagoon of sunken marble ruins where an ancient sea leviathan stirs.",
+      wayfinderHint:
+        "Enter the Sunken Coral Atoll via the southeastern coast of Crossroads Village (34.8, -21) or the south shore of the Sunscorched Oasis (0, -34.5), and confront the northern reef guardian.",
+      targetZone: "atoll",
+      targetX: flags.atollBossDefeated ? ATOLL_VICTORY_CHEST_POS.x : 0.0,
+      targetZ: flags.atollBossDefeated ? ATOLL_VICTORY_CHEST_POS.z : 25.0,
+      targetLabel: flags.atollBossDefeated ? "Tidal Reef Reliquary" : "Northern Coral Sanctum",
+      done: ch8Done,
+    },
+    {
+      id: "chapter-9",
+      category: "chapter",
+      chapterNumber: "Chapter IX",
+      title: "Glow of the Mycelial Deep",
+      regionLabel: "Bioluminescent Fungal Hollow",
+      summary: flags.hollowBossDefeated
+        ? "The toxic spores of the Fungal Hollow have settled into a gentle luminescence. The northern spore reliquary stands unsealed."
+        : "Beyond the westernmost trees of Whispering Grove and the northern tunnels of Frostpeak Caverns lies a bioluminescent mushroom mire ruled by a colossal spore entity.",
+      wayfinderHint:
+        "Travel into the Bioluminescent Fungal Hollow from the west edge of Whispering Grove (-32, 6) or the north tunnel of Frostpeak Caverns (0, 34.5) and clear the northern lair.",
+      targetZone: "hollow",
+      targetX: flags.hollowBossDefeated ? HOLLOW_VICTORY_CHEST_POS.x : 0.0,
+      targetZ: flags.hollowBossDefeated ? HOLLOW_VICTORY_CHEST_POS.z : 25.0,
+      targetLabel: flags.hollowBossDefeated ? "Mycelial Hoard Chest" : "Northern Spore Lair",
+      done: ch9Done,
+    },
+    {
+      id: "chapter-10",
+      category: "chapter",
+      chapterNumber: "Chapter X",
+      title: "Citadel Above the Stars",
+      regionLabel: "Aetherial Sky-Archipelago",
+      summary: flags.skyBossDefeated
+        ? "The Starlight Observatory shines in eternal harmony across the clouds. Claim the sovereign crown chest atop the northern dais."
+        : "High above the northeastern summit of Skyward Caldera, a golden ascension portal leads to floating marble islands and the Starlight Observatory.",
+      wayfinderHint:
+        "Step into the northeastern ascension portal in Skyward Caldera (24, 33.5) to reach the Aetherial Sky-Archipelago and challenge the Starlight Archon.",
+      targetZone: "sky",
+      targetX: flags.skyBossDefeated ? SKY_VICTORY_CHEST_POS.x : 0.0,
+      targetZ: flags.skyBossDefeated ? SKY_VICTORY_CHEST_POS.z : 25.5,
+      targetLabel: flags.skyBossDefeated ? "Aetherial Crown Chest" : "Starlight Observatory Summit",
+      done: ch10Done,
+    },
   ];
 
   let foundFirstActive = false;
@@ -602,6 +662,54 @@ export function buildQuestChronicle(params: {
       targetX: CALDERA_FORGE_CHEST_POS.x,
       targetZ: CALDERA_FORGE_CHEST_POS.z,
       targetLabel: "Northwestern Magma Vault",
+    },
+    {
+      id: "rumor-atoll-pearl",
+      category: "rumor",
+      title: "The Sunken Pearl of the Southwest Reef",
+      regionLabel: "Sunken Coral Atoll (Southwest)",
+      summary: flags.atollPearlChestOpened
+        ? "You claimed the pearl reliquary on the southwestern island of the Sunken Coral Atoll."
+        : "Across a turquoise channel in the southwestern reef of the Sunken Coral Atoll, an ice-plated sentinel guards a pearl-inlaid chest.",
+      wayfinderHint:
+        "Use your Grappling Hookshot [H] to cross the southwestern lagoon channel in Sunken Coral Atoll (-23, -19.5) and defeat the guardian.",
+      status: flags.atollPearlChestOpened ? "completed" : "active",
+      targetZone: "atoll",
+      targetX: ATOLL_PEARL_CHEST_POS.x,
+      targetZ: ATOLL_PEARL_CHEST_POS.z,
+      targetLabel: "Southwestern Coral Pearl Island",
+    },
+    {
+      id: "rumor-hollow-spore",
+      category: "rumor",
+      title: "The Alchemist's Spore-Briar Cache",
+      regionLabel: "Bioluminescent Fungal Hollow (Northwest)",
+      summary: flags.hollowSporeChestOpened
+        ? "You recovered the alchemist's cache from the northwestern alcove of the Fungal Hollow."
+        : "Behind a wall of dry spore-briars in the northwestern corner of the Fungal Hollow lies an old alchemist's reliquary.",
+      wayfinderHint:
+        "Burn the northwestern briar barrier with your Flame Rod [R] in the Bioluminescent Fungal Hollow (-23.5, 19.5) and defeat the warden.",
+      status: flags.hollowSporeChestOpened ? "completed" : "active",
+      targetZone: "hollow",
+      targetX: HOLLOW_SPORE_CHEST_POS.x,
+      targetZ: HOLLOW_SPORE_CHEST_POS.z,
+      targetLabel: "Northwestern Alchemist Alcove",
+    },
+    {
+      id: "rumor-sky-celestial",
+      category: "rumor",
+      title: "The Starlight Island Reliquary",
+      regionLabel: "Aetherial Sky-Archipelago (Northwest)",
+      summary: flags.skyCelestialChestOpened
+        ? "You unlocked the northwestern starlight island reliquary high above the clouds."
+        : "A floating marble island to the northwest of the Sky-Archipelago is separated by a cloud chasm and guarded by a crowned celestial champion.",
+      wayfinderHint:
+        "Grapple across the northwestern cloud chasm [H] in the Aetherial Sky-Archipelago (-23, 18) and defeat the champion.",
+      status: flags.skyCelestialChestOpened ? "completed" : "active",
+      targetZone: "sky",
+      targetX: SKY_CELESTIAL_CHEST_POS.x,
+      targetZ: SKY_CELESTIAL_CHEST_POS.z,
+      targetLabel: "Northwestern Starlight Island",
     },
   ];
 

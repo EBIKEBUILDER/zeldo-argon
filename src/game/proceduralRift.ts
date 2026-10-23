@@ -5,11 +5,20 @@ import {
   getDefaultEnemyWeight,
   MapPortal,
   MapPropInstance,
+  PropPrefabId,
   RIFT_ENTRANCE_POS,
   WorldRupeeSpawn,
 } from "@/game/worldData";
 
-export type RiftBiomeId = "catacombs" | "glacial" | "brimstone" | "void";
+export type RiftBiomeId =
+  | "catacombs"
+  | "glacial"
+  | "brimstone"
+  | "void"
+  | "overgrown"
+  | "pharaoh"
+  | "fungal"
+  | "starlight";
 
 export type RiftRoomRole = "start" | "combat" | "elite" | "shrine" | "vault" | "boss";
 
@@ -59,6 +68,7 @@ const BIOME_CONFIGS: Record<
     floorHex: string;
     wallHex: string;
     pillarHex: string;
+    pillarPrefab: PropPrefabId;
     bossNames: string[];
     eliteAffixes: string[];
     fodderPool: EnemyKind[];
@@ -70,8 +80,9 @@ const BIOME_CONFIGS: Record<
     floorHex: "#2a1824",
     wallHex: "#4a2a3a",
     pillarHex: "#6e3b52",
+    pillarPrefab: "dungeon_pillar",
     bossNames: [
-      "MALakor, the Bloodstone Butcher",
+      "MALAKOR, the Bloodstone Butcher",
       "VORGATH, the Catacomb Dreadlord",
       "KRAXIS, the Crimson Executioner",
     ],
@@ -88,6 +99,7 @@ const BIOME_CONFIGS: Record<
     floorHex: "#18283b",
     wallHex: "#2d4c6e",
     pillarHex: "#4c7ca8",
+    pillarPrefab: "coral_pillar",
     bossNames: [
       "GLACIUS, the Rime Sovereign",
       "BOREALIS, the Hoarfrost Titan",
@@ -106,6 +118,7 @@ const BIOME_CONFIGS: Record<
     floorHex: "#2e1c16",
     wallHex: "#543226",
     pillarHex: "#7d4834",
+    pillarPrefab: "dungeon_pillar",
     bossNames: [
       "ASHMAW, the Cinder Behemoth",
       "VULKANOR, the Hellfire Forgemaster",
@@ -124,6 +137,7 @@ const BIOME_CONFIGS: Record<
     floorHex: "#1d1730",
     wallHex: "#382a5c",
     pillarHex: "#58428f",
+    pillarPrefab: "dungeon_pillar",
     bossNames: [
       "XAL'KETH, the Void Sovereign",
       "NYXAROS, the Abyssal Watcher",
@@ -137,6 +151,82 @@ const BIOME_CONFIGS: Record<
     fodderPool: ["minion", "archer", "slime"],
     heavyPool: ["knight", "turret"],
   },
+  overgrown: {
+    title: "Verdant Overgrown Sanctuary",
+    floorHex: "#193022",
+    wallHex: "#2c5439",
+    pillarHex: "#3e7850",
+    pillarPrefab: "ruin_pillar",
+    bossNames: [
+      "SYLVANUS, the Thorn Colossus",
+      "BRAMBLEMAW, the Ancient Elder-Root",
+      "VERDANTH, the Briar Warden",
+    ],
+    eliteAffixes: [
+      "Thorn-Shielded • Poison Spore",
+      "Root-Bound • Ambush Pack",
+      "Verdant • Regeneration Aura",
+    ],
+    fodderPool: ["slime", "archer", "goblin"],
+    heavyPool: ["burrower", "knight"],
+  },
+  pharaoh: {
+    title: "Sun-Bleached Pharaoh Tomb",
+    floorHex: "#382c18",
+    wallHex: "#6e542a",
+    pillarHex: "#9e7b3e",
+    pillarPrefab: "ruin_pillar",
+    bossNames: [
+      "ANUBARAK, the Dune Pharaoh",
+      "KHOPESH, the Solar Tomb-King",
+      "SCARABAEUS, the Golden Behemoth",
+    ],
+    eliteAffixes: [
+      "Sandstorm • Burrowing Wyrms",
+      "Sun-Cursed • Obelisk Sentry",
+      "Pharaoh's Wrath • Heavy Guard",
+    ],
+    fodderPool: ["burrower", "archer", "minion"],
+    heavyPool: ["turret", "knight"],
+  },
+  fungal: {
+    title: "Bioluminescent Spore-Mire",
+    floorHex: "#1c1936",
+    wallHex: "#3d2866",
+    pillarHex: "#6c3ca8",
+    pillarPrefab: "giant_mushroom",
+    bossNames: [
+      "SPORAXIS, the Mycelial Horror",
+      "MYCELION, the Bioluminescent Sovereign",
+      "GLOAMCAP, the Toxic Behemoth",
+    ],
+    eliteAffixes: [
+      "Spore-Burst • Sapper Cluster",
+      "Bioluminescent • Shock Slime Pack",
+      "Hallucinogenic • Wraith Choir",
+    ],
+    fodderPool: ["bomber", "slime", "wraith"],
+    heavyPool: ["burrower", "wraith"],
+  },
+  starlight: {
+    title: "Aetherial Starlight Sanctum",
+    floorHex: "#1c2640",
+    wallHex: "#3a4e7a",
+    pillarHex: "#ffd978",
+    pillarPrefab: "cloud_pillar",
+    bossNames: [
+      "ORION, the Astral Sentinel",
+      "ASTRAEA, the Starlight Archon",
+      "SOLARIS, the Celestial Warden",
+    ],
+    eliteAffixes: [
+      "Starlight-Aegis • Radiant Volley",
+      "Celestial • Arcane Reflection",
+      "Aether-Charged • Tempest Knights",
+    ],
+    fodderPool: ["wraith", "archer", "minion"],
+    heavyPool: ["knight", "turret"],
+  },
 };
 
 export function generateProceduralRiftFloor(
@@ -147,7 +237,16 @@ export function generateProceduralRiftFloor(
   const combinedSeed = (seed ^ Math.imul(depth, 2654435761)) >>> 0;
   const rng = createSeededRng(combinedSeed);
 
-  const biomeOrder: RiftBiomeId[] = ["catacombs", "glacial", "brimstone", "void"];
+  const biomeOrder: RiftBiomeId[] = [
+    "catacombs",
+    "glacial",
+    "brimstone",
+    "void",
+    "overgrown",
+    "pharaoh",
+    "fungal",
+    "starlight",
+  ];
   const biome = biomeOrder[Math.floor(rng() * biomeOrder.length)];
   const bCfg = BIOME_CONFIGS[biome];
 
@@ -279,7 +378,7 @@ export function generateProceduralRiftFloor(
   const pushPillar = (id: string, x: number, z: number) => {
     props.push({
       id,
-      prefab: "dungeon_pillar",
+      prefab: bCfg.pillarPrefab,
       name: "Abyssal Pillar",
       zone: "rift",
       x: Number(x.toFixed(2)),
@@ -478,12 +577,13 @@ export function generateProceduralRiftFloor(
         });
       }
 
-      // Add a soft dirt patch or explosive boulder in combat rooms
-      if (rng() > 0.4) {
+      // Add procedural interactive tool-cache props (Dirt Patch for Shovel [G], Cracked Boulder for Bombs [B] / Hammer [T], or Rusted Peg [T])
+      const cacheRoll = rng();
+      if (cacheRoll < 0.38) {
         props.push({
           id: `prop-rift-${tag}-dirt`,
           prefab: "dirt_patch",
-          name: "Abyssal Dirt Mound",
+          name: "Abyssal Dirt Mound (Dig w/ Shovel [G]!)",
           zone: "rift",
           x: cx,
           y: 0,
@@ -497,6 +597,58 @@ export function generateProceduralRiftFloor(
           colliderDepth: 0,
           colliderKind: "ruin",
           buriedReward: rng() > 0.5 ? "rupee_red" : "heart",
+        });
+      } else if (cacheRoll < 0.72) {
+        props.push({
+          id: `prop-rift-${tag}-cracked`,
+          prefab: "cracked_rock",
+          name: "Abyssal Ore Boulder (Shatter w/ Bomb [B] or War-Hammer [T]!)",
+          zone: "rift",
+          x: cx,
+          y: 0,
+          z: cz,
+          rotY: 0,
+          scaleX: 1.1,
+          scaleY: 1.1,
+          scaleZ: 1.1,
+          hasCollider: true,
+          colliderWidth: 1.8,
+          colliderDepth: 1.8,
+          colliderKind: "ruin",
+        });
+        rupees.push({
+          id: `rift-ore-rupee-${tag}`,
+          zone: "rift",
+          x: cx,
+          z: cz,
+          tier: "red",
+          value: 20,
+        });
+      } else {
+        props.push({
+          id: `prop-rift-${tag}-peg`,
+          prefab: "rusted_peg",
+          name: "Abyssal Iron Stake (Pound w/ War-Hammer [T]!)",
+          zone: "rift",
+          x: cx,
+          y: 0,
+          z: cz,
+          rotY: 0,
+          scaleX: 1.1,
+          scaleY: 1.1,
+          scaleZ: 1.1,
+          hasCollider: true,
+          colliderWidth: 1.1,
+          colliderDepth: 1.1,
+          colliderKind: "pillar",
+        });
+        rupees.push({
+          id: `rift-peg-heart-${tag}`,
+          zone: "rift",
+          x: cx,
+          z: cz + 1.2,
+          tier: "heart",
+          value: 2,
         });
       }
     } else if (role === "vault") {

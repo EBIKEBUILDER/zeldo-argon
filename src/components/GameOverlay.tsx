@@ -154,6 +154,9 @@ const PROP_PALETTE: Array<{ id: PropPrefabId; label: string; tag: string }> = [
   { id: "temple_arch", label: "Temple Archway", tag: "Structure" },
   { id: "dungeon_pillar", label: "Sanctum Pillar", tag: "Dungeon" },
   { id: "wooden_crate", label: "Supply Crate", tag: "Dungeon" },
+  { id: "coral_pillar", label: "Bioluminescent Coral Spire", tag: "Atoll" },
+  { id: "giant_mushroom", label: "Giant Glowing Mushroom Tree", tag: "Hollow" },
+  { id: "cloud_pillar", label: "Astral Marble & Cloud Column", tag: "Sky" },
 ];
 
 const MONSTER_PALETTE: Array<{
@@ -481,6 +484,12 @@ export default function GameOverlay() {
       ? "Map 6: Sunscorched Oasis & Shifting Sands"
       : zone === "caldera"
       ? "Map 7: Skyward Caldera & Dragon's Peak"
+      : zone === "atoll"
+      ? "Map 8: Sunken Coral Atoll & Leviathan Lagoon"
+      : zone === "hollow"
+      ? "Map 9: Bioluminescent Mycelial Hollow"
+      : zone === "sky"
+      ? "Map 10: Astral Sky-Isles & Starlight Pantheon"
       : zone === "rift"
       ? `Abyssal Rift • Depth ${flags.riftDepth ?? 1}: ${flags.riftBiomeTitle ?? "The Endless Labyrinth"} (Seed #${flags.riftSeed ?? 0})`
       : dungeonRoom === "hub"
@@ -1034,6 +1043,15 @@ export default function GameOverlay() {
               (zone === "caldera" &&
                 flags.calderaBossAwakened &&
                 !flags.calderaBossDefeated) ||
+              (zone === "atoll" &&
+                flags.atollBossAwakened &&
+                !flags.atollBossDefeated) ||
+              (zone === "hollow" &&
+                flags.hollowBossAwakened &&
+                !flags.hollowBossDefeated) ||
+              (zone === "sky" &&
+                flags.skyBossAwakened &&
+                !flags.skyBossDefeated) ||
               (zone === "rift" &&
                 !flags.riftBossDefeated &&
                 bossEnemy &&
@@ -1045,6 +1063,12 @@ export default function GameOverlay() {
                   <span className="boss-name">
                     {zone === "rift"
                       ? (flags.riftBossName ?? "RIFT GUARDIAN").toUpperCase()
+                      : zone === "sky"
+                      ? "ASTRAEA, THE STARLIGHT ARCHON"
+                      : zone === "hollow"
+                      ? "MYCELION, THE SPORE BEHEMOTH"
+                      : zone === "atoll"
+                      ? "NEREUS, THE ABYSSAL LEVIATHAN"
                       : zone === "caldera"
                       ? "PYRAX, THE MAGMA WYRM"
                       : zone === "desert"
@@ -1357,6 +1381,27 @@ export default function GameOverlay() {
                   className={`zone-switch-btn ${zone === "caldera" ? "active" : ""}`}
                 >
                   Caldera (7)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorZone("atoll", true)}
+                  className={`zone-switch-btn ${zone === "atoll" ? "active" : ""}`}
+                >
+                  Atoll (8)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorZone("hollow", true)}
+                  className={`zone-switch-btn ${zone === "hollow" ? "active" : ""}`}
+                >
+                  Hollow (9)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorZone("sky", true)}
+                  className={`zone-switch-btn ${zone === "sky" ? "active" : ""}`}
+                >
+                  Sky (10)
                 </button>
               </div>
             </div>
@@ -2504,6 +2549,9 @@ export default function GameOverlay() {
                     <option value="citadel">Map 5: The Obsidian Citadel</option>
                     <option value="desert">Map 6: Sunscorched Oasis &amp; Shifting Sands</option>
                     <option value="caldera">Map 7: Skyward Caldera &amp; Dragon&apos;s Peak</option>
+                    <option value="atoll">Map 8: Sunken Coral Atoll &amp; Leviathan Lagoon</option>
+                    <option value="hollow">Map 9: Bioluminescent Mycelial Hollow</option>
+                    <option value="sky">Map 10: Astral Sky-Isles &amp; Starlight Pantheon</option>
                   </select>
                 </label>
 
@@ -2995,16 +3043,16 @@ export default function GameOverlay() {
                   Regions Charted:{" "}
                   <strong>
                     {unlockAllWarpsPlaytest
-                      ? "8 / 8"
-                      : `${(flags.discoveredZones ?? ["overworld"]).length} / 8`}
+                      ? "11 / 11"
+                      : `${(flags.discoveredZones ?? ["overworld"]).length} / 11`}
                   </strong>
                 </span>
                 <span className="char-stat-badge">
                   Warp Monoliths Awakened:{" "}
                   <strong>
                     {unlockAllWarpsPlaytest
-                      ? "8 / 8"
-                      : `${(flags.awakenedWarpZones ?? ["overworld"]).length} / 8`}
+                      ? "11 / 11"
+                      : `${(flags.awakenedWarpZones ?? ["overworld"]).length} / 11`}
                   </strong>
                 </span>
                 <label
@@ -3020,7 +3068,7 @@ export default function GameOverlay() {
                     background: "rgba(20, 26, 42, 0.75)",
                     border: "1px solid rgba(120, 150, 200, 0.25)",
                   }}
-                  title="Playtest: Reveal all 8 regions and allow instant Fast-Travel to any Warp Monolith"
+                  title="Playtest: Reveal all 11 regions and allow instant Fast-Travel to any Warp Monolith"
                 >
                   <input
                     type="checkbox"
@@ -3042,19 +3090,27 @@ export default function GameOverlay() {
                 "citadel",
                 "desert",
                 "caldera",
+                "atoll",
+                "hollow",
+                "sky",
               ];
               const discoveredList = flags.discoveredZones ?? ["overworld"];
               const awakenedList = flags.awakenedWarpZones ?? ["overworld"];
               const graphEdges: Array<[ZoneId, ZoneId]> = [
                 ["grove", "overworld"],
+                ["grove", "hollow"],
                 ["overworld", "dungeon"],
                 ["overworld", "frontier"],
+                ["overworld", "atoll"],
                 ["dungeon", "frontier"],
                 ["frontier", "caverns"],
+                ["caverns", "hollow"],
                 ["frontier", "citadel"],
                 ["frontier", "desert"],
                 ["citadel", "desert"],
+                ["desert", "atoll"],
                 ["desert", "caldera"],
+                ["caldera", "sky"],
               ];
 
               const selMeta = WARP_STONE_META[selectedAtlasZone];
@@ -3075,10 +3131,10 @@ export default function GameOverlay() {
 
               return (
                 <div className="char-equip-grid" style={{ gridTemplateColumns: "1.2fr 0.9fr" }}>
-                  {/* LEFT COLUMN: 8-REGION INTERCONNECTED WORLD GRAPH */}
+                  {/* LEFT COLUMN: 11-REGION INTERCONNECTED WORLD GRAPH */}
                   <div className="char-slot-panel">
                     <div className="char-slot-header">
-                      <span className="char-slot-title">INTERCONNECTED REALM GRAPH (8 REGIONS)</span>
+                      <span className="char-slot-title">INTERCONNECTED REALM GRAPH (11 REGIONS)</span>
                       <span className="char-slot-sub">
                         Click any region to inspect its tactical radar &amp; Warp Monolith
                       </span>
@@ -3816,7 +3872,10 @@ export default function GameOverlay() {
                     <div style={{ fontWeight: 800, color: "#ffd978", marginBottom: "4px" }}>
                       ✦ Floor {riftTargetDepth} Procedural Modifiers &amp; Rewards:
                     </div>
-                    <div>• <strong>6 to 8 Interconnected Chambers</strong> on a 3×3 Dungeon Grid</div>
+                    <div>
+                      • <strong>8 Procedural Biome Themes</strong>: Shadow Catacombs, Permafrost Crypts, Brimstone Forge, Astral Void, Overgrown Briars, Sun-Pharaoh Tombs, Fungal Spore-Caverns &amp; Starlight Pantheon
+                    </div>
+                    <div>• <strong>6 to 8 Interconnected Chambers</strong> on a 3×3 Dungeon Grid with Tool Puzzle Caches</div>
                     <div>
                       • <strong>{Math.min(3, 1 + Math.floor(riftTargetDepth / 2))} Crowned Elite Champion Packs</strong>{" "}
                       with Diablo-style Affixes (2x HP, +50 Rupees &amp; +2 Monster Cores)

@@ -29,6 +29,8 @@ import {
   sampleWayfinderPolyline,
 } from "@/game/questSystem";
 import {
+  ATOLL_PEARL_CHEST_POS,
+  ATOLL_VICTORY_CHEST_POS,
   BIG_KEY_CHEST_POS,
   BOSS_CHEST_POS,
   BOSS_EXIT_GATE_POS,
@@ -61,6 +63,8 @@ import {
   FRONTIER_SAPPER_NPC_POS,
   GUIDE_NPC_POS,
   HEIRLOOM_NPC_POS,
+  HOLLOW_SPORE_CHEST_POS,
+  HOLLOW_VICTORY_CHEST_POS,
   LOCKED_GATE_POS,
   MapPortal,
   MapPropInstance,
@@ -69,6 +73,8 @@ import {
   SECRET_STASH_POS,
   SHOP_INTERACT_POS,
   SHOP_STALL_POS,
+  SKY_CELESTIAL_CHEST_POS,
+  SKY_VICTORY_CHEST_POS,
   WARP_STONE_META,
   ZoneId,
 } from "@/game/worldData";
@@ -495,6 +501,9 @@ export default function BabylonCanvas() {
     const citadelRoot = new TransformNode("citadelRoot", scene);
     const desertRoot = new TransformNode("desertRoot", scene);
     const calderaRoot = new TransformNode("calderaRoot", scene);
+    const atollRoot = new TransformNode("atollRoot", scene);
+    const hollowRoot = new TransformNode("hollowRoot", scene);
+    const skyRoot = new TransformNode("skyRoot", scene);
     const riftRoot = new TransformNode("riftRoot", scene);
 
     const owBaseColor = new Color3(0.24, 0.55, 0.28);
@@ -505,6 +514,9 @@ export default function BabylonCanvas() {
     const ctBaseColor = new Color3(0.16, 0.14, 0.22);
     const dsBaseColor = new Color3(0.82, 0.66, 0.36);
     const caBaseColor = new Color3(0.22, 0.12, 0.12);
+    const atBaseColor = new Color3(0.14, 0.56, 0.64);
+    const hlBaseColor = new Color3(0.14, 0.22, 0.34);
+    const skBaseColor = new Color3(0.74, 0.80, 0.94);
     const riftBaseColor = new Color3(0.14, 0.12, 0.22);
 
     const owGroundMat = makeMat(
@@ -554,6 +566,24 @@ export default function BabylonCanvas() {
       new Color3(1, 1, 1),
       undefined,
       new Color3(0.18, 0.08, 0.06)
+    );
+    const atGroundMat = makeMat(
+      "atGroundMat",
+      new Color3(1, 1, 1),
+      undefined,
+      new Color3(0.08, 0.18, 0.22)
+    );
+    const hlGroundMat = makeMat(
+      "hlGroundMat",
+      new Color3(1, 1, 1),
+      undefined,
+      new Color3(0.08, 0.14, 0.22)
+    );
+    const skGroundMat = makeMat(
+      "skGroundMat",
+      new Color3(1, 1, 1),
+      undefined,
+      new Color3(0.22, 0.24, 0.32)
     );
     const riftGroundMat = makeMat(
       "riftGroundMat",
@@ -642,6 +672,36 @@ export default function BabylonCanvas() {
     caGround.parent = calderaRoot;
     caGround.isPickable = true;
     applyTerrainCellsToGroundMesh(caGround, caBaseColor, {});
+
+    const atGround = MeshBuilder.CreateGround(
+      "atGround",
+      { width: 84, height: 84, subdivisions: 42, updatable: true },
+      scene
+    );
+    atGround.material = atGroundMat;
+    atGround.parent = atollRoot;
+    atGround.isPickable = true;
+    applyTerrainCellsToGroundMesh(atGround, atBaseColor, {});
+
+    const hlGround = MeshBuilder.CreateGround(
+      "hlGround",
+      { width: 84, height: 84, subdivisions: 42, updatable: true },
+      scene
+    );
+    hlGround.material = hlGroundMat;
+    hlGround.parent = hollowRoot;
+    hlGround.isPickable = true;
+    applyTerrainCellsToGroundMesh(hlGround, hlBaseColor, {});
+
+    const skGround = MeshBuilder.CreateGround(
+      "skGround",
+      { width: 84, height: 84, subdivisions: 42, updatable: true },
+      scene
+    );
+    skGround.material = skGroundMat;
+    skGround.parent = skyRoot;
+    skGround.isPickable = true;
+    applyTerrainCellsToGroundMesh(skGround, skBaseColor, {});
 
     const riftGround = MeshBuilder.CreateGround(
       "riftGround",
@@ -2938,6 +2998,160 @@ export default function BabylonCanvas() {
     }
 
     // =========================================================
+    // MAPS 8, 9 & 10 (ATOLL, HOLLOW & SKY-ISLES): 6 BIOME RELIQUARY & VICTORY CHESTS
+    // =========================================================
+    const coralPinkMat = makeMat(
+      "coralPinkMat",
+      new Color3(0.95, 0.38, 0.56),
+      new Color3(0.28, 0.08, 0.16),
+      new Color3(0.9, 0.7, 0.8),
+      1.0,
+      48
+    );
+    const coralTealMat = makeMat(
+      "coralTealMat",
+      new Color3(0.18, 0.88, 0.82),
+      new Color3(0.08, 0.42, 0.42),
+      new Color3(0.85, 1.0, 0.98),
+      1.0,
+      64
+    );
+    const fungalStemMat = makeMat(
+      "fungalStemMat",
+      new Color3(0.76, 0.82, 0.94),
+      new Color3(0.12, 0.18, 0.32),
+      new Color3(0.4, 0.45, 0.55)
+    );
+    const fungalCapMat = makeMat(
+      "fungalCapMat",
+      new Color3(0.38, 0.22, 0.88),
+      new Color3(0.22, 0.12, 0.58),
+      new Color3(0.85, 0.75, 1.0),
+      1.0,
+      64
+    );
+    const celestialMarbleMat = makeMat(
+      "celestialMarbleMat",
+      new Color3(0.94, 0.96, 1.0),
+      new Color3(0.18, 0.22, 0.34),
+      new Color3(1.0, 1.0, 1.0),
+      1.0,
+      84
+    );
+
+    const buildBiomeChestRig = (
+      id: string,
+      parent: TransformNode,
+      pos: { x: number; z: number },
+      bodyMat: StandardMaterial,
+      ringMat: StandardMaterial
+    ) => {
+      const root = new TransformNode(`biomeChestRoot-${id}`, scene);
+      root.parent = parent;
+      root.position.set(pos.x, 0, pos.z);
+
+      const dais = MeshBuilder.CreateBox(
+        `bcDais-${id}`,
+        { width: 3.6, height: 0.36, depth: 2.8 },
+        scene
+      );
+      dais.position.set(0, 0.18, 0);
+      dais.material = dgPillarMat;
+      dais.parent = root;
+
+      const base = MeshBuilder.CreateBox(
+        `bcBase-${id}`,
+        { width: 1.9, height: 0.95, depth: 1.3 },
+        scene
+      );
+      base.position.set(0, 0.84, 0);
+      base.material = bodyMat;
+      base.parent = root;
+
+      const trim = MeshBuilder.CreateBox(
+        `bcTrim-${id}`,
+        { width: 2.0, height: 0.22, depth: 1.36 },
+        scene
+      );
+      trim.position.set(0, 1.22, 0);
+      trim.material = goldKeyMat;
+      trim.parent = root;
+
+      const lid = MeshBuilder.CreateCylinder(
+        `bcLid-${id}`,
+        { diameter: 1.3, height: 1.92, tessellation: 16 },
+        scene
+      );
+      lid.rotation.z = Math.PI / 2;
+      lid.position.set(0, 1.34, 0);
+      lid.material = goldKeyMat;
+      lid.parent = root;
+
+      const ring = MeshBuilder.CreateTorus(
+        `bcRing-${id}`,
+        { diameter: 3.1, thickness: 0.14, tessellation: 26 },
+        scene
+      );
+      ring.position.set(0, 0.45, 0);
+      ring.material = ringMat;
+      ring.parent = root;
+
+      const relic = MeshBuilder.CreatePolyhedron(
+        `bcRelic-${id}`,
+        { type: 1, size: 0.42 },
+        scene
+      );
+      relic.position.set(0, 2.3, 0);
+      relic.material = goldKeyMat;
+      relic.parent = root;
+
+      return { root, lid, ring, relic };
+    };
+
+    const atollPearlChestRig = buildBiomeChestRig(
+      "atollPearl",
+      atollRoot,
+      ATOLL_PEARL_CHEST_POS,
+      coralTealMat,
+      coralPinkMat
+    );
+    const atollVictoryChestRig = buildBiomeChestRig(
+      "atollVictory",
+      atollRoot,
+      ATOLL_VICTORY_CHEST_POS,
+      coralPinkMat,
+      goldKeyMat
+    );
+    const hollowSporeChestRig = buildBiomeChestRig(
+      "hollowSpore",
+      hollowRoot,
+      HOLLOW_SPORE_CHEST_POS,
+      fungalCapMat,
+      coralTealMat
+    );
+    const hollowVictoryChestRig = buildBiomeChestRig(
+      "hollowVictory",
+      hollowRoot,
+      HOLLOW_VICTORY_CHEST_POS,
+      fungalCapMat,
+      goldKeyMat
+    );
+    const skyCelestialChestRig = buildBiomeChestRig(
+      "skyCelestial",
+      skyRoot,
+      SKY_CELESTIAL_CHEST_POS,
+      celestialMarbleMat,
+      goldKeyMat
+    );
+    const skyVictoryChestRig = buildBiomeChestRig(
+      "skyVictory",
+      skyRoot,
+      SKY_VICTORY_CHEST_POS,
+      celestialMarbleMat,
+      glowingCrimsonMat
+    );
+
+    // =========================================================
     // INDIVIDUAL PICKABLE 3D PROP PREFAB BUILDER (FOR MAP EDITOR!)
     // =========================================================
     const propRigs = new Map<string, PropVisualRig>();
@@ -3225,6 +3439,113 @@ export default function BabylonCanvas() {
         cap.position.set(0, h - 0.25, 0);
         parts.push(cap);
         mergeGroupWithMaterial(`pillarMerged-${prop.id}`, parts, mat, root, meta);
+      } else if (prop.prefab === "coral_pillar") {
+        const coralBranches: Mesh[] = [];
+        const mainReef = MeshBuilder.CreateCylinder(
+          `coralCol-${prop.id}`,
+          { diameterTop: 1.1, diameterBottom: 1.85, height: 3.8, tessellation: 12 },
+          scene
+        );
+        mainReef.position.set(0, 1.9, 0);
+        coralBranches.push(mainReef);
+
+        const armL = MeshBuilder.CreateCylinder(
+          `coralArmL-${prop.id}`,
+          { diameterTop: 0.45, diameterBottom: 0.72, height: 2.1, tessellation: 10 },
+          scene
+        );
+        armL.position.set(-0.72, 2.35, 0);
+        armL.rotation.z = 0.52;
+        coralBranches.push(armL);
+
+        const armR = MeshBuilder.CreateCylinder(
+          `coralArmR-${prop.id}`,
+          { diameterTop: 0.42, diameterBottom: 0.68, height: 1.85, tessellation: 10 },
+          scene
+        );
+        armR.position.set(0.68, 2.05, 0.25);
+        armR.rotation.z = -0.48;
+        coralBranches.push(armR);
+
+        mergeGroupWithMaterial(`coralMerged-${prop.id}`, coralBranches, coralPinkMat, root, meta);
+
+        const pearlCrown = MeshBuilder.CreateSphere(
+          `coralPearl-${prop.id}`,
+          { diameter: 0.95, segments: 12 },
+          scene
+        );
+        pearlCrown.position.set(0, 3.95, 0);
+        pearlCrown.material = coralTealMat;
+        pearlCrown.metadata = meta;
+        pearlCrown.parent = root;
+      } else if (prop.prefab === "giant_mushroom") {
+        const stalk = MeshBuilder.CreateCylinder(
+          `shroomStalk-${prop.id}`,
+          { diameterTop: 0.75, diameterBottom: 1.25, height: 3.2, tessellation: 12 },
+          scene
+        );
+        stalk.position.set(0, 1.6, 0);
+        stalk.material = fungalStemMat;
+        stalk.metadata = meta;
+        stalk.parent = root;
+
+        const cap = MeshBuilder.CreateSphere(
+          `shroomCap-${prop.id}`,
+          { diameter: 3.1, segments: 14 },
+          scene
+        );
+        cap.scaling.set(1.05, 0.48, 1.05);
+        cap.position.set(0, 3.25, 0);
+        cap.material = fungalCapMat;
+        cap.metadata = meta;
+        cap.parent = root;
+
+        const gillRing = MeshBuilder.CreateTorus(
+          `shroomRing-${prop.id}`,
+          { diameter: 2.35, thickness: 0.16, tessellation: 20 },
+          scene
+        );
+        gillRing.position.set(0, 2.95, 0);
+        gillRing.material = coralTealMat;
+        gillRing.metadata = meta;
+        gillRing.parent = root;
+      } else if (prop.prefab === "cloud_pillar") {
+        const marbleParts: Mesh[] = [];
+        const base = MeshBuilder.CreateCylinder(
+          `cloudBase-${prop.id}`,
+          { diameterTop: 2.1, diameterBottom: 2.35, height: 0.6, tessellation: 16 },
+          scene
+        );
+        base.position.set(0, 0.3, 0);
+        marbleParts.push(base);
+
+        const shaft = MeshBuilder.CreateCylinder(
+          `cloudShaft-${prop.id}`,
+          { diameterTop: 1.55, diameterBottom: 1.72, height: 4.5, tessellation: 16 },
+          scene
+        );
+        shaft.position.set(0, 2.4, 0);
+        marbleParts.push(shaft);
+
+        const cap = MeshBuilder.CreateCylinder(
+          `cloudCap-${prop.id}`,
+          { diameterTop: 2.35, diameterBottom: 1.68, height: 0.55, tessellation: 16 },
+          scene
+        );
+        cap.position.set(0, 4.55, 0);
+        marbleParts.push(cap);
+
+        mergeGroupWithMaterial(`cloudMerged-${prop.id}`, marbleParts, celestialMarbleMat, root, meta);
+
+        const halo = MeshBuilder.CreateTorus(
+          `cloudHalo-${prop.id}`,
+          { diameter: 2.3, thickness: 0.14, tessellation: 24 },
+          scene
+        );
+        halo.position.set(0, 4.95, 0);
+        halo.material = goldKeyMat;
+        halo.metadata = meta;
+        halo.parent = root;
       } else if (prop.prefab === "wall_torch") {
         const stand = MeshBuilder.CreateCylinder(
           `torchStand-${prop.id}`,
@@ -8872,6 +9193,9 @@ export default function BabylonCanvas() {
         applyTerrainCellsToGroundMesh(ctGround, ctBaseColor, snap.terrainCells.citadel ?? {});
         applyTerrainCellsToGroundMesh(dsGround, dsBaseColor, snap.terrainCells.desert ?? {});
         applyTerrainCellsToGroundMesh(caGround, caBaseColor, snap.terrainCells.caldera ?? {});
+        applyTerrainCellsToGroundMesh(atGround, atBaseColor, snap.terrainCells.atoll ?? {});
+        applyTerrainCellsToGroundMesh(hlGround, hlBaseColor, snap.terrainCells.hollow ?? {});
+        applyTerrainCellsToGroundMesh(skGround, skBaseColor, snap.terrainCells.sky ?? {});
         applyTerrainCellsToGroundMesh(riftGround, riftBaseColor, snap.terrainCells.rift ?? {});
       }
 
@@ -8884,6 +9208,9 @@ export default function BabylonCanvas() {
       const isCitadel = snap.zone === "citadel";
       const isDesert = snap.zone === "desert";
       const isCaldera = snap.zone === "caldera";
+      const isAtoll = snap.zone === "atoll";
+      const isHollow = snap.zone === "hollow";
+      const isSky = snap.zone === "sky";
       const isRift = snap.zone === "rift";
       overworldRoot.setEnabled(isOverworld);
       groveRoot.setEnabled(isGrove);
@@ -8893,6 +9220,9 @@ export default function BabylonCanvas() {
       citadelRoot.setEnabled(isCitadel);
       desertRoot.setEnabled(isDesert);
       calderaRoot.setEnabled(isCaldera);
+      atollRoot.setEnabled(isAtoll);
+      hollowRoot.setEnabled(isHollow);
+      skyRoot.setEnabled(isSky);
       riftRoot.setEnabled(isRift);
 
       if (isOverworld) {
@@ -8937,14 +9267,38 @@ export default function BabylonCanvas() {
         dirLight.intensity = 0.64;
         sanctumPointLight.intensity = snap.flags.calderaBossDefeated ? 1.55 : 0.95;
         heroLanternDisc.setEnabled(false);
+      } else if (isAtoll) {
+        scene.clearColor.set(0.04, 0.17, 0.22, 1);
+        hemiLight.intensity = 0.94;
+        dirLight.intensity = 0.82;
+        sanctumPointLight.intensity = 0.35;
+        heroLanternDisc.setEnabled(false);
+      } else if (isHollow) {
+        scene.clearColor.set(0.05, 0.07, 0.16, 1);
+        hemiLight.intensity = 0.68;
+        dirLight.intensity = 0.56;
+        sanctumPointLight.intensity = 0.85;
+        heroLanternDisc.setEnabled(false);
+      } else if (isSky) {
+        scene.clearColor.set(0.12, 0.18, 0.34, 1);
+        hemiLight.intensity = 0.98;
+        dirLight.intensity = 0.86;
+        sanctumPointLight.intensity = 0.65;
+        heroLanternDisc.setEnabled(false);
       } else if (isRift) {
         const themeId = snap.flags.riftBiome ?? "catacombs";
         if (themeId === "glacial") {
           scene.clearColor.set(0.04, 0.1, 0.18, 1);
         } else if (themeId === "brimstone") {
           scene.clearColor.set(0.14, 0.04, 0.04, 1);
-        } else if (themeId === "void") {
+        } else if (themeId === "void" || themeId === "fungal") {
           scene.clearColor.set(0.08, 0.03, 0.14, 1);
+        } else if (themeId === "overgrown") {
+          scene.clearColor.set(0.05, 0.14, 0.08, 1);
+        } else if (themeId === "pharaoh") {
+          scene.clearColor.set(0.16, 0.12, 0.05, 1);
+        } else if (themeId === "starlight") {
+          scene.clearColor.set(0.11, 0.14, 0.28, 1);
         } else {
           scene.clearColor.set(0.06, 0.04, 0.11, 1);
         }
@@ -9984,6 +10338,29 @@ export default function BabylonCanvas() {
         calderaVictoryChestLid.position.set(0, 1.5, 0);
         calderaVictoryCrestNode.setEnabled(false);
       }
+
+      const syncBiomeChestRig = (
+        rig: { lid: Mesh; ring: Mesh; relic: Mesh },
+        opened: boolean
+      ) => {
+        rig.ring.rotation.y = t * 1.9;
+        rig.ring.scaling.setAll(1 + Math.sin(t * 3.8) * 0.05);
+        if (opened) {
+          rig.lid.position.set(0, 1.65, 0.42);
+          rig.relic.setEnabled(true);
+          rig.relic.rotation.y = t * 2.4;
+          rig.relic.position.y = 2.35 + Math.sin(t * 3.0) * 0.16;
+        } else {
+          rig.lid.position.set(0, 1.34, 0);
+          rig.relic.setEnabled(false);
+        }
+      };
+      syncBiomeChestRig(atollPearlChestRig, Boolean(snap.flags.atollPearlChestOpened));
+      syncBiomeChestRig(atollVictoryChestRig, Boolean(snap.flags.atollVictoryChestOpened));
+      syncBiomeChestRig(hollowSporeChestRig, Boolean(snap.flags.hollowSporeChestOpened));
+      syncBiomeChestRig(hollowVictoryChestRig, Boolean(snap.flags.hollowVictoryChestOpened));
+      syncBiomeChestRig(skyCelestialChestRig, Boolean(snap.flags.skyCelestialChestOpened));
+      syncBiomeChestRig(skyVictoryChestRig, Boolean(snap.flags.skyVictoryChestOpened));
 
       // 7. Sync Enemies & Billboard Floating Health Bars
       const activeEnemyIds = new Set<string>();

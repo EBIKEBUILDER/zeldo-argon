@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import {
+  ATOLL_PEARL_CHEST_POS,
+  ATOLL_VICTORY_CHEST_POS,
   BIG_KEY_CHEST_POS,
   BOSS_CHEST_POS,
   BOSS_EXIT_GATE_POS,
@@ -44,6 +46,8 @@ import {
   GUIDE_NPC_POS,
   HEIRLOOM_NPC_POS,
   HERO_SPAWN,
+  HOLLOW_SPORE_CHEST_POS,
+  HOLLOW_VICTORY_CHEST_POS,
   INITIAL_ENEMIES,
   INITIAL_PORTALS,
   INITIAL_WORLD_RUPEES,
@@ -58,6 +62,8 @@ import {
   RupeeTier,
   SECRET_STASH_POS,
   SHOP_INTERACT_POS,
+  SKY_CELESTIAL_CHEST_POS,
+  SKY_VICTORY_CHEST_POS,
   WARP_STONE_META,
   ZoneId,
 } from "@/game/worldData";
@@ -540,6 +546,18 @@ export interface GameFlags {
   calderaBossDefeated?: boolean;
   calderaBossHeartAwarded?: boolean;
   calderaVictoryChestOpened?: boolean;
+  atollPearlChestOpened?: boolean;
+  atollBossAwakened?: boolean;
+  atollBossDefeated?: boolean;
+  atollVictoryChestOpened?: boolean;
+  hollowSporeChestOpened?: boolean;
+  hollowBossAwakened?: boolean;
+  hollowBossDefeated?: boolean;
+  hollowVictoryChestOpened?: boolean;
+  skyCelestialChestOpened?: boolean;
+  skyBossAwakened?: boolean;
+  skyBossDefeated?: boolean;
+  skyVictoryChestOpened?: boolean;
   discoveredZones?: ZoneId[];
   awakenedWarpZones?: ZoneId[];
   // Diablo-Style Endless Procedural Rift State
@@ -1065,6 +1083,9 @@ function createInitialState(
       citadel: {},
       desert: {},
       caldera: {},
+      atoll: {},
+      hollow: {},
+      sky: {},
       rift: {},
     },
     terrainRevision: 1,
@@ -1148,6 +1169,18 @@ function createInitialState(
       calderaBossDefeated: false,
       calderaBossHeartAwarded: false,
       calderaVictoryChestOpened: false,
+      atollPearlChestOpened: false,
+      atollBossAwakened: false,
+      atollBossDefeated: false,
+      atollVictoryChestOpened: false,
+      hollowSporeChestOpened: false,
+      hollowBossAwakened: false,
+      hollowBossDefeated: false,
+      hollowVictoryChestOpened: false,
+      skyCelestialChestOpened: false,
+      skyBossAwakened: false,
+      skyBossDefeated: false,
+      skyVictoryChestOpened: false,
       discoveredZones: ["overworld"],
       awakenedWarpZones: ["overworld"],
     },
@@ -1194,7 +1227,7 @@ function createInitialState(
   };
 }
 
-const MAP_STORAGE_KEY = "zeldo-authored-map-v13";
+const MAP_STORAGE_KEY = "zeldo-authored-map-v14";
 
 function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   if (p.prefab === "dirt_patch") {
@@ -1301,6 +1334,10 @@ function persistAuthoredMapToStorage(state: {
         citadel: state.terrainCells.citadel ?? {},
         desert: state.terrainCells.desert ?? {},
         caldera: state.terrainCells.caldera ?? {},
+        atoll: state.terrainCells.atoll ?? {},
+        hollow: state.terrainCells.hollow ?? {},
+        sky: state.terrainCells.sky ?? {},
+        rift: state.terrainCells.rift ?? {},
       },
     };
     window.localStorage.setItem(MAP_STORAGE_KEY, JSON.stringify(payload));
@@ -1348,6 +1385,9 @@ const DEFAULT_PROP_META: Record<
   boulder: { label: "Mossy Boulder", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
   ruin_pillar: { label: "Watchtower Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   dungeon_pillar: { label: "Sanctum Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
+  coral_pillar: { label: "Coral Reef Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
+  giant_mushroom: { label: "Giant Bioluminescent Mushroom", hasCollider: true, w: 2.2, d: 2.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "tree" },
+  cloud_pillar: { label: "Celestial Marble Column", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   wall_torch: { label: "Flame Brazier", hasCollider: false, w: 0.9, d: 0.9, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   wooden_crate: { label: "Supply Crate", hasCollider: true, w: 1.4, d: 1.4, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "wall" },
   stone_wall: { label: "Stone Wall Block", hasCollider: true, w: 4.0, d: 2.0, scaleX: 4.0, scaleY: 3.6, scaleZ: 2.0, kind: "wall" },
@@ -2874,6 +2914,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
         calderaBossDefeated: false,
         calderaBossHeartAwarded: false,
         calderaVictoryChestOpened: false,
+        atollPearlChestOpened: false,
+        atollBossAwakened: false,
+        atollBossDefeated: false,
+        atollVictoryChestOpened: false,
+        hollowSporeChestOpened: false,
+        hollowBossAwakened: false,
+        hollowBossDefeated: false,
+        hollowVictoryChestOpened: false,
+        skyCelestialChestOpened: false,
+        skyBossAwakened: false,
+        skyBossDefeated: false,
+        skyVictoryChestOpened: false,
       },
       hero: {
         ...state.hero,
@@ -2953,6 +3005,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           citadel: data.terrainCells?.citadel ?? state.terrainCells.citadel ?? {},
           desert: data.terrainCells?.desert ?? state.terrainCells.desert ?? {},
           caldera: data.terrainCells?.caldera ?? state.terrainCells.caldera ?? {},
+          atoll: data.terrainCells?.atoll ?? state.terrainCells.atoll ?? {},
+          hollow: data.terrainCells?.hollow ?? state.terrainCells.hollow ?? {},
+          sky: data.terrainCells?.sky ?? state.terrainCells.sky ?? {},
           rift: data.terrainCells?.rift ?? state.terrainCells.rift ?? {},
         };
         const nextState = {
@@ -3004,6 +3059,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           citadel: data.terrainCells?.citadel ?? {},
           desert: data.terrainCells?.desert ?? {},
           caldera: data.terrainCells?.caldera ?? {},
+          atoll: data.terrainCells?.atoll ?? {},
+          hollow: data.terrainCells?.hollow ?? {},
+          sky: data.terrainCells?.sky ?? {},
           rift: data.terrainCells?.rift ?? {},
         },
         terrainRevision: state.terrainRevision + 1,
@@ -3037,6 +3095,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         citadel: {},
         desert: {},
         caldera: {},
+        atoll: {},
+        hollow: {},
+        sky: {},
         rift: {},
       },
       terrainRevision: state.terrainRevision + 1,
@@ -6505,6 +6566,266 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // 4j. Maps 8, 9 & 10 (Sunken Coral Atoll, Bioluminescent Mycelial Hollow & Astral Sky-Isles):
+    if (zone === "atoll") {
+      if (!flags.atollPearlChestOpened) {
+        const distToPearlChest = Math.hypot(
+          hero.x - ATOLL_PEARL_CHEST_POS.x,
+          hero.z - ATOLL_PEARL_CHEST_POS.z
+        );
+        const pearlGuard = enemies.find(
+          (e) => e.id === "at-pearl-guard" && e.state !== "dead"
+        );
+        if (distToPearlChest < 2.65) {
+          if (!pearlGuard) {
+            flags.atollPearlChestOpened = true;
+            if (!hero.unlockedTunics.includes("blue_mail")) {
+              hero.unlockedTunics = [...hero.unlockedTunics, "blue_mail"];
+              if (hero.equippedTunic === "green_tunic") {
+                hero.equippedTunic = "blue_mail";
+              }
+            }
+            hero.monsterCores = (hero.monsterCores ?? 0) + 2;
+            hero.rupees += 100;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Claimed the Sunken Pearl Reliquary! (+2 Monster Cores, Sapphire Mail & +100 Rupees!)",
+              "Cross the North Coral Bridge or grapple the Anchor Posts [H] to challenge Nereus, the Abyssal Leviathan!",
+              6.5
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Sunken Pearl Reliquary is Guarded!",
+              "Vanquish the SW Coral Sentinel Knight to unseal the Sunken Pearl Chest!",
+              4.0
+            );
+          }
+        }
+      }
+
+      if (
+        !flags.atollBossAwakened &&
+        !flags.atollBossDefeated &&
+        hero.z > 12.5
+      ) {
+        flags.atollBossAwakened = true;
+        flags.bossState = "ARMORED";
+        flags.bossArmorTimer = 0;
+        soundEngine.playBossRoar();
+        pushBanner(
+          "Nereus, the Abyssal Leviathan Awakens!",
+          "Phase 1: Crack his Coral Carapace [R / B / T] • Phase 2: Pierce Open Eye [E / Q / H] • Phase 3: Slash with Sword [Space]!",
+          6.5
+        );
+      }
+
+      if (!flags.atollVictoryChestOpened) {
+        const distToAtollVictory = Math.hypot(
+          hero.x - ATOLL_VICTORY_CHEST_POS.x,
+          hero.z - ATOLL_VICTORY_CHEST_POS.z
+        );
+        if (distToAtollVictory < 2.6) {
+          if (flags.atollBossDefeated) {
+            flags.atollVictoryChestOpened = true;
+            hero.maxHp += 2;
+            hero.hp = hero.maxHp;
+            hero.mp = hero.maxMp;
+            hero.damageFractionAcc = 0;
+            hero.monsterCores = (hero.monsterCores ?? 0) + 3;
+            hero.rupees += 150;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Claimed the Leviathan's Tidal Hoard! (+1 Heart Container, +3 Cores & +150 Rupees!)",
+              "You conquered the Sunken Coral Atoll! Use the Warp Monolith [M] or Coastal Portals to continue your odyssey!",
+              7.0
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Leviathan's Tidal Hoard is Sealed!",
+              "Vanquish Nereus, the Abyssal Leviathan, in the North Lagoon Arena to unseal this chest!",
+              4.0
+            );
+          }
+        }
+      }
+    }
+
+    if (zone === "hollow") {
+      if (!flags.hollowSporeChestOpened) {
+        const distToSporeChest = Math.hypot(
+          hero.x - HOLLOW_SPORE_CHEST_POS.x,
+          hero.z - HOLLOW_SPORE_CHEST_POS.z
+        );
+        const sporeGuard = enemies.find(
+          (e) => e.id === "hl-spore-guard" && e.state !== "dead"
+        );
+        if (distToSporeChest < 2.65) {
+          if (!sporeGuard) {
+            flags.hollowSporeChestOpened = true;
+            const emptyIdx = hero.bottles.findIndex((b) => b === "empty");
+            if (emptyIdx !== -1) {
+              hero.bottles[emptyIdx] = "fairy";
+            } else if (hero.bottles.length < 6) {
+              hero.bottles = [...hero.bottles, "fairy"];
+            }
+            hero.monsterCores = (hero.monsterCores ?? 0) + 2;
+            hero.rupees += 120;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Claimed the Luminous Spore Reliquary! (+2 Monster Cores, Bottled Fairy & +120 Rupees!)",
+              "Head North into the Fungal Overlord's Grotto to challenge Mycelion, the Spore Behemoth!",
+              6.5
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Luminous Spore Reliquary is Guarded!",
+              "Vanquish the NW Mycelial Sentinel Knight to unseal the Spore Reliquary Chest!",
+              4.0
+            );
+          }
+        }
+      }
+
+      if (
+        !flags.hollowBossAwakened &&
+        !flags.hollowBossDefeated &&
+        hero.z > 12.5
+      ) {
+        flags.hollowBossAwakened = true;
+        flags.bossState = "ARMORED";
+        flags.bossArmorTimer = 0;
+        soundEngine.playBossRoar();
+        pushBanner(
+          "Mycelion, the Spore Behemoth Awakens!",
+          "Phase 1: Burn or Crack his Fungal Cap [R / B / T] • Phase 2: Pierce Open Eye [E / Q / H] • Phase 3: Slash with Sword [Space]!",
+          6.5
+        );
+      }
+
+      if (!flags.hollowVictoryChestOpened) {
+        const distToHollowVictory = Math.hypot(
+          hero.x - HOLLOW_VICTORY_CHEST_POS.x,
+          hero.z - HOLLOW_VICTORY_CHEST_POS.z
+        );
+        if (distToHollowVictory < 2.6) {
+          if (flags.hollowBossDefeated) {
+            flags.hollowVictoryChestOpened = true;
+            hero.maxHp += 2;
+            hero.hp = hero.maxHp;
+            hero.mp = hero.maxMp;
+            hero.damageFractionAcc = 0;
+            hero.monsterCores = (hero.monsterCores ?? 0) + 3;
+            hero.rupees += 200;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Claimed the Mycelial Crown Hoard! (+1 Heart Container, +3 Cores & +200 Rupees!)",
+              "You conquered the Bioluminescent Mycelial Hollow! Use the Warp Monolith [M] or Grotto Portals to explore further!",
+              7.0
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Mycelial Crown Hoard is Sealed!",
+              "Vanquish Mycelion, the Spore Behemoth, in the North Grotto Sanctum to unseal this chest!",
+              4.0
+            );
+          }
+        }
+      }
+    }
+
+    if (zone === "sky") {
+      if (!flags.skyCelestialChestOpened) {
+        const distToCelestialChest = Math.hypot(
+          hero.x - SKY_CELESTIAL_CHEST_POS.x,
+          hero.z - SKY_CELESTIAL_CHEST_POS.z
+        );
+        const celestialGuard = enemies.find(
+          (e) => e.id === "sk-celestial-guard" && e.state !== "dead"
+        );
+        if (distToCelestialChest < 2.65) {
+          if (!celestialGuard) {
+            flags.skyCelestialChestOpened = true;
+            if (!hero.unlockedBoots.includes("swift_boots")) {
+              hero.unlockedBoots = [...hero.unlockedBoots, "swift_boots"];
+              hero.equippedBoots = "swift_boots";
+            }
+            hero.monsterCores = (hero.monsterCores ?? 0) + 3;
+            hero.rupees += 150;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Claimed the Celestial Reliquary! (+3 Monster Cores, Swiftwind Boots & +150 Rupees!)",
+              "Ascend to the North Starlight Pantheon to challenge Astraea, the Starlight Archon!",
+              6.5
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Celestial Reliquary Chest is Guarded!",
+              "Vanquish the NW Astral Sentinel Knight to unseal the Celestial Reliquary!",
+              4.0
+            );
+          }
+        }
+      }
+
+      if (
+        !flags.skyBossAwakened &&
+        !flags.skyBossDefeated &&
+        hero.z > 12.5
+      ) {
+        flags.skyBossAwakened = true;
+        flags.bossState = "ARMORED";
+        flags.bossArmorTimer = 0;
+        soundEngine.playBossRoar();
+        pushBanner(
+          "Astraea, the Starlight Archon Awakens!",
+          "Phase 1: Shatter her Aetherial Aegis [R / B / T] • Phase 2: Pierce Open Eye [E / Q / H] • Phase 3: Slash with Sword [Space]!",
+          6.8
+        );
+      }
+
+      if (!flags.skyVictoryChestOpened) {
+        const distToSkyVictory = Math.hypot(
+          hero.x - SKY_VICTORY_CHEST_POS.x,
+          hero.z - SKY_VICTORY_CHEST_POS.z
+        );
+        if (distToSkyVictory < 2.6) {
+          if (flags.skyBossDefeated) {
+            flags.skyVictoryChestOpened = true;
+            hero.maxHp += 2;
+            hero.hp = hero.maxHp;
+            hero.mp = hero.maxMp;
+            hero.damageFractionAcc = 0;
+            hero.monsterCores = (hero.monsterCores ?? 0) + 5;
+            hero.rupees += 350;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Claimed the Starlight Pantheon Hoard! (+1 Heart Container, +5 Cores & +350 Rupees!)",
+              "You conquered the Astral Sky-Isles! Take the North Golden Return Portal back to Whispering Vale Crossroads!",
+              7.5
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Starlight Pantheon Hoard is Sealed!",
+              "Vanquish Astraea, the Starlight Archon, in the North Pantheon Arena to unseal this chest!",
+              4.0
+            );
+          }
+        }
+      }
+    }
+
     // 5. Check North Boss Door in Room 1 (`LOCKED_GATE_POS = 0, 12.0` -> requires 4 Lit Hub Lanterns AND Big Boss Key!)
     if (zone === "dungeon" && !flags.gateUnlocked) {
       const distToGate = Math.hypot(
@@ -7267,6 +7588,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
         );
       }
 
+      if (enemy.id === "at-pearl-guard" && !flags.atollPearlChestOpened) {
+        soundEngine.playSecretSolve();
+        pushBanner(
+          "Coral Sentinel Vanquished! (Sunken Pearl Chest Unsealed!)",
+          "Walk up to the SW Sunken Pearl Chest to claim +2 Monster Cores, Sapphire Mail & +100 Rupees!",
+          5.5
+        );
+      }
+
+      if (enemy.id === "hl-spore-guard" && !flags.hollowSporeChestOpened) {
+        soundEngine.playSecretSolve();
+        pushBanner(
+          "Mycelial Sentinel Vanquished! (Luminous Spore Chest Unsealed!)",
+          "Walk up to the NW Luminous Spore Chest to claim +2 Monster Cores, Bottled Fairy & +120 Rupees!",
+          5.5
+        );
+      }
+
+      if (enemy.id === "sk-celestial-guard" && !flags.skyCelestialChestOpened) {
+        soundEngine.playSecretSolve();
+        pushBanner(
+          "Astral Sentinel Vanquished! (Celestial Reliquary Chest Unsealed!)",
+          "Walk up to the NW Celestial Reliquary Chest to claim +3 Monster Cores, Swiftwind Boots & +150 Rupees!",
+          5.5
+        );
+      }
+
       if (zone === "rift" && enemy.kind === "boss" && !flags.riftBossDefeated) {
         flags.riftBossDefeated = true;
         const curDepth = flags.riftDepth ?? 1;
@@ -7285,6 +7633,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const getBossName = (z: ZoneId = zone): string =>
       z === "rift"
         ? flags.riftBossName ?? "Rift Guardian"
+        : z === "sky"
+        ? "Astraea"
+        : z === "hollow"
+        ? "Mycelion"
+        : z === "atoll"
+        ? "Nereus"
         : z === "caldera"
         ? "Pyrax"
         : z === "desert"
@@ -7300,7 +7654,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       (e.zone === "citadel" && (e.kind === "boss" || e.spawnZ > 13) && !flags.citadelBossAwakened) ||
       (e.zone === "caldera" && (e.kind === "boss" || e.spawnZ > 13) && !flags.calderaBossAwakened) ||
       (e.zone === "caverns" && e.kind === "boss" && !flags.cavernBossAwakened) ||
-      (e.zone === "desert" && e.kind === "boss" && !flags.desertBossAwakened);
+      (e.zone === "desert" && e.kind === "boss" && !flags.desertBossAwakened) ||
+      (e.zone === "atoll" && e.kind === "boss" && !flags.atollBossAwakened) ||
+      (e.zone === "hollow" && e.kind === "boss" && !flags.hollowBossAwakened) ||
+      (e.zone === "sky" && e.kind === "boss" && !flags.skyBossAwakened);
 
     // 8c-2. Resolve Titan War-Hammer Overhead Slam + Radial Seismic Shockwave (`hammerSlamImpactPos`)
     if (hammerSlamImpactPos) {
@@ -10059,7 +10416,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const toHeroZ = hero.z - enemy.z;
       const distToHero = Math.hypot(toHeroX, toHeroZ);
       const isSanctumEnemy =
-        ((enemy.zone === "dungeon" || enemy.zone === "citadel" || enemy.zone === "caldera") &&
+        ((enemy.zone === "dungeon" ||
+          enemy.zone === "citadel" ||
+          enemy.zone === "caldera" ||
+          enemy.zone === "atoll" ||
+          enemy.zone === "hollow" ||
+          enemy.zone === "sky") &&
           enemy.spawnZ > 13) ||
         ((enemy.zone === "caverns" || enemy.zone === "desert") &&
           enemy.spawnX > 13.5 &&
@@ -10067,13 +10429,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const enemyWeight = enemy.weight ?? getDefaultEnemyWeight(enemy.kind);
 
       // =====================================================
-      // DEDICATED BOSS AI STATE MACHINE ("IGNIS", "CRYOS", "VAELKOR", "SKORPIUS", & "PYRAX")
+      // DEDICATED BOSS AI STATE MACHINE ("IGNIS", "CRYOS", "VAELKOR", "SKORPIUS", "PYRAX", "NEREUS", "MYCELION", & "ASTRAEA")
       // =====================================================
       if (enemy.kind === "boss") {
         const bossName = getBossName(zone);
         const isCurrentBossAwakened =
           zone === "rift"
             ? distToHero <= 11.5 || Boolean(enemy.provoked)
+            : zone === "sky"
+            ? Boolean(flags.skyBossAwakened)
+            : zone === "hollow"
+            ? Boolean(flags.hollowBossAwakened)
+            : zone === "atoll"
+            ? Boolean(flags.atollBossAwakened)
             : zone === "caldera"
             ? Boolean(flags.calderaBossAwakened)
             : zone === "desert"
@@ -10084,7 +10452,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             ? Boolean(flags.cavernBossAwakened)
             : Boolean(flags.bossAwakened);
         const isCurrentBossPhase2 =
-          zone === "rift"
+          zone === "rift" || zone === "atoll" || zone === "hollow" || zone === "sky"
             ? enemy.hp <= Math.ceil(enemy.maxHp / 2)
             : zone === "caldera"
             ? Boolean(flags.calderaBossPhase2)
@@ -11448,6 +11816,54 @@ export const useGameStore = create<GameStore>((set, get) => ({
         pushBanner(
           "Pyrax, the Magma Wyrm Vanquished! (+1 Full Heart Container!)",
           "Open Dragon's Peak Relic Chest (+1 Heart Container + 300 Rupees) and step through the North Golden Return Portal!",
+          7.5
+        );
+      }
+    }
+
+    if (zone === "atoll" && !flags.atollBossDefeated) {
+      const atollBossEnemy = enemies.find((e) => e.zone === "atoll" && e.kind === "boss");
+      if (atollBossEnemy && atollBossEnemy.state === "dead") {
+        flags.atollBossDefeated = true;
+        flags.bossState = "DEAD";
+        flags.bossArmorTimer = 0;
+        soundEngine.playVictoryFanfare();
+        soundEngine.playGateUnlock();
+        pushBanner(
+          "Nereus, the Abyssal Leviathan Vanquished!",
+          "The Leviathan's Tidal Hoard Chest (-6.5, 31.5) is unsealed — claim +1 Heart Container, +3 Monster Cores & +150 Rupees!",
+          7.0
+        );
+      }
+    }
+
+    if (zone === "hollow" && !flags.hollowBossDefeated) {
+      const hollowBossEnemy = enemies.find((e) => e.zone === "hollow" && e.kind === "boss");
+      if (hollowBossEnemy && hollowBossEnemy.state === "dead") {
+        flags.hollowBossDefeated = true;
+        flags.bossState = "DEAD";
+        flags.bossArmorTimer = 0;
+        soundEngine.playVictoryFanfare();
+        soundEngine.playGateUnlock();
+        pushBanner(
+          "Mycelion, the Spore Behemoth Vanquished!",
+          "The Mycelial Crown Hoard Chest (-6.5, 31.5) is unsealed — claim +1 Heart Container, +3 Monster Cores & +200 Rupees!",
+          7.0
+        );
+      }
+    }
+
+    if (zone === "sky" && !flags.skyBossDefeated) {
+      const skyBossEnemy = enemies.find((e) => e.zone === "sky" && e.kind === "boss");
+      if (skyBossEnemy && skyBossEnemy.state === "dead") {
+        flags.skyBossDefeated = true;
+        flags.bossState = "DEAD";
+        flags.bossArmorTimer = 0;
+        soundEngine.playVictoryFanfare();
+        soundEngine.playGateUnlock();
+        pushBanner(
+          "Astraea, the Starlight Archon Vanquished!",
+          "The Starlight Pantheon Hoard Chest (-6.5, 31.5) is unsealed — claim +1 Heart Container, +5 Monster Cores & +350 Rupees!",
           7.5
         );
       }
