@@ -123,6 +123,7 @@ function formatTime(seconds: number): string {
 }
 
 const PROP_PALETTE: Array<{ id: PropPrefabId; label: string; tag: string }> = [
+  { id: "grapple_post", label: "Grapple Anchor Post (Hookshot)", tag: "Puzzle" },
   { id: "eye_statue", label: "Wall Eye Statue (Shoot w/ Bow)", tag: "Puzzle" },
   { id: "clay_pot", label: "Clay Pot (Lift & Throw)", tag: "Interact" },
   { id: "light_rock", label: "Light Rock (Lift & Throw)", tag: "Interact" },
@@ -235,6 +236,7 @@ export default function GameOverlay() {
   const shopOpen = useGameStore((s) => s.shopOpen);
   const characterOpen = useGameStore((s) => s.characterOpen);
   const boomerang = useGameStore((s) => s.boomerang);
+  const hookshot = useGameStore((s) => s.hookshot);
 
   // Map Editor Store Slice
   const editorMode = useGameStore((s) => s.editorMode);
@@ -697,6 +699,28 @@ export default function GameOverlay() {
                       ? `Boomerang (${hero.boomerangCooldown.toFixed(1)}s)`
                       : "Boomerang"
                     : "Boomerang"}
+                </span>
+              </div>
+
+              <div
+                className={`gear-slot ${
+                  hero.hasHookshot
+                    ? hookshot !== null
+                      ? "gear-slot-active"
+                      : "gear-slot-owned"
+                    : "gear-slot-locked"
+                }`}
+                title="Press H or 7 to fire the Grappling Hookshot — latches onto Grapple Posts, Trees, Crates & Torches across chasms, rips off Wooden Shields, or snags distant Keys/Rupees!"
+              >
+                <span className="gear-key">H</span>
+                <span className="gear-name">
+                  {hero.hasHookshot
+                    ? hookshot !== null
+                      ? hookshot.state === "pulling_hero"
+                        ? "Grappling!"
+                        : "Hookshot..."
+                      : "Hookshot"
+                    : "Hookshot (Map 3)"}
                 </span>
               </div>
 
@@ -3014,6 +3038,31 @@ export default function GameOverlay() {
                     : hero.rupees >= 250
                     ? "Unlock Shovel — 250 Rupees"
                     : `Need 250 Rupees (${hero.rupees}/250)`}
+                </button>
+              </div>
+
+              {/* GRAPPLING HOOKSHOT (180 RUPEES — OR FREE IN MAP 3 NW RELIQUARY) */}
+              <div className={`shop-item-card ${hero.hasHookshot ? "shop-item-owned" : ""}`}>
+                <div className="shop-item-top">
+                  <span className="shop-item-name">Grappling Hookshot</span>
+                  <span className="shop-item-hotkey">180 Rupees • Key: H / 7</span>
+                </div>
+                <p className="shop-item-desc">
+                  Fires a 13.5m iron grapple chain that pulls you across rivers &amp; chasms to{" "}
+                  <strong>Grapple Posts, Trees, Crates &amp; Torches</strong>, rips Wooden Shields
+                  off Goblins, and snags distant treasure! <em>(Or find in Map 3 NW!)</em>
+                </p>
+                <button
+                  type="button"
+                  disabled={hero.hasHookshot || hero.rupees < 180}
+                  onClick={() => buyShopItem("hookshot")}
+                  className="shop-buy-btn"
+                >
+                  {hero.hasHookshot
+                    ? "Owned ✓"
+                    : hero.rupees >= 180
+                    ? "Unlock Hookshot — 180 Rupees"
+                    : `Need 180 Rupees (Or Map 3 NW)`}
                 </button>
               </div>
 

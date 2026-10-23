@@ -1377,6 +1377,50 @@ class SoundEngine {
       osc.stop(t + 0.25);
     });
   }
+
+  public playHookshotShoot(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Metallic chain ratchet + high-speed zip
+    for (let i = 0; i < 5; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const t = now + i * 0.035;
+      osc.type = "square";
+      osc.frequency.setValueAtTime(720 + i * 110, t);
+      osc.frequency.exponentialRampToValueAtTime(420, t + 0.03);
+      gain.gain.setValueAtTime(0.14, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.032);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.035);
+    }
+  }
+
+  public playHookshotLatch(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Heavy iron claw clunk + upward winch reel
+    [340, 680, 1020].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const t = now + i * 0.028;
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.25, t + 0.11);
+      gain.gain.setValueAtTime(0.22, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.13);
+    });
+  }
 }
 
 export const soundEngine = new SoundEngine();

@@ -44,6 +44,7 @@ import {
   FIRE_ROD_CHEST_POS,
   FRONTIER_BOMB_CHEST_POS,
   FRONTIER_CITADEL_GATE_POS,
+  FRONTIER_HOOKSHOT_CHEST_POS,
   FRONTIER_SAPPER_NPC_POS,
   GUIDE_NPC_POS,
   HEIRLOOM_NPC_POS,
@@ -1812,6 +1813,84 @@ export default function BabylonCanvas() {
       bSpark.parent = frontierBombRelicNode;
     }
 
+    // NW Cliffside Grapple Reliquary Chest (`FRONTIER_HOOKSHOT_CHEST_POS = -24.5, 22.0`)
+    const frontierHookshotChestRoot = new TransformNode("frontierHookshotChestRoot", scene);
+    frontierHookshotChestRoot.parent = frontierRoot;
+    frontierHookshotChestRoot.position.set(
+      FRONTIER_HOOKSHOT_CHEST_POS.x,
+      0,
+      FRONTIER_HOOKSHOT_CHEST_POS.z
+    );
+
+    const frHookDais = MeshBuilder.CreateBox(
+      "frHookDais",
+      { width: 3.6, height: 0.36, depth: 2.8 },
+      scene
+    );
+    frHookDais.position.set(0, 0.18, 0);
+    frHookDais.material = dgPillarMat;
+    frHookDais.parent = frontierHookshotChestRoot;
+
+    const frHookBase = MeshBuilder.CreateBox(
+      "frHookBase",
+      { width: 1.85, height: 0.92, depth: 1.25 },
+      scene
+    );
+    frHookBase.position.set(0, 0.82, 0);
+    frHookBase.material = ironGateMat;
+    frHookBase.parent = frontierHookshotChestRoot;
+
+    const frHookTrim = MeshBuilder.CreateBox(
+      "frHookTrim",
+      { width: 1.94, height: 0.22, depth: 1.32 },
+      scene
+    );
+    frHookTrim.position.set(0, 1.2, 0);
+    frHookTrim.material = goldKeyMat;
+    frHookTrim.parent = frontierHookshotChestRoot;
+
+    const frontierHookshotChestLid = MeshBuilder.CreateCylinder(
+      "frontierHookshotChestLid",
+      { diameter: 1.25, height: 1.88, tessellation: 16 },
+      scene
+    );
+    frontierHookshotChestLid.rotation.z = Math.PI / 2;
+    frontierHookshotChestLid.position.set(0, 1.32, 0);
+    frontierHookshotChestLid.material = goldKeyMat;
+    frontierHookshotChestLid.parent = frontierHookshotChestRoot;
+
+    const frontierHookshotChestRing = MeshBuilder.CreateTorus(
+      "frontierHookshotChestRing",
+      { diameter: 2.95, thickness: 0.13, tessellation: 24 },
+      scene
+    );
+    frontierHookshotChestRing.position.set(0, 0.45, 0);
+    frontierHookshotChestRing.material = goldKeyMat;
+    frontierHookshotChestRing.parent = frontierHookshotChestRoot;
+
+    const frontierHookshotRelicNode = new TransformNode("frontierHookshotRelicNode", scene);
+    frontierHookshotRelicNode.parent = frontierHookshotChestRoot;
+    frontierHookshotRelicNode.position.set(0, 2.25, 0);
+    {
+      const hkBarrel = MeshBuilder.CreateCylinder(
+        "frHookRelicBarrel",
+        { diameterTop: 0.24, diameterBottom: 0.34, height: 0.65, tessellation: 12 },
+        scene
+      );
+      hkBarrel.rotation.z = -0.45;
+      hkBarrel.material = bladeMat;
+      hkBarrel.parent = frontierHookshotRelicNode;
+
+      const hkClawRing = MeshBuilder.CreateTorus(
+        "frHookRelicRing",
+        { diameter: 0.48, thickness: 0.1, tessellation: 16 },
+        scene
+      );
+      hkClawRing.position.set(0.22, 0.28, 0);
+      hkClawRing.material = goldKeyMat;
+      hkClawRing.parent = frontierHookshotRelicNode;
+    }
+
     // North Glacial Seal Gate to Map 5 (`FRONTIER_CITADEL_GATE_POS = 0, 31.8`)
     const frCitadelGateNode = new TransformNode("frCitadelGateNode", scene);
     frCitadelGateNode.parent = frontierRoot;
@@ -3359,6 +3438,56 @@ export default function BabylonCanvas() {
         if (eyeArrowMesh) {
           eyeArrowMesh.setEnabled(Boolean(prop.eyeActivated));
         }
+      } else if (prop.prefab === "grapple_post") {
+        // Wooden Grapple Anchor Post with Stone Base, Brass Bands, Iron Cap & Glowing Golden Target Ring!
+        const stoneBase = MeshBuilder.CreateCylinder(
+          `grappleBase-${prop.id}`,
+          { diameterTop: 0.92, diameterBottom: 1.15, height: 0.34, tessellation: 12 },
+          scene
+        );
+        stoneBase.position.set(0, 0.17, 0);
+        stoneBase.material = dgPillarMat;
+        stoneBase.parent = root;
+
+        const timberPost = MeshBuilder.CreateCylinder(
+          `grappleTimber-${prop.id}`,
+          { diameterTop: 0.56, diameterBottom: 0.66, height: 1.95, tessellation: 12 },
+          scene
+        );
+        timberPost.position.set(0, 1.14, 0);
+        timberPost.material = woodMat;
+        timberPost.parent = root;
+
+        const ironCap = MeshBuilder.CreateCylinder(
+          `grappleCap-${prop.id}`,
+          { diameterTop: 0.42, diameterBottom: 0.68, height: 0.28, tessellation: 12 },
+          scene
+        );
+        ironCap.position.set(0, 2.2, 0);
+        ironCap.material = ironGateMat;
+        ironCap.parent = root;
+
+        const goldParts: Mesh[] = [];
+        for (const by of [0.68, 1.56]) {
+          const band = MeshBuilder.CreateTorus(
+            `grappleBand-${prop.id}-${by}`,
+            { diameter: 0.64, thickness: 0.08, tessellation: 16 },
+            scene
+          );
+          band.position.set(0, by, 0);
+          goldParts.push(band);
+        }
+
+        const topLatchRing = MeshBuilder.CreateTorus(
+          `grappleTopRing-${prop.id}`,
+          { diameter: 0.58, thickness: 0.11, tessellation: 18 },
+          scene
+        );
+        topLatchRing.rotation.x = Math.PI / 2;
+        topLatchRing.position.set(0, 2.52, 0);
+        goldParts.push(topLatchRing);
+
+        mergeGroupWithMaterial(`grappleGoldMerged-${prop.id}`, goldParts, goldKeyMat, root, meta);
       } else if (prop.prefab === "custom_model") {
         const asset = customModels.find((m) => m.id === prop.customModelId);
         const customMesh = new Mesh(`customMesh-${prop.id}`, scene);
@@ -3999,6 +4128,60 @@ export default function BabylonCanvas() {
     boomRing.material = slashMat;
     boomRing.parent = boomerangNode;
     boomerangNode.setEnabled(false);
+
+    // --- 3D GRAPPLING HOOKSHOT CLAW + SEGMENTED METALLIC CHAIN ---
+    const hookshotClawNode = new TransformNode("hookshotClawNode", scene);
+    {
+      const clawHead = MeshBuilder.CreateCylinder(
+        "hookshotClawHead",
+        { diameterTop: 0.22, diameterBottom: 0.36, height: 0.56, tessellation: 12 },
+        scene
+      );
+      clawHead.rotation.x = Math.PI / 2;
+      clawHead.material = bladeMat;
+      clawHead.isPickable = false;
+      clawHead.parent = hookshotClawNode;
+
+      const clawCollar = MeshBuilder.CreateTorus(
+        "hookshotClawCollar",
+        { diameter: 0.42, thickness: 0.09, tessellation: 16 },
+        scene
+      );
+      clawCollar.rotation.x = Math.PI / 2;
+      clawCollar.position.set(0, 0, 0.14);
+      clawCollar.material = goldKeyMat;
+      clawCollar.isPickable = false;
+      clawCollar.parent = hookshotClawNode;
+
+      for (let p = 0; p < 3; p++) {
+        const ang = (p / 3) * Math.PI * 2;
+        const prong = MeshBuilder.CreateCylinder(
+          `hookshotProng-${p}`,
+          { diameterTop: 0.02, diameterBottom: 0.12, height: 0.46, tessellation: 8 },
+          scene
+        );
+        prong.position.set(Math.cos(ang) * 0.18, Math.sin(ang) * 0.18, 0.34);
+        prong.rotation.x = Math.PI / 2;
+        prong.material = goldKeyMat;
+        prong.isPickable = false;
+        prong.parent = hookshotClawNode;
+      }
+    }
+    hookshotClawNode.setEnabled(false);
+
+    const HOOKSHOT_CHAIN_COUNT = 14;
+    const hookshotChainLinks: Mesh[] = [];
+    for (let c = 0; c < HOOKSHOT_CHAIN_COUNT; c++) {
+      const link = MeshBuilder.CreateTorus(
+        `hookshotChainLink-${c}`,
+        { diameter: 0.24, thickness: 0.065, tessellation: 12 },
+        scene
+      );
+      link.material = c % 2 === 0 ? bladeMat : ironGateMat;
+      link.isPickable = false;
+      link.setEnabled(false);
+      hookshotChainLinks.push(link);
+    }
 
     // =========================================================
     // DYNAMIC ENEMY, ARROW, PROJECTILE, HAZARD & RUPEE REGISTRIES
@@ -6806,6 +6989,7 @@ export default function BabylonCanvas() {
     let attackTriggeredOnce = false;
     let interactTriggeredOnce = false;
     let boomerangTriggeredOnce = false;
+    let hookshotTriggeredOnce = false;
     let bowTriggeredOnce = false;
     let fireRodTriggeredOnce = false;
     let shovelTriggeredOnce = false;
@@ -6934,6 +7118,9 @@ export default function BabylonCanvas() {
       }
       if ((code === "KeyB" || code === "Digit6") && !pressedKeys.has(code)) {
         bombTriggeredOnce = true;
+      }
+      if ((code === "KeyH" || code === "Digit7") && !pressedKeys.has(code)) {
+        hookshotTriggeredOnce = true;
       }
       pressedKeys.add(code);
     };
@@ -7098,6 +7285,7 @@ export default function BabylonCanvas() {
         attackTriggeredOnce = false;
         interactTriggeredOnce = false;
         boomerangTriggeredOnce = false;
+        hookshotTriggeredOnce = false;
         bowTriggeredOnce = false;
         fireRodTriggeredOnce = false;
         shovelTriggeredOnce = false;
@@ -7117,6 +7305,7 @@ export default function BabylonCanvas() {
           pressedKeys.has("ShiftRight");
         const interactPressed = interactTriggeredOnce;
         const boomerangPressed = boomerangTriggeredOnce;
+        const hookshotPressed = hookshotTriggeredOnce;
         const bowPressed = bowTriggeredOnce;
         const fireRodPressed = fireRodTriggeredOnce;
         const fireRodHeld =
@@ -7128,6 +7317,7 @@ export default function BabylonCanvas() {
         attackTriggeredOnce = false;
         interactTriggeredOnce = false;
         boomerangTriggeredOnce = false;
+        hookshotTriggeredOnce = false;
         bowTriggeredOnce = false;
         fireRodTriggeredOnce = false;
         shovelTriggeredOnce = false;
@@ -7143,6 +7333,7 @@ export default function BabylonCanvas() {
             blockHeld,
             interactPressed,
             boomerangPressed,
+            hookshotPressed,
             bowPressed,
             fireRodPressed,
             fireRodHeld,
@@ -7602,6 +7793,38 @@ export default function BabylonCanvas() {
         boomerangNode.setEnabled(false);
       }
 
+      // Sync Grappling Hookshot 3D Claw + Segmented Metallic Chain
+      if (snap.hookshot && snap.hookshot.zone === snap.zone) {
+        hookshotClawNode.setEnabled(true);
+        const startX = snap.hero.x + Math.sin(snap.hero.facing) * 0.48;
+        const startZ = snap.hero.z + Math.cos(snap.hero.facing) * 0.48;
+        const startY = heroGroundY + 1.05;
+        const endX = snap.hookshot.x;
+        const endZ = snap.hookshot.z;
+        const endY = sampleTerrainHeight(activeCells, endX, endZ) + 1.05;
+        const yaw = Math.atan2(endX - startX, endZ - startZ);
+
+        hookshotClawNode.position.set(endX, endY, endZ);
+        hookshotClawNode.rotation.set(0, yaw, t * 14);
+
+        for (let c = 0; c < hookshotChainLinks.length; c++) {
+          const link = hookshotChainLinks[c];
+          const frac = (c + 0.5) / hookshotChainLinks.length;
+          link.setEnabled(true);
+          link.position.set(
+            startX + (endX - startX) * frac,
+            startY + (endY - startY) * frac,
+            startZ + (endZ - startZ) * frac
+          );
+          link.rotation.set(c % 2 === 0 ? Math.PI / 2 : 0, yaw, c % 2 === 0 ? 0 : Math.PI / 2);
+        }
+      } else {
+        hookshotClawNode.setEnabled(false);
+        for (let c = 0; c < hookshotChainLinks.length; c++) {
+          hookshotChainLinks[c].setEnabled(false);
+        }
+      }
+
       // 5. Camera Follow in Play Mode vs Free Orbit in Editor Mode
       if (!snap.editorMode) {
         camera.alpha += (-Math.PI / 2 - camera.alpha) * Math.min(1, dt * 8);
@@ -7627,6 +7850,8 @@ export default function BabylonCanvas() {
         keyNode.rotation.y = t * 2.2;
         if (snap.boomerang?.carryingKey && snap.boomerang.zone === "grove") {
           keyNode.position.set(snap.boomerang.x, 1.35, snap.boomerang.z);
+        } else if (snap.hookshot?.carryingKey && snap.hookshot.zone === "grove") {
+          keyNode.position.set(snap.hookshot.x, 1.35, snap.hookshot.z);
         } else {
           keyNode.position.set(
             DUNGEON_KEY_POS.x,
@@ -7644,6 +7869,8 @@ export default function BabylonCanvas() {
         dgSmallKeyNode.rotation.y = t * 2.5;
         if (snap.boomerang?.carryingDgSmallKey && snap.boomerang.zone === "dungeon") {
           dgSmallKeyNode.position.set(snap.boomerang.x, 1.35, snap.boomerang.z);
+        } else if (snap.hookshot?.carryingDgSmallKey && snap.hookshot.zone === "dungeon") {
+          dgSmallKeyNode.position.set(snap.hookshot.x, 1.35, snap.hookshot.z);
         } else {
           dgSmallKeyNode.position.set(
             DG_SMALL_KEY_POS.x,
@@ -7722,7 +7949,8 @@ export default function BabylonCanvas() {
 
       const targetExitGateY = snap.flags.bossDefeated ? -5.0 : 0;
       bossExitGateNode.position.y +=
-        (targetExitGateY - bossExitGateNode.position.y) * Math.min(1, dt * 6);
+        (targetExitGateY - bossExitGateNode.position.y) *
+        Math.min(1, dt * 6);
 
       chestSealRing.setEnabled(!snap.flags.bossDefeated);
       chestSealRing.rotation.y = t * 1.8;
@@ -7787,6 +8015,19 @@ export default function BabylonCanvas() {
         frontierBombRelicNode.position.y = 2.2 + Math.sin(t * 3.5) * 0.16;
       }
 
+      if (snap.flags.frontierHookshotChestOpened) {
+        frontierHookshotChestLid.position.set(0, 1.65, 0.42);
+        frontierHookshotChestRing.setEnabled(false);
+        frontierHookshotRelicNode.setEnabled(false);
+      } else {
+        frontierHookshotChestLid.position.set(0, 1.32, 0);
+        frontierHookshotChestRing.setEnabled(true);
+        frontierHookshotChestRing.rotation.y = t * 2.1;
+        frontierHookshotRelicNode.setEnabled(true);
+        frontierHookshotRelicNode.rotation.y = t * 2.7;
+        frontierHookshotRelicNode.position.y = 2.25 + Math.sin(t * 3.4) * 0.16;
+      }
+
       const isFrCitadelGateOpen = Boolean(
         snap.flags.frontierCitadelGateUnlocked ||
           snap.flags.cavernCrestKeyPickedUp ||
@@ -7817,6 +8058,8 @@ export default function BabylonCanvas() {
         glacialKeyNode.rotation.y = t * 2.4;
         if (snap.boomerang?.carryingGlacialKey && snap.boomerang.zone === "caverns") {
           glacialKeyNode.position.set(snap.boomerang.x, 1.35, snap.boomerang.z);
+        } else if (snap.hookshot?.carryingGlacialKey && snap.hookshot.zone === "caverns") {
+          glacialKeyNode.position.set(snap.hookshot.x, 1.35, snap.hookshot.z);
         } else {
           glacialKeyNode.position.set(
             CAVERN_CREST_KEY_POS.x,

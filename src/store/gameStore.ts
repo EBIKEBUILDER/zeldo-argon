@@ -29,6 +29,7 @@ import {
   FIRE_ROD_CHEST_POS,
   FRONTIER_BOMB_CHEST_POS,
   FRONTIER_CITADEL_GATE_POS,
+  FRONTIER_HOOKSHOT_CHEST_POS,
   FRONTIER_SAPPER_NPC_POS,
   getDefaultEnemyWeight,
   GUIDE_NPC_POS,
@@ -64,6 +65,7 @@ export type ShopItemId =
   | "bombs"
   | "shovel"
   | "fire_rod"
+  | "hookshot"
   | "swift_boots"
   | "titan_greaves"
   | "mirror_shield"
@@ -171,6 +173,7 @@ export interface HeroState {
   hasBow: boolean;
   hasFireRod: boolean;
   hasShovel: boolean;
+  hasHookshot?: boolean;
   arrows: number;
   bombs: number;
   maxBombs: number;
@@ -199,6 +202,7 @@ export interface HeroState {
   swordChargeTimer: number;
   fireRodChargeTimer: number;
   fireRodCooldown: number;
+  hookshotCooldown?: number;
   digAnimTimer: number;
   attackCooldown: number;
   boomerangCooldown: number;
@@ -273,6 +277,23 @@ export interface BoomerangState {
   returning: boolean;
   spinAngle: number;
   hitEnemyIds: string[];
+  carriedRupeeIds?: string[];
+  carryingKey?: boolean;
+  carryingDgSmallKey?: boolean;
+  carryingGlacialKey?: boolean;
+}
+
+export interface HookshotState {
+  zone: ZoneId;
+  x: number;
+  z: number;
+  dirX: number;
+  dirZ: number;
+  distanceTraveled: number;
+  maxLength?: number;
+  state: "extending" | "retracting" | "pulling_hero";
+  targetX: number;
+  targetZ: number;
   carriedRupeeIds?: string[];
   carryingKey?: boolean;
   carryingDgSmallKey?: boolean;
@@ -428,6 +449,7 @@ export interface GameFlags {
   // Map 3 (Frontier), Map 4 (Frostpeak Caverns) & Map 5 (Obsidian Citadel) Progression Flags
   frontierSappersCleared?: boolean;
   frontierBombChestOpened?: boolean;
+  frontierHookshotChestOpened?: boolean;
   frontierCitadelGateUnlocked?: boolean;
   cavernWardensCleared?: boolean;
   cavernEyeSolved?: boolean;
@@ -473,6 +495,7 @@ export interface FrameInput {
   fireRodPressed?: boolean;
   fireRodHeld?: boolean;
   shovelPressed?: boolean;
+  hookshotPressed?: boolean;
   bottlePressed?: boolean;
   interactPressed?: boolean;
   bombPressed?: boolean;
@@ -485,6 +508,7 @@ export interface SerializableGameState {
   hero: HeroState;
   enemies: EnemyState[];
   boomerang: BoomerangState | null;
+  hookshot: HookshotState | null;
   arrows: ArrowProjectileState[];
   fireballs: FireballProjectileState[];
   fireZones: FireZoneState[];
@@ -826,6 +850,7 @@ function createInitialState(
       hasBow: true,
       hasFireRod: false,
       hasShovel: false,
+      hasHookshot: false,
       arrows: 20,
       bombs: 0,
       maxBombs: 0,
@@ -853,6 +878,7 @@ function createInitialState(
       swordChargeTimer: 0,
       fireRodChargeTimer: 0,
       fireRodCooldown: 0,
+      hookshotCooldown: 0,
       digAnimTimer: 0,
       attackCooldown: 0,
       boomerangCooldown: 0,
@@ -872,6 +898,7 @@ function createInitialState(
     },
     enemies: createInitialEnemies(),
     boomerang: null,
+    hookshot: null,
     arrows: [],
     fireballs: [],
     fireZones: [],
@@ -956,6 +983,7 @@ function createInitialState(
       bossArmorTimer: 0,
       frontierSappersCleared: false,
       frontierBombChestOpened: false,
+      frontierHookshotChestOpened: false,
       frontierCitadelGateUnlocked: false,
       cavernWardensCleared: false,
       cavernEyeSolved: false,
@@ -987,7 +1015,7 @@ function createInitialState(
             id: 1,
             text: "Map 1: Whispering Crossroads (Act I — The Adventure Begins)",
             subtext:
-              "West Exit -> Map 1B Grove (Sanctum Key) • North -> Map 2 Dungeon (Flame Rod) • East -> Map 3 Frontier (Bombs) • Map 4 Caverns (Shovel) • Map 5 Citadel!",
+              "West Exit -> Map 1B Grove (Sanctum Key) • North -> Map 2 Dungeon (Flame Rod) • East -> Map 3 Frontier (Bombs & Hookshot) • Map 4 Caverns (Shovel) • Map 5 Citadel!",
             timer: 6.5,
           }
         : null,
@@ -1012,7 +1040,7 @@ function createInitialState(
   };
 }
 
-const MAP_STORAGE_KEY = "zeldo-authored-map-v10";
+const MAP_STORAGE_KEY = "zeldo-authored-map-v11";
 
 function resetPropForPlaySession(p: MapPropInstance): MapPropInstance {
   if (p.prefab === "dirt_patch") {
@@ -1098,7 +1126,7 @@ function persistAuthoredMapToStorage(state: {
       .map((r) => ({ ...r, collected: false, spawnBounceTimer: 0 }));
 
     const payload = {
-      version: 8,
+      version: 9,
       mapProps: state.mapProps.map(resetPropForPlaySession),
       enemies: cleanEnemies,
       rupees: cleanRupees,
@@ -1153,6 +1181,7 @@ const DEFAULT_PROP_META: Record<
   briar_barrier: { label: "Dry Briar Barrier (Burnable)", hasCollider: true, w: 2.8, d: 1.6, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "tree" },
   spiderweb_barrier: { label: "Thick Spiderweb Barrier (Burnable)", hasCollider: true, w: 5.0, d: 1.6, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "wall" },
   eye_statue: { label: "Sanctum Eye Statue (Bow Target)", hasCollider: true, w: 1.6, d: 1.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "wall" },
+  grapple_post: { label: "Grapple Anchor Post (Hookshot [H])", hasCollider: true, w: 1.1, d: 1.1, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   boulder: { label: "Mossy Boulder", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
   ruin_pillar: { label: "Watchtower Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
   dungeon_pillar: { label: "Sanctum Pillar", hasCollider: true, w: 2.0, d: 2.0, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "pillar" },
@@ -2172,6 +2201,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         },
       ],
       boomerang: null,
+      hookshot: null,
       flags: {
         ...state.flags,
         keyPickedUp: false,
@@ -2212,6 +2242,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         bossArmorTimer: 0,
         frontierSappersCleared: false,
         frontierBombChestOpened: false,
+        frontierHookshotChestOpened: false,
         frontierCitadelGateUnlocked: false,
         cavernWardensCleared: false,
         cavernEyeSolved: false,
@@ -2249,6 +2280,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         swordChargeTimer: 0,
         fireRodChargeTimer: 0,
         fireRodCooldown: 0,
+        hookshotCooldown: 0,
         digAnimTimer: 0,
         attackCooldown: 0,
         boomerangCooldown: 0,
@@ -2513,14 +2545,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
       hero.equippedPrimary = "tempered_blade";
       hero.swordDamage = 2;
+      hero.hasHookshot = true;
       hero.maxBombs = Math.max(hero.maxBombs || 0, 30);
       hero.bombs = hero.maxBombs;
       hero.mp = hero.maxMp;
 
       soundEngine.playVictoryFanfare();
       pushNotice(
-        "Champion's Progression Set Unlocked! (+1 Heart, Mirror Shield, Master Blade & 30 Bombs)",
-        "Your Max HP increased, Aegis Mirror Shield & Tempered Blade are equipped, and your Bomb Bag holds 30 Bombs!"
+        "Champion's Progression Set Unlocked! (+1 Heart, Mirror Shield, Master Blade, Hookshot & 30 Bombs)",
+        "Your Max HP increased, Aegis Mirror Shield, Tempered Blade & Hookshot [H] are equipped, and your Bomb Bag holds 30 Bombs!"
       );
       return;
     }
@@ -2562,6 +2595,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
       pushNotice(
         "Unlocked the Bomb Bag! (+10 Bombs, Capacity: 20)",
         "Press B or 6 to place or throw Bombs and blast open Cracked Boulders blocking secret caves!"
+      );
+      return;
+    }
+
+    if (item === "hookshot") {
+      if (hero.hasHookshot) return;
+      if (hero.rupees < 180) {
+        soundEngine.playGateLocked();
+        pushNotice(
+          "Not Enough Rupees!",
+          "The Grappling Hookshot costs 180 Rupees (or claim it free inside Map 3's NW Cliffside Reliquary Chest!)."
+        );
+        return;
+      }
+      hero.rupees -= 180;
+      hero.hasHookshot = true;
+      soundEngine.playVictoryFanfare();
+      pushNotice(
+        "Unlocked the Grappling Hookshot! (Key: H / 7)",
+        "Press H or 7 to grapple across chasms onto Wooden Grapple Posts & Trees, rip shields off Goblins, or snag distant Rupees & Keys!"
       );
       return;
     }
@@ -3088,11 +3141,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let chestNoticeCooldown = Math.max(0, state.chestNoticeCooldown - dt);
     let armorNoticeCooldown = Math.max(0, state.armorNoticeCooldown - dt);
 
-    // 1. Update Hero Timers, Charged Spin Attack, Shield Block, Boomerang, Bow, Flame Rod & Shovel
+    // 1. Update Hero Timers, Charged Spin Attack, Shield Block, Boomerang, Hookshot, Bow, Flame Rod & Shovel
     hero.attackTimer = Math.max(0, hero.attackTimer - dt);
     hero.spinAttackTimer = Math.max(0, (hero.spinAttackTimer ?? 0) - dt);
     hero.attackCooldown = Math.max(0, hero.attackCooldown - dt);
     hero.boomerangCooldown = Math.max(0, (hero.boomerangCooldown ?? 0) - dt);
+    hero.hookshotCooldown = Math.max(0, (hero.hookshotCooldown ?? 0) - dt);
     hero.bowCooldown = Math.max(0, hero.bowCooldown - dt);
     hero.fireRodCooldown = Math.max(0, (hero.fireRodCooldown ?? 0) - dt);
     hero.bowAnimTimer = Math.max(0, (hero.bowAnimTimer ?? 0) - dt);
@@ -3115,6 +3169,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
           carryingKey: state.boomerang.carryingKey ?? false,
           carryingDgSmallKey: state.boomerang.carryingDgSmallKey ?? false,
           carryingGlacialKey: state.boomerang.carryingGlacialKey ?? false,
+        }
+      : null;
+    let hookshot: HookshotState | null = state.hookshot
+      ? {
+          ...state.hookshot,
+          carriedRupeeIds: [...(state.hookshot.carriedRupeeIds ?? [])],
+          carryingKey: state.hookshot.carryingKey ?? false,
+          carryingDgSmallKey: state.hookshot.carryingDgSmallKey ?? false,
+          carryingGlacialKey: state.hookshot.carryingGlacialKey ?? false,
         }
       : null;
     let arrows: ArrowProjectileState[] = state.arrows.map((a) => ({ ...a }));
@@ -4261,6 +4324,42 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     } else if (
       canUseWeapon &&
+      input.hookshotPressed &&
+      !hookshot &&
+      (hero.hookshotCooldown ?? 0) <= 0
+    ) {
+      // Trigger Grappling Hookshot (H or 7)
+      if (!hero.hasHookshot) {
+        pushBanner(
+          "No Grappling Hookshot Equipped!",
+          "Claim the Grappling Hookshot in the NW Cliffside Reliquary of Map 3 (Elderwood Highlands) or buy it at Bramble's Shop!",
+          3.0
+        );
+        hero.hookshotCooldown = 0.4;
+      } else {
+        hero.isBlocking = false;
+        hero.throwAnimTimer = 0.26;
+        hero.weaponLockTimer = 0.28;
+        hero.hookshotCooldown = 0.45;
+        soundEngine.playHookshotShoot();
+        hookshot = {
+          zone,
+          x: hero.x + Math.sin(hero.facing) * 0.9,
+          z: hero.z + Math.cos(hero.facing) * 0.9,
+          dirX: Math.sin(hero.facing),
+          dirZ: Math.cos(hero.facing),
+          distanceTraveled: 0,
+          state: "extending",
+          targetX: hero.x,
+          targetZ: hero.z,
+          carriedRupeeIds: [],
+          carryingKey: false,
+          carryingDgSmallKey: false,
+          carryingGlacialKey: false,
+        };
+      }
+    } else if (
+      canUseWeapon &&
       input.boomerangPressed &&
       hero.hasBoomerang &&
       !boomerang &&
@@ -4342,7 +4441,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.isAttacking ||
       hero.bowAnimTimer > 0 ||
       hero.throwAnimTimer > 0 ||
-      hero.digAnimTimer > 0;
+      hero.digAnimTimer > 0 ||
+      Boolean(hookshot);
 
     // Right-click Shield Block (disabled while holding a pot/rock/bomb overhead)
     hero.isBlocking =
@@ -4351,7 +4451,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !isUsingAnyWeapon &&
       hero.knockbackLockTimer <= 0;
 
-    // 2. Hero Movement + Boots Speed Multiplier + Knockback + Pushable Block Puzzles
+    // 2. Hero Movement + Boots Speed Multiplier + Knockback + Hookshot Grapple Pull + Pushable Block Puzzles
     const isKnockbackLocked = hero.knockbackLockTimer > 0;
     let mx = isKnockbackLocked ? 0 : input.moveX;
     let mz = isKnockbackLocked ? 0 : input.moveZ;
@@ -4364,32 +4464,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ? 1.12
         : 1.0) * chillMultiplier;
 
-    if (mag > 0.01) {
-      mx /= mag;
-      mz /= mag;
-      if (!isUsingAnyWeapon) {
-        hero.facing = Math.atan2(mx, mz);
-      }
-      hero.walkCycle += dt * (hero.isBlocking ? 7 : 11) * bootsMultiplier;
-    }
-
-    const baseMoveSpeed = isUsingAnyWeapon
-      ? 4.8
-      : hero.heldObject
-      ? 7.8
-      : (hero.swordChargeTimer ?? 0) > 0.25 || (hero.fireRodChargeTimer ?? 0) > 0.2
-      ? 6.4
-      : hero.isBlocking
-      ? 5.4
-      : 9.0;
-    const moveSpeed = baseMoveSpeed * bootsMultiplier;
-    const nextHeroX = hero.x + (mx * moveSpeed + hero.knockbackVx) * dt;
-    const nextHeroZ = hero.z + (mz * moveSpeed + hero.knockbackVz) * dt;
-
-    const kbDecay = isKnockbackLocked ? Math.exp(-2.8 * dt) : Math.exp(-10 * dt);
-    hero.knockbackVx *= kbDecay;
-    hero.knockbackVz *= kbDecay;
-
     const initialGatePassable =
       zone === "overworld"
         ? Boolean(flags.dungeonEntryUnlocked || flags.keyPickedUp || hero.hasDungeonKey)
@@ -4400,30 +4474,104 @@ export const useGameStore = create<GameStore>((set, get) => ({
         : Boolean(flags.gateUnlocked && (!flags.bossAwakened || flags.bossDefeated));
     const initialBossExitOpen =
       zone === "citadel" ? Boolean(flags.citadelBossDefeated) : Boolean(flags.bossDefeated);
-    const clampedNextHeroZ =
-      (zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated) ||
-      (zone === "citadel" && flags.citadelBossAwakened && !flags.citadelBossDefeated)
-        ? Math.max(13.55, nextHeroZ)
-        : nextHeroZ;
-    const resolvedHero = resolveWorldCollisions(
-      nextHeroX,
-      clampedNextHeroZ,
-      0.72,
-      zone,
-      initialGatePassable,
-      dynamicObstacles,
-      initialBossExitOpen
-    );
-    if (isKnockbackLocked && resolvedHero.hitObstacle) {
-      hero.knockbackVx *= 0.45;
-      hero.knockbackVz *= 0.45;
+
+    if (hookshot && hookshot.zone === zone && hookshot.state === "pulling_hero") {
+      const toTx = hookshot.targetX - hero.x;
+      const toTz = hookshot.targetZ - hero.z;
+      const distToTarget = Math.hypot(toTx, toTz);
+      const pullSpeed = 24.0;
+      const pullStep = pullSpeed * dt;
+      hero.knockbackVx = 0;
+      hero.knockbackVz = 0;
+
+      if (distToTarget <= Math.max(0.45, pullStep)) {
+        const resolvedLand = resolveWorldCollisions(
+          hookshot.targetX,
+          hookshot.targetZ,
+          0.68,
+          zone,
+          initialGatePassable,
+          dynamicObstacles,
+          initialBossExitOpen,
+          true
+        );
+        hero.x = resolvedLand.x;
+        hero.z = resolvedLand.z;
+        hookshot = null;
+      } else {
+        const pullDirX = toTx / distToTarget;
+        const pullDirZ = toTz / distToTarget;
+        hero.facing = Math.atan2(pullDirX, pullDirZ);
+        const nextPullX = hero.x + pullDirX * pullStep;
+        const nextPullZ = hero.z + pullDirZ * pullStep;
+        const resolvedPull = resolveWorldCollisions(
+          nextPullX,
+          nextPullZ,
+          0.68,
+          zone,
+          initialGatePassable,
+          dynamicObstacles,
+          initialBossExitOpen,
+          true
+        );
+        hero.x = resolvedPull.x;
+        hero.z = resolvedPull.z;
+        if (resolvedPull.hitObstacle) {
+          hookshot = null;
+        }
+      }
+    } else {
+      if (mag > 0.01) {
+        mx /= mag;
+        mz /= mag;
+        if (!isUsingAnyWeapon) {
+          hero.facing = Math.atan2(mx, mz);
+        }
+        hero.walkCycle += dt * (hero.isBlocking ? 7 : 11) * bootsMultiplier;
+      }
+
+      const baseMoveSpeed = isUsingAnyWeapon
+        ? 4.8
+        : hero.heldObject
+        ? 7.8
+        : (hero.swordChargeTimer ?? 0) > 0.25 || (hero.fireRodChargeTimer ?? 0) > 0.2
+        ? 6.4
+        : hero.isBlocking
+        ? 5.4
+        : 9.0;
+      const moveSpeed = baseMoveSpeed * bootsMultiplier;
+      const nextHeroX = hero.x + (mx * moveSpeed + hero.knockbackVx) * dt;
+      const nextHeroZ = hero.z + (mz * moveSpeed + hero.knockbackVz) * dt;
+
+      const kbDecay = isKnockbackLocked ? Math.exp(-2.8 * dt) : Math.exp(-10 * dt);
+      hero.knockbackVx *= kbDecay;
+      hero.knockbackVz *= kbDecay;
+
+      const clampedNextHeroZ =
+        (zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated) ||
+        (zone === "citadel" && flags.citadelBossAwakened && !flags.citadelBossDefeated)
+          ? Math.max(13.55, nextHeroZ)
+          : nextHeroZ;
+      const resolvedHero = resolveWorldCollisions(
+        nextHeroX,
+        clampedNextHeroZ,
+        0.72,
+        zone,
+        initialGatePassable,
+        dynamicObstacles,
+        initialBossExitOpen
+      );
+      if (isKnockbackLocked && resolvedHero.hitObstacle) {
+        hero.knockbackVx *= 0.45;
+        hero.knockbackVz *= 0.45;
+      }
+      hero.x = resolvedHero.x;
+      hero.z =
+        (zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated) ||
+        (zone === "citadel" && flags.citadelBossAwakened && !flags.citadelBossDefeated)
+          ? Math.max(13.55, resolvedHero.z)
+          : resolvedHero.z;
     }
-    hero.x = resolvedHero.x;
-    hero.z =
-      (zone === "dungeon" && flags.bossAwakened && !flags.bossDefeated) ||
-      (zone === "citadel" && flags.citadelBossAwakened && !flags.citadelBossDefeated)
-        ? Math.max(13.55, resolvedHero.z)
-        : resolvedHero.z;
 
     // 2b. Update Sliding Push Blocks & Check 1.0-Second Continuous Push Against Pushable Blocks (`push_block`)
     for (let i = 0; i < mapProps.length; i++) {
@@ -4699,6 +4847,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.pushTimer = 0;
           hero.pushTargetPropId = null;
           boomerang = null;
+          hookshot = null;
           thrownObjects = [];
           activeBombs = [];
           arrows = arrows.map((a) => (a.stuck && a.stuckInShield ? { ...a, zone } : a));
@@ -4918,6 +5067,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // 4e. Map 3 (`frontier` — Elderwood Highlands & Sunstone Quarry):
     // - SE Sapper Outpost NPC (`FRONTIER_SAPPER_NPC_POS = 16.0, -21.5`) & Bomb Bag Chest (`FRONTIER_BOMB_CHEST_POS = 24.5, -18.5`)
+    // - NW Cliffside Grapple Reliquary Chest (`FRONTIER_HOOKSHOT_CHEST_POS = -24.5, 22.0`)
     // - North Glacial Seal Gate (`FRONTIER_CITADEL_GATE_POS = 0, 31.8`) leading into Map 5 (`citadel`)
     if (zone === "frontier") {
       const distToSapperNpc = Math.hypot(
@@ -4977,6 +5127,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
             pushBanner(
               "The Sapper's Bomb Bag Chest is Guarded!",
               `Defeat the ${remainingSappers.length} Outpost Raider${remainingSappers.length === 1 ? "" : "s"} in the SE Sapper Outpost to unseal the Bomb Bag Chest!`,
+              4.2
+            );
+          }
+        }
+      }
+
+      // NW Cliffside Grapple Reliquary Chest (`FRONTIER_HOOKSHOT_CHEST_POS = -24.5, 22.0`)
+      if (!flags.frontierHookshotChestOpened) {
+        const distToHookshotChest = Math.hypot(
+          hero.x - FRONTIER_HOOKSHOT_CHEST_POS.x,
+          hero.z - FRONTIER_HOOKSHOT_CHEST_POS.z
+        );
+        const reliquaryGuard = enemies.find(
+          (e) => e.id === "fr-hookshot-guard" && e.state !== "dead"
+        );
+        if (distToHookshotChest < 2.65) {
+          if (!reliquaryGuard) {
+            flags.frontierHookshotChestOpened = true;
+            hero.hasHookshot = true;
+            hero.rupees += 20;
+            soundEngine.playVictoryFanfare();
+            pushBanner(
+              "Acquired the Grappling Hookshot! (+20 Rupees!)",
+              "Press H [or 7] to grapple to Anchor Posts, Trees, Crates & Torches across chasms, rip off Wooden Shields, or snag distant Treasure!",
+              6.8
+            );
+          } else if (chestNoticeCooldown <= 0) {
+            chestNoticeCooldown = 3.0;
+            soundEngine.playGateLocked();
+            pushBanner(
+              "The Grapple Reliquary Chest is Guarded!",
+              "Defeat the Wooden-Shielded Reliquary Guard in the NW Cliffside Alcove to claim the Grappling Hookshot!",
               4.2
             );
           }
@@ -5884,6 +6066,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
           );
         }
       }
+
+      if (enemy.id === "fr-hookshot-guard" && !flags.frontierHookshotChestOpened) {
+        soundEngine.playSecretSolve();
+        pushBanner(
+          "Reliquary Guard Vanquished! (Hookshot Chest Unsealed!)",
+          "Walk up to the NW Cliffside Reliquary Chest to claim the Grappling Hookshot [H / 7]!",
+          5.5
+        );
+      }
     };
 
     const getBossName = (z: ZoneId = zone): string =>
@@ -5893,6 +6084,308 @@ export const useGameStore = create<GameStore>((set, get) => ({
       (e.zone === "dungeon" && (e.kind === "boss" || e.spawnZ > 13) && !flags.bossAwakened) ||
       (e.zone === "citadel" && (e.kind === "boss" || e.spawnZ > 13) && !flags.citadelBossAwakened) ||
       (e.zone === "caverns" && e.kind === "boss" && !flags.cavernBossAwakened);
+
+    // 8d. Update Grappling Hookshot Flight (`extending` / `retracting`)
+    if (hookshot) {
+      if (hookshot.zone !== zone) {
+        hookshot = null;
+      } else if (hookshot.state === "extending" || hookshot.state === "retracting") {
+        if (!hookshot.carriedRupeeIds) {
+          hookshot.carriedRupeeIds = [];
+        }
+
+        if (hookshot.state === "extending") {
+          const extendSpeed = 28.0;
+          const step = extendSpeed * dt;
+          hookshot.distanceTraveled += step;
+          const nextHx = hookshot.x + hookshot.dirX * step;
+          const nextHz = hookshot.z + hookshot.dirZ * step;
+
+          // 1) Check Grapple Anchor Props (`grapple_post`, `pine_tree`, `wooden_crate`, `wall_torch`) & `crystal_switch`
+          let latchedOrBounced = false;
+          for (const prop of mapProps) {
+            if (prop.zone !== zone || prop.smashed) continue;
+            if (
+              prop.prefab === "grapple_post" ||
+              prop.prefab === "pine_tree" ||
+              prop.prefab === "wooden_crate" ||
+              prop.prefab === "wall_torch"
+            ) {
+              const hitRadius =
+                prop.prefab === "grapple_post"
+                  ? 1.05
+                  : prop.prefab === "pine_tree"
+                  ? 1.1
+                  : 0.92;
+              if (Math.hypot(nextHx - prop.x, nextHz - prop.z) <= hitRadius) {
+                soundEngine.playHookshotLatch();
+                hookshot.x = prop.x;
+                hookshot.z = prop.z;
+                hookshot.targetX = prop.x - hookshot.dirX * 1.05;
+                hookshot.targetZ = prop.z - hookshot.dirZ * 1.05;
+                hookshot.state = "pulling_hero";
+                latchedOrBounced = true;
+                break;
+              }
+            } else if (
+              prop.prefab === "crystal_switch" &&
+              (prop.hitCooldown ?? 0) <= 0 &&
+              Math.hypot(nextHx - prop.x, nextHz - prop.z) <= 1.15
+            ) {
+              toggleCrystalSwitch(prop.id);
+              soundEngine.playHookshotLatch();
+              hookshot.x = prop.x;
+              hookshot.z = prop.z;
+              hookshot.state = "retracting";
+              latchedOrBounced = true;
+              break;
+            }
+          }
+
+          // 2) Check Enemy Combat Interactions (Strip Wooden Shield, Pierce Boss Eye & Pull Hero, or Stun Enemies)
+          if (!latchedOrBounced) {
+            for (const enemy of enemies) {
+              if (enemy.zone !== zone || enemy.state === "dead") continue;
+              if (enemy.kind === "burrower" && enemy.burrowed) continue;
+              const eRad =
+                enemy.kind === "boss" ? 1.65 : enemy.kind === "turret" ? 1.08 : 0.92;
+              if (Math.hypot(enemy.x - nextHx, enemy.z - nextHz) <= eRad) {
+                latchedOrBounced = true;
+                hookshot.x = enemy.x;
+                hookshot.z = enemy.z;
+
+                if (isBossRoomSealed(enemy)) {
+                  soundEngine.playArmorDeflect();
+                  hookshot.state = "retracting";
+                } else if (enemy.kind === "boss") {
+                  const bossName = getBossName(zone);
+                  enemy.provoked = true;
+                  if (flags.bossState === "EXPOSED_EYE") {
+                    flags.bossState = "STUNNED";
+                    enemy.state = "stunned";
+                    enemy.stateTimer = 4.5;
+                    enemy.hp -= 2;
+                    enemy.hitFlashTimer = 0.38;
+                    soundEngine.playHookshotLatch();
+                    soundEngine.playEyeStatueHit();
+                    soundEngine.playBossWallCrash();
+                    if (enemy.hp <= 0) {
+                      handleEnemyDeath(enemy);
+                      hookshot.state = "retracting";
+                    } else {
+                      hookshot.targetX = enemy.x - hookshot.dirX * 1.85;
+                      hookshot.targetZ = enemy.z - hookshot.dirZ * 1.85;
+                      hookshot.state = "pulling_hero";
+                      pushBanner(
+                        `Hookshot Pierced ${bossName}'s Open Eye & Pulled You In! (-2 HP)`,
+                        `Slash ${bossName} at point-blank range while stunned on the floor!`,
+                        4.4
+                      );
+                    }
+                  } else if (flags.bossState === "STUNNED") {
+                    enemy.hp -= 1;
+                    enemy.hitFlashTimer = 0.25;
+                    soundEngine.playHookshotLatch();
+                    if (enemy.hp <= 0) {
+                      handleEnemyDeath(enemy);
+                    } else {
+                      soundEngine.playEnemyHit(true);
+                    }
+                    hookshot.state = "retracting";
+                  } else {
+                    soundEngine.playArmorDeflect();
+                    enemy.hitFlashTimer = 0.15;
+                    hookshot.state = "retracting";
+                    if (armorNoticeCooldown <= 0) {
+                      armorNoticeCooldown = 2.8;
+                      pushBanner(
+                        `${bossName}'s Outer Carapace Deflects the Hookshot!`,
+                        `Crack ${bossName}'s shell first, then grapple his Exposed Eye [H / 7] to stun & pull yourself in!`,
+                        3.8
+                      );
+                    }
+                  }
+                } else if (enemy.shieldArmor === "wood") {
+                  // Rips the Wooden Shield right off the Goblin's arm!
+                  enemy.shieldArmor = "none";
+                  enemy.provoked = true;
+                  enemy.stunTimer = 2.4;
+                  enemy.state = "stunned";
+                  enemy.stateTimer = 2.4;
+                  enemy.hitFlashTimer = 0.32;
+                  soundEngine.playHookshotLatch();
+                  soundEngine.playPotSmash();
+                  hookshot.state = "retracting";
+                  pushBanner(
+                    "Hookshot Ripped Off the Goblin's Wooden Shield!",
+                    "The goblin is now permanently shieldless and stunned for 2.4s — slash away!",
+                    4.0
+                  );
+                } else if (enemy.shieldArmor === "ice") {
+                  soundEngine.playArmorDeflect();
+                  enemy.hitFlashTimer = 0.16;
+                  hookshot.state = "retracting";
+                  if (armorNoticeCooldown <= 0) {
+                    armorNoticeCooldown = 2.8;
+                    pushBanner(
+                      "Glacial Ice Armor Deflects the Hookshot!",
+                      "Melt their Ice Armor with the Flame Rod [R / 3] first!",
+                      3.4
+                    );
+                  }
+                } else {
+                  enemy.provoked = true;
+                  enemy.hp -= 1;
+                  enemy.hitFlashTimer = 0.28;
+                  enemy.stunTimer = Math.max(enemy.stunTimer, 2.4);
+                  if (enemy.kind !== "turret") {
+                    enemy.state = "stunned";
+                    enemy.stateTimer = Math.max(enemy.stateTimer, 2.4);
+                  }
+                  soundEngine.playHookshotLatch();
+                  if (enemy.hp <= 0) {
+                    handleEnemyDeath(enemy);
+                  } else {
+                    soundEngine.playEnemyHit(true);
+                  }
+                  hookshot.state = "retracting";
+                }
+                break;
+              }
+            }
+          }
+
+          // 3) Wall/Obstacle Check & Max Range Check (13.5m)
+          if (!latchedOrBounced && hookshot) {
+            const resH = resolveArrowCollisions(
+              nextHx,
+              nextHz,
+              0.32,
+              zone,
+              gatePassable,
+              dynamicObstacles
+            );
+            hookshot.x = resH.x;
+            hookshot.z = resH.z;
+            if (resH.hitObstacle || hookshot.distanceTraveled >= 13.5) {
+              if (resH.hitObstacle) {
+                soundEngine.playArmorDeflect();
+              }
+              hookshot.state = "retracting";
+            }
+          }
+        } else if (hookshot.state === "retracting") {
+          const toHx = hero.x - hookshot.x;
+          const toHz = hero.z - hookshot.z;
+          const distH = Math.hypot(toHx, toHz);
+          if (distH < 1.25) {
+            if (hookshot.carryingKey && !flags.keyPickedUp) {
+              flags.keyPickedUp = true;
+              hero.hasDungeonKey = true;
+              soundEngine.playKeyPickup();
+              pushBanner(
+                "Hookshot Snagged the Sanctum Entry Key!",
+                "Return East to Map 1 Crossroads and take the North Exit to unlock Map 2 (Sunken Sanctum)!",
+                5.5
+              );
+            }
+            if (hookshot.carryingDgSmallKey && !flags.dgSmallKeyPickedUp) {
+              flags.dgSmallKeyPickedUp = true;
+              flags.hasSmallKey = true;
+              hero.hasDungeonKey = true;
+              soundEngine.playKeyPickup();
+              pushBanner(
+                "Hookshot Snagged the Small Key Across the Chasm!",
+                "Return East to Room 1 (Central Hub) and unlock the Locked East Door into Room 3!",
+                5.5
+              );
+            }
+            if (hookshot.carryingGlacialKey && !flags.cavernCrestKeyPickedUp) {
+              flags.cavernCrestKeyPickedUp = true;
+              flags.hasGlacialKey = true;
+              hero.hasDungeonKey = true;
+              soundEngine.playVictoryFanfare();
+              soundEngine.playKeyPickup();
+              pushBanner(
+                "Hookshot Snagged the Glacial Crest Key!",
+                "Step into the North-East Shortcut Portal and unlock the North Citadel Gate into Map 5!",
+                5.8
+              );
+            }
+            for (const cId of hookshot.carriedRupeeIds) {
+              const r = rupees.find((item) => item.id === cId);
+              if (r && !r.collected) {
+                r.collected = true;
+                if (r.tier === "heart") {
+                  hero.hp = Math.min(hero.maxHp, hero.hp + (r.value || 2));
+                } else {
+                  hero.rupees += r.value;
+                }
+                soundEngine.playRupeePickup(r.tier);
+              }
+            }
+            hookshot = null;
+          } else {
+            const retractSpeed = 30.0;
+            hookshot.x += (toHx / distH) * retractSpeed * dt;
+            hookshot.z += (toHz / distH) * retractSpeed * dt;
+          }
+        }
+
+        // Snag Keys & Rupees/Hearts along the Hookshot claw's path!
+        if (hookshot && (hookshot.state === "extending" || hookshot.state === "retracting")) {
+          if (
+            zone === "grove" &&
+            !flags.keyPickedUp &&
+            !hookshot.carryingKey &&
+            Math.hypot(DUNGEON_KEY_POS.x - hookshot.x, DUNGEON_KEY_POS.z - hookshot.z) < 1.65
+          ) {
+            hookshot.carryingKey = true;
+            hookshot.state = "retracting";
+            soundEngine.playHookshotLatch();
+          }
+          if (
+            zone === "dungeon" &&
+            !flags.dgSmallKeyPickedUp &&
+            !hookshot.carryingDgSmallKey &&
+            Math.hypot(DG_SMALL_KEY_POS.x - hookshot.x, DG_SMALL_KEY_POS.z - hookshot.z) < 1.85
+          ) {
+            hookshot.carryingDgSmallKey = true;
+            hookshot.state = "retracting";
+            soundEngine.playHookshotLatch();
+          }
+          if (
+            zone === "caverns" &&
+            !flags.cavernCrestKeyPickedUp &&
+            !hookshot.carryingGlacialKey &&
+            (flags.cavernEyeSolved || flags.cavernWardensCleared || flags.cavernBossDefeated) &&
+            Math.hypot(CAVERN_CREST_KEY_POS.x - hookshot.x, CAVERN_CREST_KEY_POS.z - hookshot.z) < 1.85
+          ) {
+            hookshot.carryingGlacialKey = true;
+            hookshot.state = "retracting";
+            soundEngine.playHookshotLatch();
+          }
+          for (const rupee of rupees) {
+            if (rupee.zone !== zone || rupee.collected) continue;
+            if ((rupee.spawnBounceTimer ?? 0) > 0.12) continue;
+            if (
+              !hookshot.carriedRupeeIds!.includes(rupee.id) &&
+              Math.hypot(rupee.x - hookshot.x, rupee.z - hookshot.z) < 1.48
+            ) {
+              hookshot.carriedRupeeIds!.push(rupee.id);
+              hookshot.state = "retracting";
+              soundEngine.playHookshotLatch();
+            }
+          }
+          for (const cId of hookshot.carriedRupeeIds!) {
+            const r = rupees.find((item) => item.id === cId);
+            if (!r || r.collected) continue;
+            r.x = hookshot.x;
+            r.z = hookshot.z;
+          }
+        }
+      }
+    }
 
     // 9. Update Arrows, Frost Bolts & Stone Spitter Turret Rock Projectiles
     const remainingArrows: ArrowProjectileState[] = [];
@@ -9579,6 +10072,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const nearScoutLyra =
         zone === "overworld" &&
         Math.hypot(GUIDE_NPC_POS.x - hero.x, GUIDE_NPC_POS.z - hero.z) <= 3.8;
+      const nearHookshotChest =
+        zone === "frontier" &&
+        !flags.frontierHookshotChestOpened &&
+        Math.hypot(FRONTIER_HOOKSHOT_CHEST_POS.x - hero.x, FRONTIER_HOOKSHOT_CHEST_POS.z - hero.z) <= 5.5;
+      const nearGrapplePost =
+        hero.hasHookshot &&
+        mapProps.find(
+          (p) =>
+            p.zone === zone &&
+            p.prefab === "grapple_post" &&
+            Math.hypot(p.x - hero.x, p.z - hero.z) >= 2.2 &&
+            Math.hypot(p.x - hero.x, p.z - hero.z) <= 13.0
+        );
 
       if (nearGroundBomb) {
         hero.interactPrompt = "Press [F] or [B] to Lift & Throw Bomb";
@@ -9587,6 +10093,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           nearLiftable.prefab === "clay_pot"
             ? "Press [F] to Lift Clay Pot"
             : "Press [F] to Lift Light Rock";
+      } else if (nearHookshotChest) {
+        hero.interactPrompt =
+          "NW Cliffside Reliquary Chest (Grappling Hookshot) — Defeat Guard & Walk Up to Open!";
       } else if (nearSecretStash) {
         hero.interactPrompt =
           "Secret Rupee Stash Chest (+50 Rupees) — Walk Up to Claim Treasure!";
@@ -9606,7 +10115,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             : "North Dungeon Entrance Gate (Locked) — Get the Key from West Exit (Map 1B: Forest Grove)!";
       } else if (nearDgSmallKeyAcrossGap) {
         hero.interactPrompt =
-          "Small Key on Pedestal Across Chasm — Throw Boomerang [Q / 1] Across the Gap to Snag It!";
+          "Small Key on Pedestal Across Chasm — Throw Boomerang [Q] or Grapple [H] Across the Gap!";
       } else if (nearDgEastDoor) {
         hero.interactPrompt = flags.hasSmallKey
           ? "Room 3 East Wing Key Door — Walk Forward to Unlock with Your Small Key!"
@@ -9634,13 +10143,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
           "Grove Crystal Switch — Throw Boomerang [Q / 1] Across the Stream (or Clear 3 Ambush Monsters) to Open Shrine!";
       } else if (nearWaterGapRupee) {
         hero.interactPrompt =
-          "Red Rupee (+20) Across Water — Throw Boomerang [Q / 1] to Snag & Pull It Back!";
+          "Red Rupee (+20) Across Water — Throw Boomerang [Q / 1] or Hookshot [H / 7] to Snag It!";
       } else if (nearEyeStatue) {
         hero.interactPrompt =
           "Cyclops Eye Statue — Shoot its Open Eye with your Bow & Arrow [E / 2]!";
       } else if (nearShockEnemy) {
         hero.interactPrompt =
-          "Armored Spiked Beetle — Throw Boomerang [Q / 1] to Stun for 2s Before Slashing!";
+          "Armored Spiked Beetle — Stun with Boomerang [Q] or Hookshot [H] Before Slashing!";
       } else if (nearBountyEnemy) {
         hero.interactPrompt =
           "Gold/Crimson Bounty Monster — Defeat for 5x Rupee Drops!";
@@ -9665,6 +10174,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
             : nearUnlitTorch.id.startsWith("prop-ow-east-exit-torch")
             ? "East Exit Gate Torch — Light Both Torches with Flame Rod [R] to Burn the East Barrier!"
             : "Unlit Lantern — Shoot with Flame Rod [R] to Illuminate!";
+      } else if (nearGrapplePost) {
+        hero.interactPrompt =
+          "Grapple Anchor Post — Face Post & Press [H] or [7] to Grapple Across with Hookshot!";
       } else {
         hero.interactPrompt = null;
       }
@@ -9677,6 +10189,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero,
       enemies,
       boomerang,
+      hookshot,
       arrows,
       fireballs,
       fireZones,

@@ -34,6 +34,7 @@ export type PropPrefabId =
   | "briar_barrier"
   | "spiderweb_barrier"
   | "eye_statue"
+  | "grapple_post"
   | "boulder"
   | "ruin_pillar"
   | "dungeon_pillar"
@@ -356,6 +357,12 @@ export const FRONTIER_SAPPER_NPC_POS = {
 export const FRONTIER_BOMB_CHEST_POS = {
   x: 24.5,
   z: -18.5,
+};
+
+// Map 3 North-West Cliffside Grapple Reliquary Chest (Unlocks the Grappling Hookshot [H / 7]!)
+export const FRONTIER_HOOKSHOT_CHEST_POS = {
+  x: -24.5,
+  z: 22.0,
 };
 
 // Map 3 North Exit Gate to Map 5 (Obsidian Citadel — unlocked with Glacial Crest Key from Map 4!)
@@ -1420,6 +1427,20 @@ export const INITIAL_ENEMIES: EnemySpawn[] = [
     speed: 5.2,
     damage: 1,
     rupeeDrop: "red",
+  },
+  {
+    id: "fr-hookshot-guard",
+    kind: "goblin",
+    zone: "frontier",
+    x: -21.5,
+    z: 18.5,
+    hp: 5,
+    weight: 2.0,
+    aggroRadius: 9.0,
+    speed: 5.4,
+    damage: 1,
+    rupeeDrop: "red",
+    shieldArmor: "wood",
   },
 
   // =========================================================
@@ -4599,6 +4620,132 @@ export function buildInitialMapProps(): MapPropInstance[] {
     });
   });
 
+  // 22. GRAPPLE ANCHOR POSTS ("grapple_post") ACROSS ALL MAPS (Grapple Across Chasms & Rivers with Hookshot [H / 7]!)
+  const grapplePosts: Array<{
+    id: string;
+    name: string;
+    zone: ZoneId;
+    x: number;
+    z: number;
+  }> = [
+    // Map 1 (Overworld): East River Crossing Posts & Western Ruins Moat Post
+    {
+      id: "prop-ow-grapple-post-river-s",
+      name: "River South Grapple Post (Hookshot [H] Across!)",
+      zone: "overworld",
+      x: 9.5,
+      z: -24.2,
+    },
+    {
+      id: "prop-ow-grapple-post-river-n",
+      name: "River North Grapple Post (Hookshot [H] Across!)",
+      zone: "overworld",
+      x: 9.5,
+      z: -16.8,
+    },
+    {
+      id: "prop-ow-grapple-post-moat",
+      name: "Ruins Moat Island Grapple Post (Hookshot [H]!)",
+      zone: "overworld",
+      x: -28.0,
+      z: 11.8,
+    },
+    // Map 1B (Grove): West Stream Crossing Posts
+    {
+      id: "prop-gr-grapple-post-s",
+      name: "Grove Stream South Grapple Post (Hookshot [H]!)",
+      zone: "grove",
+      x: -8.5,
+      z: -0.5,
+    },
+    {
+      id: "prop-gr-grapple-post-n",
+      name: "Grove Stream North Grapple Post (Hookshot [H]!)",
+      zone: "grove",
+      x: -8.5,
+      z: 6.2,
+    },
+    // Map 2 (Dungeon Room 2: Chasm Gallery): Across the West Chasm Channel!
+    {
+      id: "prop-dg-grapple-post-e",
+      name: "Chasm Gallery East Grapple Post (Hookshot [H] Across Chasm!)",
+      zone: "dungeon",
+      x: -22.8,
+      z: -2.5,
+    },
+    {
+      id: "prop-dg-grapple-post-w",
+      name: "Chasm Gallery West Ledge Grapple Post (Hookshot [H] Across Chasm!)",
+      zone: "dungeon",
+      x: -30.2,
+      z: -2.5,
+    },
+    // Map 3 (Elderwood Highlands): NW Grapple Reliquary Trial Posts
+    {
+      id: "prop-fr-grapple-post-nw-1",
+      name: "Highland Reliquary Grapple Post S (Hookshot [H]!)",
+      zone: "frontier",
+      x: -24.5,
+      z: 13.5,
+    },
+    {
+      id: "prop-fr-grapple-post-nw-2",
+      name: "Highland Reliquary Grapple Post E (Hookshot [H]!)",
+      zone: "frontier",
+      x: -14.5,
+      z: 22.0,
+    },
+    // Map 4 (Frostpeak Caverns): Across the Frozen Underground Stream (`x = 10.0`)
+    {
+      id: "prop-cv-grapple-post-stream-w",
+      name: "Glacial Stream West Grapple Post (Hookshot [H] Across Stream!)",
+      zone: "caverns",
+      x: 6.2,
+      z: -8.5,
+    },
+    {
+      id: "prop-cv-grapple-post-stream-e",
+      name: "Glacial Stream East Grapple Post (Hookshot [H] Across Stream!)",
+      zone: "caverns",
+      x: 13.8,
+      z: -8.5,
+    },
+    // Map 5 (Obsidian Citadel): Courtyard Tactical Grapple Posts
+    {
+      id: "prop-ct-grapple-post-w",
+      name: "Citadel Courtyard West Grapple Post (Hookshot [H]!)",
+      zone: "citadel",
+      x: -14.5,
+      z: 8.5,
+    },
+    {
+      id: "prop-ct-grapple-post-e",
+      name: "Citadel Courtyard East Grapple Post (Hookshot [H]!)",
+      zone: "citadel",
+      x: 14.5,
+      z: 8.5,
+    },
+  ];
+  grapplePosts.forEach((gp) => {
+    props.push({
+      id: gp.id,
+      prefab: "grapple_post",
+      name: gp.name,
+      zone: gp.zone,
+      x: gp.x,
+      y: 0,
+      z: gp.z,
+      rotY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      hasCollider: true,
+      colliderWidth: 1.1,
+      colliderDepth: 1.1,
+      colliderKind: "pillar",
+    });
+  });
+
   return props;
 }
 
@@ -4777,7 +4924,8 @@ export function resolveWorldCollisions(
   zone: ZoneId,
   gateUnlocked: boolean,
   dynamicObstacles?: RectObstacle[],
-  bossExitUnlocked = false
+  bossExitUnlocked = false,
+  ignoreWater = false
 ): { x: number; z: number; hitObstacle: boolean } {
   let curX = x;
   let curZ = z;
@@ -4785,6 +4933,7 @@ export function resolveWorldCollisions(
   const list = dynamicObstacles ?? [];
   for (const obs of list) {
     if (obs.zone !== zone) continue;
+    if (ignoreWater && obs.kind === "water") continue;
     if (obs.id === "ow-dungeon-entry-gate" && gateUnlocked) continue;
     if (obs.id === "dg-locked-gate" && gateUnlocked) continue;
     if (obs.id === "dg-boss-exit-gate" && bossExitUnlocked) continue;
