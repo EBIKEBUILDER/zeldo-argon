@@ -69,6 +69,7 @@ import {
   LOCKED_GATE_POS,
   MapPortal,
   MapPropInstance,
+  MOUNT_STABLES_POS,
   PropPrefabId,
   RIFT_ENTRANCE_POS,
   SECRET_STASH_POS,
@@ -5833,6 +5834,435 @@ export default function BabylonCanvas() {
     spriteHalo.isPickable = false;
     spriteHalo.parent = spriteNode;
 
+    // 1d. Overworld Crossroads Royal Stables (`MOUNT_STABLES_POS = -11.5, -31.8`)
+    const mountStablesNode = new TransformNode("mountStablesNode", scene);
+    mountStablesNode.position.set(MOUNT_STABLES_POS.x, 0, MOUNT_STABLES_POS.z);
+
+    const stablesPad = MeshBuilder.CreateCylinder(
+      "mountStablesPad",
+      { diameterTop: 4.1, diameterBottom: 4.6, height: 0.22, tessellation: 14 },
+      scene
+    );
+    stablesPad.position.set(0, 0.11, 0);
+    stablesPad.material = ruinMat;
+    stablesPad.isPickable = false;
+    stablesPad.parent = mountStablesNode;
+
+    for (const px of [-1.45, 1.45]) {
+      for (const pz of [-1.15, 1.15]) {
+        const post = MeshBuilder.CreateCylinder(
+          `stablesPost-${px}-${pz}`,
+          { diameter: 0.24, height: 2.35, tessellation: 8 },
+          scene
+        );
+        post.position.set(px, 1.25, pz);
+        post.material = woodMat;
+        post.isPickable = false;
+        post.parent = mountStablesNode;
+      }
+    }
+
+    const stablesRoof = MeshBuilder.CreateCylinder(
+      "mountStablesRoof",
+      { diameterTop: 0.25, diameterBottom: 4.4, height: 1.35, tessellation: 4 },
+      scene
+    );
+    stablesRoof.position.set(0, 2.95, 0);
+    stablesRoof.rotation.y = Math.PI / 4;
+    stablesRoof.material = clayPotMat;
+    stablesRoof.isPickable = false;
+    stablesRoof.parent = mountStablesNode;
+
+    const stablesHorseshoeCrest = MeshBuilder.CreateTorus(
+      "stablesHorseshoeCrest",
+      { diameter: 0.92, thickness: 0.14, tessellation: 20 },
+      scene
+    );
+    stablesHorseshoeCrest.position.set(0, 3.55, 0);
+    stablesHorseshoeCrest.rotation.x = Math.PI / 2;
+    stablesHorseshoeCrest.material = goldKeyMat;
+    stablesHorseshoeCrest.isPickable = false;
+    stablesHorseshoeCrest.parent = mountStablesNode;
+
+    const stablesTrough = MeshBuilder.CreateBox(
+      "stablesTrough",
+      { width: 1.35, height: 0.42, depth: 0.58 },
+      scene
+    );
+    stablesTrough.position.set(-0.85, 0.38, 0.65);
+    stablesTrough.material = woodMat;
+    stablesTrough.isPickable = false;
+    stablesTrough.parent = mountStablesNode;
+
+    const stablesWater = MeshBuilder.CreateBox(
+      "stablesWater",
+      { width: 1.18, height: 0.08, depth: 0.44 },
+      scene
+    );
+    stablesWater.position.set(-0.85, 0.58, 0.65);
+    stablesWater.material = warpAwakenedMat;
+    stablesWater.isPickable = false;
+    stablesWater.parent = mountStablesNode;
+
+    const stablesHayBale = MeshBuilder.CreateBox(
+      "stablesHayBale",
+      { width: 0.92, height: 0.56, depth: 0.64 },
+      scene
+    );
+    stablesHayBale.position.set(0.95, 0.46, 0.72);
+    stablesHayBale.material = goldKeyMat;
+    stablesHayBale.isPickable = false;
+    stablesHayBale.parent = mountStablesNode;
+
+    // Stablemaster Garrick NPC standing at the Stables
+    const garrickBody = MeshBuilder.CreateCylinder(
+      "garrickBody",
+      { diameterTop: 0.58, diameterBottom: 0.74, height: 1.05, tessellation: 10 },
+      scene
+    );
+    garrickBody.position.set(1.25, 0.72, -0.55);
+    garrickBody.material = clayRimMat;
+    garrickBody.isPickable = false;
+    garrickBody.parent = mountStablesNode;
+
+    const garrickHead = MeshBuilder.CreateSphere(
+      "garrickHead",
+      { diameter: 0.5, segments: 10 },
+      scene
+    );
+    garrickHead.position.set(1.25, 1.44, -0.55);
+    garrickHead.material = skinMat;
+    garrickHead.isPickable = false;
+    garrickHead.parent = mountStablesNode;
+
+    const garrickBrim = MeshBuilder.CreateCylinder(
+      "garrickBrim",
+      { diameter: 0.86, height: 0.08, tessellation: 12 },
+      scene
+    );
+    garrickBrim.position.set(1.25, 1.68, -0.55);
+    garrickBrim.material = woodMat;
+    garrickBrim.isPickable = false;
+    garrickBrim.parent = mountStablesNode;
+
+    const stablesGroundHalo = MeshBuilder.CreateTorus(
+      "stablesGroundHalo",
+      { diameter: 3.9, thickness: 0.09, tessellation: 28 },
+      scene
+    );
+    stablesGroundHalo.position.set(0, 0.14, 0);
+    stablesGroundHalo.material = goldKeyMat;
+    stablesGroundHalo.isPickable = false;
+    stablesGroundHalo.parent = mountStablesNode;
+
+    // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
+    const heroMountNode = new TransformNode("heroMountNode", scene);
+    heroMountNode.setEnabled(false);
+
+    const courserCoatMat = makeMat(
+      "courserCoatMat",
+      new Color3(0.92, 0.68, 0.24),
+      new Color3(0.28, 0.18, 0.04),
+      new Color3(0.95, 0.85, 0.55)
+    );
+    const stagCoatMat = makeMat(
+      "stagCoatMat",
+      new Color3(0.74, 0.94, 1.0),
+      new Color3(0.22, 0.58, 0.82),
+      new Color3(1.0, 1.0, 1.0)
+    );
+    const drakeScaleMat = makeMat(
+      "drakeScaleMat",
+      new Color3(0.24, 0.14, 0.28),
+      new Color3(0.12, 0.04, 0.14),
+      new Color3(0.85, 0.35, 0.45)
+    );
+
+    // Shared Saddle & 4 Articulated Steed Legs
+    const mountSaddle = MeshBuilder.CreateBox(
+      "mountSaddle",
+      { width: 0.82, height: 0.22, depth: 0.78 },
+      scene
+    );
+    mountSaddle.position.set(0, 1.08, -0.05);
+    mountSaddle.material = clayRimMat;
+    mountSaddle.isPickable = false;
+    mountSaddle.parent = heroMountNode;
+
+    const mountLegFL = MeshBuilder.CreateCylinder(
+      "mountLegFL",
+      { diameterTop: 0.22, diameterBottom: 0.16, height: 0.78, tessellation: 8 },
+      scene
+    );
+    mountLegFL.position.set(-0.34, 0.39, 0.62);
+    mountLegFL.material = woodMat;
+    mountLegFL.isPickable = false;
+    mountLegFL.parent = heroMountNode;
+
+    const mountLegFR = MeshBuilder.CreateCylinder(
+      "mountLegFR",
+      { diameterTop: 0.22, diameterBottom: 0.16, height: 0.78, tessellation: 8 },
+      scene
+    );
+    mountLegFR.position.set(0.34, 0.39, 0.62);
+    mountLegFR.material = woodMat;
+    mountLegFR.isPickable = false;
+    mountLegFR.parent = heroMountNode;
+
+    const mountLegBL = MeshBuilder.CreateCylinder(
+      "mountLegBL",
+      { diameterTop: 0.24, diameterBottom: 0.16, height: 0.78, tessellation: 8 },
+      scene
+    );
+    mountLegBL.position.set(-0.34, 0.39, -0.62);
+    mountLegBL.material = woodMat;
+    mountLegBL.isPickable = false;
+    mountLegBL.parent = heroMountNode;
+
+    const mountLegBR = MeshBuilder.CreateCylinder(
+      "mountLegBR",
+      { diameterTop: 0.24, diameterBottom: 0.16, height: 0.78, tessellation: 8 },
+      scene
+    );
+    mountLegBR.position.set(0.34, 0.39, -0.62);
+    mountLegBR.material = woodMat;
+    mountLegBR.isPickable = false;
+    mountLegBR.parent = heroMountNode;
+
+    // Steed 1: Sun-Mane Courser (`sun_courser`)
+    const sunCourserNode = new TransformNode("sunCourserNode", scene);
+    sunCourserNode.parent = heroMountNode;
+    {
+      const body = MeshBuilder.CreateBox(
+        "courserBody",
+        { width: 0.86, height: 0.68, depth: 1.68 },
+        scene
+      );
+      body.position.set(0, 0.82, 0);
+      body.material = courserCoatMat;
+      body.isPickable = false;
+      body.parent = sunCourserNode;
+
+      const neck = MeshBuilder.CreateCylinder(
+        "courserNeck",
+        { diameterTop: 0.38, diameterBottom: 0.54, height: 0.86, tessellation: 10 },
+        scene
+      );
+      neck.position.set(0, 1.32, 0.72);
+      neck.rotation.x = 0.42;
+      neck.material = courserCoatMat;
+      neck.isPickable = false;
+      neck.parent = sunCourserNode;
+
+      const head = MeshBuilder.CreateBox(
+        "courserHead",
+        { width: 0.42, height: 0.38, depth: 0.68 },
+        scene
+      );
+      head.position.set(0, 1.66, 1.05);
+      head.rotation.x = 0.22;
+      head.material = courserCoatMat;
+      head.isPickable = false;
+      head.parent = sunCourserNode;
+
+      const mane = MeshBuilder.CreateBox(
+        "courserMane",
+        { width: 0.16, height: 0.75, depth: 0.26 },
+        scene
+      );
+      mane.position.set(0, 1.42, 0.56);
+      mane.rotation.x = 0.42;
+      mane.material = goldKeyMat;
+      mane.isPickable = false;
+      mane.parent = sunCourserNode;
+
+      const tail = MeshBuilder.CreateCylinder(
+        "courserTail",
+        { diameterTop: 0.14, diameterBottom: 0.32, height: 0.82, tessellation: 8 },
+        scene
+      );
+      tail.position.set(0, 0.74, -1.04);
+      tail.rotation.x = -0.58;
+      tail.material = goldKeyMat;
+      tail.isPickable = false;
+      tail.parent = sunCourserNode;
+    }
+
+    const courserAuraRing = MeshBuilder.CreateTorus(
+      "courserAuraRing",
+      { diameter: 2.35, thickness: 0.075, tessellation: 24 },
+      scene
+    );
+    courserAuraRing.position.set(0, 0.08, 0);
+    courserAuraRing.material = goldKeyMat;
+    courserAuraRing.isPickable = false;
+    courserAuraRing.parent = sunCourserNode;
+
+    // Steed 2: Glacial Dire-Stag (`frost_stag`)
+    const frostStagNode = new TransformNode("frostStagNode", scene);
+    frostStagNode.parent = heroMountNode;
+    {
+      const body = MeshBuilder.CreateBox(
+        "stagBody",
+        { width: 0.82, height: 0.66, depth: 1.64 },
+        scene
+      );
+      body.position.set(0, 0.82, 0);
+      body.material = stagCoatMat;
+      body.isPickable = false;
+      body.parent = frostStagNode;
+
+      const neck = MeshBuilder.CreateCylinder(
+        "stagNeck",
+        { diameterTop: 0.34, diameterBottom: 0.5, height: 0.92, tessellation: 10 },
+        scene
+      );
+      neck.position.set(0, 1.36, 0.7);
+      neck.rotation.x = 0.32;
+      neck.material = stagCoatMat;
+      neck.isPickable = false;
+      neck.parent = frostStagNode;
+
+      const head = MeshBuilder.CreateBox(
+        "stagHead",
+        { width: 0.38, height: 0.36, depth: 0.64 },
+        scene
+      );
+      head.position.set(0, 1.72, 0.98);
+      head.rotation.x = 0.18;
+      head.material = stagCoatMat;
+      head.isPickable = false;
+      head.parent = frostStagNode;
+
+      for (const side of [-1, 1]) {
+        const antlerMain = MeshBuilder.CreateCylinder(
+          `stagAntlerMain-${side}`,
+          { diameterTop: 0.04, diameterBottom: 0.12, height: 0.92, tessellation: 8 },
+          scene
+        );
+        antlerMain.position.set(side * 0.32, 2.18, 0.86);
+        antlerMain.rotation.z = side * -0.46;
+        antlerMain.rotation.x = -0.22;
+        antlerMain.material = warpAwakenedMat;
+        antlerMain.isPickable = false;
+        antlerMain.parent = frostStagNode;
+
+        const antlerTine = MeshBuilder.CreateCylinder(
+          `stagAntlerTine-${side}`,
+          { diameterTop: 0.03, diameterBottom: 0.09, height: 0.54, tessellation: 8 },
+          scene
+        );
+        antlerTine.position.set(side * 0.48, 2.28, 1.06);
+        antlerTine.rotation.z = side * -0.25;
+        antlerTine.rotation.x = 0.45;
+        antlerTine.material = warpAwakenedMat;
+        antlerTine.isPickable = false;
+        antlerTine.parent = frostStagNode;
+      }
+    }
+
+    const stagFrostRing = MeshBuilder.CreateTorus(
+      "stagFrostRing",
+      { diameter: 2.45, thickness: 0.085, tessellation: 24 },
+      scene
+    );
+    stagFrostRing.position.set(0, 0.08, 0);
+    stagFrostRing.material = warpAwakenedMat;
+    stagFrostRing.isPickable = false;
+    stagFrostRing.parent = frostStagNode;
+
+    // Steed 3: Obsidian War-Drake (`war_drake`)
+    const warDrakeNode = new TransformNode("warDrakeNode", scene);
+    warDrakeNode.parent = heroMountNode;
+    {
+      const body = MeshBuilder.CreateBox(
+        "drakeBody",
+        { width: 0.98, height: 0.72, depth: 1.82 },
+        scene
+      );
+      body.position.set(0, 0.84, 0);
+      body.material = drakeScaleMat;
+      body.isPickable = false;
+      body.parent = warDrakeNode;
+
+      const neck = MeshBuilder.CreateCylinder(
+        "drakeNeck",
+        { diameterTop: 0.44, diameterBottom: 0.62, height: 0.88, tessellation: 10 },
+        scene
+      );
+      neck.position.set(0, 1.32, 0.78);
+      neck.rotation.x = 0.48;
+      neck.material = drakeScaleMat;
+      neck.isPickable = false;
+      neck.parent = warDrakeNode;
+
+      const head = MeshBuilder.CreateBox(
+        "drakeHead",
+        { width: 0.52, height: 0.44, depth: 0.76 },
+        scene
+      );
+      head.position.set(0, 1.62, 1.18);
+      head.rotation.x = 0.16;
+      head.material = drakeScaleMat;
+      head.isPickable = false;
+      head.parent = warDrakeNode;
+
+      for (const side of [-1, 1]) {
+        const horn = MeshBuilder.CreateCylinder(
+          `drakeHorn-${side}`,
+          { diameterTop: 0.02, diameterBottom: 0.14, height: 0.58, tessellation: 8 },
+          scene
+        );
+        horn.position.set(side * 0.24, 1.92, 0.96);
+        horn.rotation.x = -0.65;
+        horn.rotation.z = side * -0.22;
+        horn.material = forgeEmberMat;
+        horn.isPickable = false;
+        horn.parent = warDrakeNode;
+      }
+
+      const tail = MeshBuilder.CreateCylinder(
+        "drakeTail",
+        { diameterTop: 0.08, diameterBottom: 0.42, height: 1.25, tessellation: 8 },
+        scene
+      );
+      tail.position.set(0, 0.68, -1.28);
+      tail.rotation.x = -1.15;
+      tail.material = drakeScaleMat;
+      tail.isPickable = false;
+      tail.parent = warDrakeNode;
+    }
+
+    const drakeWingL = MeshBuilder.CreateBox(
+      "drakeWingL",
+      { width: 1.55, height: 0.07, depth: 0.92 },
+      scene
+    );
+    drakeWingL.position.set(-0.98, 1.18, 0.05);
+    drakeWingL.material = forgeEmberMat;
+    drakeWingL.isPickable = false;
+    drakeWingL.parent = warDrakeNode;
+
+    const drakeWingR = MeshBuilder.CreateBox(
+      "drakeWingR",
+      { width: 1.55, height: 0.07, depth: 0.92 },
+      scene
+    );
+    drakeWingR.position.set(0.98, 1.18, 0.05);
+    drakeWingR.material = forgeEmberMat;
+    drakeWingR.isPickable = false;
+    drakeWingR.parent = warDrakeNode;
+
+    const drakeFlameRing = MeshBuilder.CreateTorus(
+      "drakeFlameRing",
+      { diameter: 2.6, thickness: 0.095, tessellation: 24 },
+      scene
+    );
+    drakeFlameRing.position.set(0, 0.08, 0);
+    drakeFlameRing.material = forgeEmberMat;
+    drakeFlameRing.isPickable = false;
+    drakeFlameRing.parent = warDrakeNode;
+
     // 2. Procedural Rift Blessing Shrine (`riftShrineNode`)
     const riftShrineNode = new TransformNode("riftShrineNode", scene);
     riftShrineNode.parent = riftRoot;
@@ -9081,6 +9511,17 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // Y whistles to summon/dismiss 3D Steed (or Shift+Y toggles Crossroads Royal Stables Modal!)
+      if (code === "KeyY" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          store.setStablesOpen(!store.stablesOpen);
+        } else {
+          store.whistleToggleMount();
+        }
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -9119,7 +9560,11 @@ export default function BabylonCanvas() {
         shovelTriggeredOnce = true;
       }
       if ((code === "KeyV" || code === "Digit5") && !pressedKeys.has(code)) {
-        bottleTriggeredOnce = true;
+        if (code === "KeyV" && store.hero.bottles.length === 0) {
+          store.whistleToggleMount();
+        } else {
+          bottleTriggeredOnce = true;
+        }
       }
       if ((code === "KeyB" || code === "Digit6") && !pressedKeys.has(code)) {
         bombTriggeredOnce = true;
@@ -9756,10 +10201,25 @@ export default function BabylonCanvas() {
 
       const dashTimer = snap.hero.dashTimer ?? 0;
       const isDashingNow = dashTimer > 0;
+      const mountedSteed = snap.hero.mountedSteed ?? "none";
+      const isMounted = mountedSteed !== "none" && !snap.editorMode;
+      const mountHopY =
+        mountedSteed === "war_drake"
+          ? 0.96 + Math.sin(t * 5.8) * 0.08
+          : isMounted
+          ? 0.88 + Math.abs(stride) * 0.14
+          : 0;
 
       heroRoot.position.set(
         snap.hero.x,
-        heroGroundY + (kbLock > 0 ? launchArcY : isDashingNow ? 0.24 : Math.abs(stride) * 0.11),
+        heroGroundY +
+          (kbLock > 0
+            ? launchArcY
+            : isMounted
+            ? mountHopY
+            : isDashingNow
+            ? 0.24
+            : Math.abs(stride) * 0.11),
         snap.hero.z
       );
       heroRoot.rotation.y = isSpinning
@@ -9771,8 +10231,10 @@ export default function BabylonCanvas() {
           : isDashingNow
           ? 0.45
           : 0;
-      heroLeftBoot.position.z = kbLock > 0 ? 0.16 : stride * 0.22;
-      heroRightBoot.position.z = kbLock > 0 ? -0.16 : -stride * 0.22;
+      heroLeftBoot.position.x = isMounted ? -0.44 : -0.22;
+      heroRightBoot.position.x = isMounted ? 0.44 : 0.22;
+      heroLeftBoot.position.z = kbLock > 0 ? 0.16 : isMounted ? 0.05 : stride * 0.22;
+      heroRightBoot.position.z = kbLock > 0 ? -0.16 : isMounted ? 0.05 : -stride * 0.22;
 
       const heroHurtTimer = snap.hero.hurtFlashTimer ?? 0;
       const heroBlinkHide =
@@ -9780,6 +10242,39 @@ export default function BabylonCanvas() {
         heroHurtTimer > 0 &&
         Math.floor(heroHurtTimer * 18) % 2 === 0;
       heroRoot.setEnabled(!heroBlinkHide);
+
+      // Sync 3D Summonable Steed Rig (`heroMountNode`)
+      heroMountNode.setEnabled(isMounted && !heroBlinkHide);
+      if (isMounted) {
+        const steedBaseY =
+          mountedSteed === "war_drake"
+            ? heroGroundY + 0.16 + Math.sin(t * 5.8) * 0.08
+            : heroGroundY + Math.abs(stride) * 0.12;
+        heroMountNode.position.set(snap.hero.x, steedBaseY, snap.hero.z);
+        heroMountNode.rotation.y = snap.hero.facing;
+        heroMountNode.rotation.x = isDashingNow ? 0.18 : stride * 0.06;
+
+        sunCourserNode.setEnabled(mountedSteed === "sun_courser");
+        frostStagNode.setEnabled(mountedSteed === "frost_stag");
+        warDrakeNode.setEnabled(mountedSteed === "war_drake");
+
+        const gallopSwing = stride * 0.56;
+        mountLegFL.rotation.x = gallopSwing;
+        mountLegBR.rotation.x = gallopSwing;
+        mountLegFR.rotation.x = -gallopSwing;
+        mountLegBL.rotation.x = -gallopSwing;
+
+        if (mountedSteed === "sun_courser") {
+          courserAuraRing.rotation.y = t * 2.4;
+        } else if (mountedSteed === "frost_stag") {
+          stagFrostRing.rotation.y = -t * 2.8;
+        } else if (mountedSteed === "war_drake") {
+          const wingBeat = Math.sin(t * 11.5) * 0.44;
+          drakeWingL.rotation.z = wingBeat;
+          drakeWingR.rotation.z = -wingBeat;
+          drakeFlameRing.rotation.y = t * 3.2;
+        }
+      }
 
       if (snap.hero.isBlocking || kbLock > 0) {
         heroShieldPivot.position.set(0, 0.96, 0.56);
@@ -10034,9 +10529,10 @@ export default function BabylonCanvas() {
         smithArmNode.rotation.x = Math.sin(t * 6.5) * 0.55;
       }
 
-      // Sync 3D Abyssal Rift Obelisk & Spirit Companion Sanctuary (Map 1 Overworld)
+      // Sync 3D Abyssal Rift Obelisk, Spirit Companion Sanctuary & Crossroads Royal Stables (Map 1 Overworld)
       riftEntranceNode.setEnabled(inOverworld);
       companionAltarNode.setEnabled(inOverworld);
+      mountStablesNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -10067,6 +10563,19 @@ export default function BabylonCanvas() {
         altarOrb.position.y = 2.05 + Math.sin(t * 3.8) * 0.16;
         altarOrbitRing.rotation.y = -t * 2.2;
         altarGroundHalo.rotation.y = t * 1.5;
+
+        const stablesGroundY = sampleTerrainHeight(
+          activeCells,
+          MOUNT_STABLES_POS.x,
+          MOUNT_STABLES_POS.z
+        );
+        mountStablesNode.position.set(
+          MOUNT_STABLES_POS.x,
+          stablesGroundY,
+          MOUNT_STABLES_POS.z
+        );
+        stablesHorseshoeCrest.rotation.y = t * 2.1;
+        stablesGroundHalo.rotation.y = -t * 1.4;
       }
 
       // Sync 3D Active Spirit Companion Orbiting / Following the Hero (`snap.hero.activeCompanion`)

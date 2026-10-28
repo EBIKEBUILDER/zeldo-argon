@@ -6,6 +6,7 @@ import {
   BottleContentId,
   CompanionId,
   EditorPlaceCategory,
+  MountId,
   OffhandId,
   PrimaryHandId,
   RelicId,
@@ -251,6 +252,7 @@ export default function GameOverlay() {
   const forgeOpen = useGameStore((s) => s.forgeOpen);
   const riftOpen = useGameStore((s) => s.riftOpen);
   const sanctuaryOpen = useGameStore((s) => s.sanctuaryOpen);
+  const stablesOpen = useGameStore((s) => s.stablesOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -277,6 +279,10 @@ export default function GameOverlay() {
   const setForgeOpen = useGameStore((s) => s.setForgeOpen);
   const setRiftOpen = useGameStore((s) => s.setRiftOpen);
   const setSanctuaryOpen = useGameStore((s) => s.setSanctuaryOpen);
+  const setStablesOpen = useGameStore((s) => s.setStablesOpen);
+  const whistleToggleMount = useGameStore((s) => s.whistleToggleMount);
+  const summonOrUnlockMount = useGameStore((s) => s.summonOrUnlockMount);
+  const grantStablesPlaytestBundle = useGameStore((s) => s.grantStablesPlaytestBundle);
   const summonOrUnlockCompanion = useGameStore((s) => s.summonOrUnlockCompanion);
   const toggleEquipRelic = useGameStore((s) => s.toggleEquipRelic);
   const gambleAncientRelic = useGameStore((s) => s.gambleAncientRelic);
@@ -344,6 +350,7 @@ export default function GameOverlay() {
         if (forgeOpen) setForgeOpen(false);
         if (riftOpen) setRiftOpen(false);
         if (sanctuaryOpen) setSanctuaryOpen(false);
+        if (stablesOpen) setStablesOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -356,6 +363,7 @@ export default function GameOverlay() {
     forgeOpen,
     riftOpen,
     sanctuaryOpen,
+    stablesOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -363,6 +371,7 @@ export default function GameOverlay() {
     setForgeOpen,
     setRiftOpen,
     setSanctuaryOpen,
+    setStablesOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -872,6 +881,28 @@ export default function GameOverlay() {
                     : "Dash-Evade"}
                 </span>
               </div>
+
+              <button
+                type="button"
+                onClick={whistleToggleMount}
+                className={`gear-slot gear-slot-btn ${
+                  (hero.mountedSteed ?? "none") !== "none"
+                    ? "gear-slot-active"
+                    : "gear-slot-owned"
+                }`}
+                title="Press Y (or click) to Whistle and mount/dismount your active 3D Steed! Press Shift+Y or click Stables on the right to change steeds."
+              >
+                <span className="gear-key">Y</span>
+                <span className="gear-name">
+                  {(hero.mountedSteed ?? "none") === "war_drake"
+                    ? "🐉 War-Drake"
+                    : (hero.mountedSteed ?? "none") === "frost_stag"
+                    ? "🦌 Dire-Stag"
+                    : (hero.mountedSteed ?? "none") === "sun_courser"
+                    ? "🐎 Sun-Courser"
+                    : "🐎 Whistle Steed"}
+                </span>
+              </button>
             </div>
           )}
         </div>
@@ -1329,6 +1360,25 @@ export default function GameOverlay() {
                   title="Open the Spirit Companion Sanctuary & Ancient Relic Loadout Vault (Shortcut: K)"
                 >
                   🐾 Sanctuary ({(hero.equippedRelics ?? []).length}/3 • K)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStablesOpen(!stablesOpen)}
+                  className={`char-toggle-btn ${
+                    stablesOpen || (hero.mountedSteed ?? "none") !== "none" ? "active" : ""
+                  }`}
+                  style={
+                    (hero.mountedSteed ?? "none") !== "none"
+                      ? {
+                          borderColor: "rgba(255, 198, 88, 0.85)",
+                          background: "rgba(62, 42, 12, 0.92)",
+                          color: "#ffe49e",
+                        }
+                      : undefined
+                  }
+                  title="Open the Crossroads Royal Stables to saddle or unlock 3D Steeds (Press Y to Whistle Mount, or Shift+Y for Stables)"
+                >
+                  🐎 Stables ({(hero.mountedSteed ?? "none") !== "none" ? "Mounted" : "Y"})
                 </button>
                 <button
                   type="button"
@@ -4572,6 +4622,285 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Sanctuary (K)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          CROSSROADS ROYAL STABLES & 3D SUMMONABLE STEEDS MODAL [Y / SHIFT+Y]
+         ========================================================= */}
+      {phase === "playing" && !editorMode && stablesOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card" style={{ maxWidth: "960px", width: "95vw" }}>
+            <div className="shop-header">
+              <div>
+                <div
+                  className="shop-pill"
+                  style={{
+                    background: "rgba(255, 198, 88, 0.16)",
+                    borderColor: "rgba(255, 198, 88, 0.55)",
+                    color: "#ffe49e",
+                  }}
+                >
+                  CROSSROADS ROYAL STABLES • 3D CAVALRY STEEDS &amp; CAVALRY TRAMPLE
+                </div>
+                <h2 className="shop-title">STABLEMASTER GARRICK&apos;S PADDOCK</h2>
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <div
+                  className="shop-wallet"
+                  style={{
+                    borderColor: "rgba(255, 198, 88, 0.55)",
+                    background: "rgba(56, 38, 12, 0.65)",
+                  }}
+                >
+                  <span className="shop-wallet-label">MONSTER CORES:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ffd875" }}>
+                    {hero.monsterCores ?? 0} ✦
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">RUPEES:</span>
+                  <span className="shop-wallet-val">{hero.rupees}</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+                padding: "10px 14px",
+                marginBottom: "14px",
+                borderRadius: "10px",
+                background: "rgba(42, 28, 12, 0.72)",
+                border: "1px solid rgba(255, 198, 88, 0.35)",
+              }}
+            >
+              <p className="shop-greeting" style={{ margin: 0, flex: "1 1 520px" }}>
+                &ldquo;Hail, rider! Press <strong>Y</strong> anytime in the field to blow your{" "}
+                <strong>Royal Steed Whistle</strong> and mount or dismount your chosen 3D steed
+                on the spot. Galloping into monsters unleashes a <strong>Cavalry Trample (2 DMG + Heavy Knockback + Combo)</strong>,
+                and you can slash, shoot arrows, or cast magic right from the saddle!&rdquo;
+              </p>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={whistleToggleMount}
+                  className="char-equip-btn"
+                  style={{
+                    background: "linear-gradient(180deg, #ffb838 0%, #c4760a 100%)",
+                    borderColor: "rgba(255, 228, 150, 0.85)",
+                    color: "#1b1102",
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {(hero.mountedSteed ?? "none") !== "none"
+                    ? "🐎 Whistle: Dismount Steed (Y)"
+                    : "🐎 Whistle: Mount Active Steed (Y)"}
+                </button>
+                <button
+                  type="button"
+                  onClick={grantStablesPlaytestBundle}
+                  className="char-equip-btn"
+                  style={{
+                    background: "linear-gradient(180deg, #3ad6b5 0%, #168f78 100%)",
+                    borderColor: "rgba(130, 255, 220, 0.75)",
+                    color: "#ffffff",
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Playtest Shortcut: Immediately unlock all 3 Royal Steeds + grant +10 Monster Cores & +500 Rupees"
+                >
+                  ★ Playtest: Unlock All 3 Steeds
+                </button>
+              </div>
+            </div>
+
+            {(() => {
+              const cores = hero.monsterCores ?? 0;
+              const unlockedMounts = hero.unlockedMounts ?? ["none", "sun_courser"];
+              const activeMount = hero.activeMount ?? "sun_courser";
+              const mountedSteed = hero.mountedSteed ?? "none";
+
+              const steedsList: Array<{
+                id: Exclude<MountId, "none">;
+                name: string;
+                title: string;
+                icon: string;
+                costCores: number;
+                costRupees: number;
+                speedBadge: string;
+                traitBadge: string;
+                desc: string;
+                accent: string;
+              }> = [
+                {
+                  id: "sun_courser",
+                  name: "Solarius, the Sun-Mane Courser",
+                  title: "PALOMINO CAVALRY CHARGER • STARTER STEED",
+                  icon: "🐎",
+                  costCores: 0,
+                  costRupees: 0,
+                  speedBadge: "+65% Gallop Speed (1.65x)",
+                  traitBadge: "Cavalry Trample (2 DMG + Knockback)",
+                  desc: "A noble golden-maned warhorse bred in the Whispering Vale. Grants +65% gallop speed and tramples minor foes in your path for 2 DMG + heavy knockback.",
+                  accent: "#ffd24c",
+                },
+                {
+                  id: "frost_stag",
+                  name: "Boreas, the Glacial Dire-Stag",
+                  title: "FROSTPEAK ANTLERED SOVEREIGN • AMPHIBIOUS",
+                  icon: "🦌",
+                  costCores: 4,
+                  costRupees: 140,
+                  speedBadge: "+55% Speed • Frost-Walk on Water",
+                  traitBadge: "Auto-Fires Rime Hoof-Bolts (2 DMG + Freeze)",
+                  desc: "Crystalline dire-stag whose hooves freeze deep rivers & lakes solid so you can ride across water! Automatically fires Rime Hoof-Bolts (2 DMG + 2.2s Freeze) every 2.4s.",
+                  accent: "#6ae8ff",
+                },
+                {
+                  id: "war_drake",
+                  name: "Ignivar, the Obsidian War-Drake",
+                  title: "WINGED CALDERA WYVERN • ARMORED & AMPHIBIOUS",
+                  icon: "🐉",
+                  costCores: 7,
+                  costRupees: 240,
+                  speedBadge: "+50% Glide • Winged Hover Over Water",
+                  traitBadge: "-30% DMG Taken + Auto-Drakefire Breath",
+                  desc: "Armored obsidian drake that glides effortlessly over deep water, reduces all incoming damage by -30%, and breathes 2 DMG Drakefire every 1.8s (melts Ice Armor & lights braziers)!",
+                  accent: "#ff784f",
+                },
+              ];
+
+              return (
+                <div
+                  className="shop-items-grid"
+                  style={{ gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}
+                >
+                  {steedsList.map((steed) => {
+                    const isUnlocked = unlockedMounts.includes(steed.id);
+                    const isMountedNow = mountedSteed === steed.id;
+                    const isSelectedMount = activeMount === steed.id;
+                    const canAfford =
+                      cores >= steed.costCores && hero.rupees >= steed.costRupees;
+
+                    return (
+                      <div
+                        key={steed.id}
+                        className={`shop-item-card ${isMountedNow ? "shop-item-owned" : ""}`}
+                        style={{
+                          borderColor: isMountedNow
+                            ? steed.accent
+                            : isSelectedMount
+                            ? "rgba(255, 214, 102, 0.65)"
+                            : "rgba(140, 165, 210, 0.3)",
+                          padding: "12px",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              fontSize: "0.66rem",
+                              fontWeight: 800,
+                              letterSpacing: "0.06em",
+                              color: steed.accent,
+                              marginBottom: "4px",
+                            }}
+                          >
+                            {steed.title}
+                          </div>
+                          <div className="shop-item-top" style={{ marginBottom: "8px" }}>
+                            <span
+                              className="shop-item-name"
+                              style={{ color: "#ffffff", fontSize: "0.92rem" }}
+                            >
+                              {steed.icon} {steed.name}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                              marginBottom: "10px",
+                              padding: "7px 9px",
+                              borderRadius: "8px",
+                              background: "rgba(10, 16, 28, 0.65)",
+                              border: "1px solid rgba(255, 255, 255, 0.08)",
+                              fontSize: "0.72rem",
+                            }}
+                          >
+                            <div style={{ color: "#8effb8", fontWeight: 700 }}>
+                              ⚡ {steed.speedBadge}
+                            </div>
+                            <div style={{ color: "#ffd978", fontWeight: 700 }}>
+                              ✦ {steed.traitBadge}
+                            </div>
+                          </div>
+
+                          <p
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "#d6e2f5",
+                              lineHeight: 1.45,
+                              margin: "0 0 12px 0",
+                            }}
+                          >
+                            {steed.desc}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={!isUnlocked && !canAfford}
+                          onClick={() => summonOrUnlockMount(steed.id)}
+                          className="shop-buy-btn"
+                          style={{
+                            fontSize: "0.78rem",
+                            padding: "8px 12px",
+                            background: isMountedNow
+                              ? "rgba(46, 214, 118, 0.28)"
+                              : isUnlocked
+                              ? "linear-gradient(180deg, #ffb838 0%, #c4760a 100%)"
+                              : undefined,
+                            color: !isMountedNow && isUnlocked ? "#1b1102" : undefined,
+                            fontWeight: 800,
+                          }}
+                        >
+                          {isMountedNow
+                            ? "✓ Currently Riding (Click to Dismount)"
+                            : isUnlocked
+                            ? `🐎 Saddle & Ride ${steed.name.split(",")[0]}`
+                            : `Unlock (${steed.costCores}✦ Cores + ${steed.costRupees} Rupees)`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>Y</strong> anytime in the world to Whistle for your active steed, or{" "}
+                <strong>Shift+Y</strong> / <strong>Esc</strong> to close the Royal Stables.
+              </span>
+              <button
+                type="button"
+                onClick={() => setStablesOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Royal Stables
               </button>
             </div>
           </div>

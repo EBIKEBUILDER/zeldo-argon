@@ -55,6 +55,7 @@ import {
   LOCKED_GATE_POS,
   MapPortal,
   MapPropInstance,
+  MOUNT_STABLES_POS,
   PotRewardKind,
   PropPrefabId,
   resolveArrowCollisions,
@@ -136,6 +137,12 @@ export type RelicId =
   | "greed_crown"
   | "berserker_torc"
   | "aegis_ankh";
+
+export type MountId =
+  | "none"
+  | "sun_courser"
+  | "frost_stag"
+  | "war_drake";
 
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
@@ -253,6 +260,11 @@ export interface HeroState {
   companionBlessTimer?: number;
   unlockedRelics?: RelicId[];
   equippedRelics?: RelicId[];
+  activeMount?: MountId;
+  mountedSteed?: MountId;
+  unlockedMounts?: MountId[];
+  mountAttackTimer?: number;
+  mountTrampleCooldowns?: Record<string, number>;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -681,6 +693,7 @@ export interface SerializableGameState {
   forgeOpen: boolean;
   riftOpen: boolean;
   sanctuaryOpen: boolean;
+  stablesOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -714,6 +727,10 @@ export interface GameActions {
   setForgeOpen: (open: boolean) => void;
   setRiftOpen: (open: boolean) => void;
   setSanctuaryOpen: (open: boolean) => void;
+  setStablesOpen: (open: boolean) => void;
+  whistleToggleMount: () => void;
+  summonOrUnlockMount: (mountId: MountId) => void;
+  grantStablesPlaytestBundle: () => void;
   summonOrUnlockCompanion: (companionId: CompanionId) => void;
   toggleEquipRelic: (relicId: RelicId) => void;
   gambleAncientRelic: () => void;
@@ -1044,6 +1061,11 @@ function createInitialState(
       companionBlessTimer: 14.0,
       unlockedRelics: [],
       equippedRelics: [],
+      activeMount: "sun_courser",
+      mountedSteed: "none",
+      unlockedMounts: ["none", "sun_courser"],
+      mountAttackTimer: 1.5,
+      mountTrampleCooldowns: {},
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1254,6 +1276,7 @@ function createInitialState(
     forgeOpen: false,
     riftOpen: false,
     sanctuaryOpen: false,
+    stablesOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -1629,6 +1652,195 @@ export const useGameStore = create<GameStore>((set, get) => ({
       atlasOpen: open ? false : state.atlasOpen,
       forgeOpen: open ? false : state.forgeOpen,
       riftOpen: open ? false : state.riftOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+    }));
+  },
+
+  setStablesOpen: (open: boolean) => {
+    set((state) => ({
+      stablesOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+    }));
+  },
+
+  whistleToggleMount: () => {
+    const state = get();
+    if (state.phase !== "playing") return;
+    const hero = { ...state.hero };
+    const currentMounted = hero.mountedSteed ?? "none";
+
+    if (currentMounted !== "none") {
+      hero.mountedSteed = "none";
+      soundEngine.unlock();
+      soundEngine.playCrystalSwitch(false);
+      set({
+        hero,
+        banner: {
+          id: Date.now(),
+          text: "Dismounted Steed",
+          subtext: "Press [V] anytime to whistle and summon your 3D Steed!",
+          timer: 2.8,
+        },
+      });
+      return;
+    }
+
+    const active =
+      hero.activeMount && hero.activeMount !== "none"
+        ? hero.activeMount
+        : "sun_courser";
+    const unlocked = hero.unlockedMounts ?? ["none", "sun_courser"];
+    const targetMount = unlocked.includes(active) ? active : "sun_courser";
+
+    hero.activeMount = targetMount;
+    hero.mountedSteed = targetMount;
+    hero.mountAttackTimer = 1.0;
+
+    const MOUNT_NAMES: Record<Exclude<MountId, "none">, { title: string; sub: string }> = {
+      sun_courser: {
+        title: "🐎 Whistled: Sun-Mane Courser Mounted!",
+        sub: "+65% Gallop Speed & Cavalry Trample (gallop through foes for 2 DMG + heavy knockback)!",
+      },
+      frost_stag: {
+        title: "🦌 Whistled: Glacial Dire-Stag Mounted!",
+        sub: "+55% Speed, Frost-Walk across rivers/lagoons, Cavalry Trample & Rime Hoof-Bolts every 2.4s!",
+      },
+      war_drake: {
+        title: "🐉 Whistled: Obsidian War-Drake Mounted!",
+        sub: "+50% Glide Speed over water, -30% Damage Taken, Trample & Homing Drakefire Breath every 1.8s!",
+      },
+    };
+
+    soundEngine.unlock();
+    soundEngine.playFairyRevive();
+    set({
+      hero,
+      banner: {
+        id: Date.now(),
+        text: MOUNT_NAMES[targetMount].title,
+        subtext: `${MOUNT_NAMES[targetMount].sub} Press [V] to dismount.`,
+        timer: 4.0,
+      },
+    });
+  },
+
+  summonOrUnlockMount: (mountId: MountId) => {
+    const state = get();
+    const hero = {
+      ...state.hero,
+      unlockedMounts: [...(state.hero.unlockedMounts ?? ["none", "sun_courser"])],
+    };
+
+    if (mountId === "none") {
+      hero.mountedSteed = "none";
+      soundEngine.unlock();
+      soundEngine.playCrystalSwitch(false);
+      set({
+        hero,
+        banner: {
+          id: Date.now(),
+          text: "Dismounted & Returned Steed to Paddock",
+          subtext: "Press [V] anytime in the field to whistle your active steed!",
+          timer: 3.0,
+        },
+      });
+      return;
+    }
+
+    const MOUNT_META: Record<
+      Exclude<MountId, "none">,
+      { cores: number; rupees: number; name: string; desc: string }
+    > = {
+      sun_courser: {
+        cores: 0,
+        rupees: 0,
+        name: "Solarius, the Sun-Mane Courser",
+        desc: "+65% Gallop Speed & Cavalry Trample (galloping into monsters deals 2 DMG + heavy knockback)!",
+      },
+      frost_stag: {
+        cores: 4,
+        rupees: 140,
+        name: "Boreas, the Glacial Dire-Stag",
+        desc: "+55% Gallop Speed, Frost-Walk across rivers/lagoons, Cavalry Trample & Rime Hoof-Bolts every 2.4s!",
+      },
+      war_drake: {
+        cores: 7,
+        rupees: 240,
+        name: "Ignivar, the Obsidian War-Drake",
+        desc: "+50% Glide Speed over water, -30% Damage Taken, Cavalry Trample & Homing Drakefire Breath every 1.8s!",
+      },
+    };
+
+    const meta = MOUNT_META[mountId];
+    const alreadyUnlocked = hero.unlockedMounts.includes(mountId);
+    if (!alreadyUnlocked) {
+      const cores = hero.monsterCores ?? 0;
+      if (cores < meta.cores || hero.rupees < meta.rupees) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: "Insufficient Royal Stables Tribute!",
+            subtext: `Taming ${meta.name} requires ${meta.cores} Monster Cores and ${meta.rupees} Rupees.`,
+            timer: 3.4,
+          },
+        });
+        return;
+      }
+      hero.monsterCores = cores - meta.cores;
+      hero.rupees -= meta.rupees;
+      hero.unlockedMounts.push(mountId);
+    }
+
+    hero.activeMount = mountId;
+    hero.mountedSteed = mountId;
+    hero.mountAttackTimer = 0.8;
+    soundEngine.unlock();
+    soundEngine.playFairyRevive();
+    soundEngine.playVictoryFanfare();
+    set({
+      hero,
+      banner: {
+        id: Date.now(),
+        text: alreadyUnlocked
+          ? `Mounted ${meta.name}!`
+          : `Tamed & Mounted ${meta.name}!`,
+        subtext: meta.desc,
+        timer: 4.5,
+      },
+    });
+  },
+
+  grantStablesPlaytestBundle: () => {
+    soundEngine.unlock();
+    soundEngine.playVictoryFanfare();
+    set((state) => ({
+      hero: {
+        ...state.hero,
+        monsterCores: (state.hero.monsterCores ?? 0) + 12,
+        rupees: state.hero.rupees + 600,
+        unlockedMounts: ["none", "sun_courser", "frost_stag", "war_drake"],
+        activeMount:
+          state.hero.activeMount && state.hero.activeMount !== "none"
+            ? state.hero.activeMount
+            : "war_drake",
+        mountedSteed:
+          state.hero.mountedSteed && state.hero.mountedSteed !== "none"
+            ? state.hero.mountedSteed
+            : "war_drake",
+      },
+      banner: {
+        id: Date.now(),
+        text: "Royal Stables Playtest Unlocked! (All 3 Steeds Ready!)",
+        subtext: "Ride Solarius (Courser), Boreas (Glacial Stag), or Ignivar (Obsidian War-Drake) anytime with [V]!",
+        timer: 4.4,
+      },
     }));
   },
 
@@ -4021,7 +4233,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           : hero.equippedTunic === "blue_mail"
           ? 0.5
           : 1.0;
-      return hasRelic("aegis_ankh") ? baseMult * 0.75 : baseMult;
+      const relicMult = hasRelic("aegis_ankh") ? baseMult * 0.75 : baseMult;
+      return hero.mountedSteed === "war_drake" ? relicMult * 0.7 : relicMult;
     };
 
     // Helper: check if hero died and auto-revive with Bottled Fairy OR Immortal Phoenix Ankh (`aegis_ankh`)!
@@ -5707,6 +5920,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const chillMultiplier = (hero.chillTimer ?? 0) > 0 ? 0.68 : 1.0;
     const relicSpeedMult = hasRelic("wind_feather") ? 1.18 : 1.0;
     const companionSpeedMult = hero.activeCompanion === "storm_wolf" ? 1.15 : 1.0;
+    const mountSpeedMult =
+      hero.mountedSteed === "sun_courser"
+        ? 1.65
+        : hero.mountedSteed === "frost_stag"
+        ? 1.55
+        : hero.mountedSteed === "war_drake"
+        ? 1.5
+        : 1.0;
     const dashSpeedMult = isDashing ? 2.25 : 1.0;
     const bootsMultiplier =
       (hero.equippedBoots === "swift_boots"
@@ -5717,6 +5938,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       chillMultiplier *
       relicSpeedMult *
       companionSpeedMult *
+      mountSpeedMult *
       dashSpeedMult;
 
     const initialGatePassable =
@@ -5816,6 +6038,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         (zone === "caldera" && flags.calderaBossAwakened && !flags.calderaBossDefeated)
           ? Math.max(13.55, nextHeroZ)
           : nextHeroZ;
+      const mountIgnoresWater =
+        hero.mountedSteed === "frost_stag" || hero.mountedSteed === "war_drake";
       const resolvedHero = resolveWorldCollisions(
         nextHeroX,
         clampedNextHeroZ,
@@ -5823,7 +6047,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         zone,
         initialGatePassable,
         dynamicObstacles,
-        initialBossExitOpen
+        initialBossExitOpen,
+        mountIgnoresWater
       );
       if (isKnockbackLocked && resolvedHero.hitObstacle) {
         hero.knockbackVx *= 0.45;
@@ -10182,6 +10407,152 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // 9b-2. Mounted 3D Steed Mechanics: Cavalry Trample, Frost-Stag Hoof Bolts & War-Drake Breath (`hero.mountedSteed`)
+    if (hero.mountedSteed && hero.mountedSteed !== "none") {
+      // Update per-target trample cooldowns
+      const nextTrampleCds: Record<string, number> = {};
+      for (const [eid, cd] of Object.entries(hero.mountTrampleCooldowns ?? {})) {
+        if (cd - dt > 0) {
+          nextTrampleCds[eid] = cd - dt;
+        }
+      }
+      hero.mountTrampleCooldowns = nextTrampleCds;
+
+      // 1. Cavalry Trample when galloping (`mag > 0.05` or `isDashing`)
+      if (mag > 0.05 || isDashing) {
+        const trampleDmg = hasRelic("berserker_torc") ? 3 : 2;
+        for (const enemy of enemies) {
+          if (
+            enemy.zone !== zone ||
+            enemy.state === "dead" ||
+            enemy.kind === "boss" ||
+            (enemy.kind === "burrower" && enemy.burrowed) ||
+            (hero.mountTrampleCooldowns[enemy.id] ?? 0) > 0 ||
+            isBossRoomSealed(enemy)
+          ) {
+            continue;
+          }
+          const dist = Math.hypot(enemy.x - hero.x, enemy.z - hero.z);
+          if (dist <= 1.72) {
+            hero.mountTrampleCooldowns[enemy.id] = 0.85;
+            enemy.provoked = true;
+            if (enemy.shieldArmor === "ice" && hero.mountedSteed === "war_drake") {
+              enemy.shieldArmor = "none";
+            }
+            enemy.hp -= trampleDmg;
+            enemy.hitFlashTimer = 0.26;
+            const stunDur = hero.mountedSteed === "frost_stag" ? 1.6 : 1.1;
+            enemy.stunTimer = Math.max(enemy.stunTimer, stunDur);
+            if (enemy.kind !== "turret") {
+              enemy.state = "stunned";
+              enemy.stateTimer = Math.max(enemy.stateTimer, stunDur);
+              const pushAngle = Math.atan2(enemy.x - hero.x, enemy.z - hero.z);
+              const kbStrength = 13.5 / Math.max(0.5, enemy.weight || 1.0);
+              enemy.knockbackVx = Math.sin(pushAngle) * kbStrength;
+              enemy.knockbackVz = Math.cos(pushAngle) * kbStrength;
+            }
+            hero.comboCount = (hero.comboCount ?? 0) + 1;
+            hero.comboTimer = 6.5;
+            hero.maxComboStreak = Math.max(hero.maxComboStreak ?? 0, hero.comboCount);
+            soundEngine.playPegPound();
+            if (enemy.hp <= 0) {
+              handleEnemyDeath(enemy);
+            }
+          }
+        }
+      }
+
+      // 2. Glacial Dire-Stag Rime Hoof-Bolts & Obsidian War-Drake Homing Fireballs
+      if (hero.mountedSteed === "frost_stag" || hero.mountedSteed === "war_drake") {
+        hero.mountAttackTimer = (hero.mountAttackTimer ?? 1.2) - dt;
+        if (hero.mountAttackTimer <= 0) {
+          const maxRange = hero.mountedSteed === "war_drake" ? 9.5 : 8.5;
+          let targetFoe: EnemyState | null = null;
+          let bestDist = maxRange;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - hero.x, e.z - hero.z);
+            if (d <= bestDist) {
+              bestDist = d;
+              targetFoe = e;
+            }
+          }
+
+          const headX = hero.x + Math.sin(hero.facing) * 1.1;
+          const headZ = hero.z + Math.cos(hero.facing) * 1.1;
+
+          if (hero.mountedSteed === "frost_stag") {
+            hero.mountAttackTimer = 2.4;
+            if (targetFoe) {
+              const shotAngle = Math.atan2(targetFoe.x - headX, targetFoe.z - headZ);
+              soundEngine.playBowShoot();
+              arrows.push({
+                id: `stag-frost-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+                zone,
+                fromHero: true,
+                isFrost: true,
+                x: headX,
+                z: headZ,
+                angle: shotAngle,
+                speed: 20.0,
+                damage: 2,
+                lifeTimer: 1.35,
+              });
+            }
+          } else if (hero.mountedSteed === "war_drake") {
+            hero.mountAttackTimer = 1.8;
+            if (targetFoe) {
+              const shotAngle = Math.atan2(targetFoe.x - headX, targetFoe.z - headZ);
+              soundEngine.playFireballShoot(false);
+              fireballs.push({
+                id: `drake-fb-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+                zone,
+                x: headX,
+                z: headZ,
+                angle: shotAngle,
+                speed: 14.0,
+                damage: 2,
+                radius: 0.48,
+                isCharged: false,
+                lifeTimer: 1.35,
+              });
+            } else {
+              const unlitTorch = mapProps.find(
+                (p) =>
+                  p.zone === zone &&
+                  p.prefab === "wall_torch" &&
+                  p.lit === false &&
+                  Math.hypot(p.x - hero.x, p.z - hero.z) <= 6.5
+              );
+              if (unlitTorch) {
+                const shotAngle = Math.atan2(unlitTorch.x - headX, unlitTorch.z - headZ);
+                soundEngine.playFireballShoot(false);
+                fireballs.push({
+                  id: `drake-torch-fb-${stats.elapsedSeconds.toFixed(3)}`,
+                  zone,
+                  x: headX,
+                  z: headZ,
+                  angle: shotAngle,
+                  speed: 14.0,
+                  damage: 1,
+                  radius: 0.46,
+                  isCharged: false,
+                  lifeTimer: 1.2,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
     // 9c. Update Thrown Clay Pots & Light Rocks in Flight (`thrownObjects`)
     const remainingThrown: ThrownObjectState[] = [];
     for (const obj of thrownObjects) {
@@ -12987,6 +13358,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Spirit Companion Sanctuary & Ancient Relic Vault — Press [K] or [F] to Summon Companions & Equip Relics!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(MOUNT_STABLES_POS.x - hero.x, MOUNT_STABLES_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Crossroads Royal Stables (Stablemaster Garrick) — Press [F] to Open Stables, or [V] to Whistle Your Steed!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -13005,6 +13382,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let forgeOpen = state.forgeOpen;
     let riftOpen = state.riftOpen;
     let sanctuaryOpen = state.sanctuaryOpen;
+    let stablesOpen = state.stablesOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -13016,6 +13394,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       shopOpen = false;
       riftOpen = false;
       sanctuaryOpen = false;
+      stablesOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(RIFT_ENTRANCE_POS.x - hero.x, RIFT_ENTRANCE_POS.z - hero.z) <= 3.5 &&
@@ -13027,6 +13406,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       atlasOpen = false;
       shopOpen = false;
       sanctuaryOpen = false;
+      stablesOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(COMPANION_ALTAR_POS.x - hero.x, COMPANION_ALTAR_POS.z - hero.z) <= 3.5 &&
@@ -13034,6 +13414,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       sanctuaryOpen = true;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+      stablesOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(MOUNT_STABLES_POS.x - hero.x, MOUNT_STABLES_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      stablesOpen = true;
+      sanctuaryOpen = false;
       riftOpen = false;
       forgeOpen = false;
       atlasOpen = false;
@@ -13190,6 +13583,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       forgeOpen,
       riftOpen,
       sanctuaryOpen,
+      stablesOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

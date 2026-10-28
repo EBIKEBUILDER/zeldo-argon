@@ -280,6 +280,12 @@ export const COMPANION_ALTAR_POS = {
   z: -13.5,
 };
 
+// Map 1 Crossroads Royal Stables & Hitching Paddock (Whistle & unlock 3D Steeds: Sun-Mane Courser, Glacial Dire-Stag & Obsidian War-Drake!)
+export const MOUNT_STABLES_POS = {
+  x: -11.5,
+  z: -31.8,
+};
+
 // Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,
