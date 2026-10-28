@@ -7,6 +7,8 @@ import {
   ColosseumTierId,
   CompanionId,
   EditorPlaceCategory,
+  ElixirId,
+  HerbId,
   MountId,
   OffhandId,
   PrimaryHandId,
@@ -255,6 +257,7 @@ export default function GameOverlay() {
   const sanctuaryOpen = useGameStore((s) => s.sanctuaryOpen);
   const stablesOpen = useGameStore((s) => s.stablesOpen);
   const colosseumOpen = useGameStore((s) => s.colosseumOpen);
+  const alchemyOpen = useGameStore((s) => s.alchemyOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -283,6 +286,9 @@ export default function GameOverlay() {
   const setSanctuaryOpen = useGameStore((s) => s.setSanctuaryOpen);
   const setStablesOpen = useGameStore((s) => s.setStablesOpen);
   const setColosseumOpen = useGameStore((s) => s.setColosseumOpen);
+  const setAlchemyOpen = useGameStore((s) => s.setAlchemyOpen);
+  const brewAndDrinkElixir = useGameStore((s) => s.brewAndDrinkElixir);
+  const grantAlchemyPlaytestBundle = useGameStore((s) => s.grantAlchemyPlaytestBundle);
   const startColosseumTrial = useGameStore((s) => s.startColosseumTrial);
   const grantColosseumPlaytestBundle = useGameStore((s) => s.grantColosseumPlaytestBundle);
   const whistleToggleMount = useGameStore((s) => s.whistleToggleMount);
@@ -357,6 +363,7 @@ export default function GameOverlay() {
         if (sanctuaryOpen) setSanctuaryOpen(false);
         if (stablesOpen) setStablesOpen(false);
         if (colosseumOpen) setColosseumOpen(false);
+        if (alchemyOpen) setAlchemyOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -371,6 +378,7 @@ export default function GameOverlay() {
     sanctuaryOpen,
     stablesOpen,
     colosseumOpen,
+    alchemyOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -380,6 +388,7 @@ export default function GameOverlay() {
     setSanctuaryOpen,
     setStablesOpen,
     setColosseumOpen,
+    setAlchemyOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -1406,6 +1415,29 @@ export default function GameOverlay() {
                   title="Open the Grand Colosseum Boss-Rush & Wave Survival Gauntlet Console (Shortcut: O)"
                 >
                   🏛 Arena ({(flags.colosseumCompletedTiers ?? []).length}/3 • O)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAlchemyOpen(!alchemyOpen)}
+                  className={`char-toggle-btn ${
+                    alchemyOpen || (hero.activeElixir ?? "none") !== "none" ? "active" : ""
+                  }`}
+                  style={
+                    (hero.activeElixir ?? "none") !== "none"
+                      ? {
+                          borderColor: "rgba(78, 255, 178, 0.9)",
+                          background: "rgba(12, 54, 38, 0.92)",
+                          color: "#96ffcf",
+                        }
+                      : undefined
+                  }
+                  title="Open Apothecary Selene's Alchemy Cauldron & Buff Elixirs (Shortcut: [)"
+                >
+                  ⚗ Alchemy (
+                  {(hero.activeElixir ?? "none") !== "none"
+                    ? `${Math.ceil(hero.activeElixirTimer ?? 0)}s`
+                    : "["}
+                  )
                 </button>
                 <button
                   type="button"
@@ -5224,6 +5256,449 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Colosseum (O)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          APOTHECARY SELENE'S ALCHEMY CAULDRON & BUFF ELIXIRS MODAL [[]
+         ========================================================= */}
+      {phase === "playing" && !editorMode && alchemyOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card" style={{ maxWidth: "1020px", width: "95vw" }}>
+            <div className="shop-header">
+              <div>
+                <div
+                  className="shop-pill"
+                  style={{
+                    background: "rgba(78, 255, 178, 0.16)",
+                    borderColor: "rgba(78, 255, 178, 0.55)",
+                    color: "#96ffcf",
+                  }}
+                >
+                  CROSSROADS APOTHECARY • BIOME HERB FORAGING &amp; COMBAT BUFF ELIXIRS
+                </div>
+                <h2 className="shop-title">APOTHECARY SELENE&apos;S ALCHEMY CAULDRON</h2>
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <div
+                  className="shop-wallet"
+                  style={{
+                    borderColor: "rgba(78, 255, 178, 0.55)",
+                    background: "rgba(12, 48, 34, 0.65)",
+                  }}
+                >
+                  <span className="shop-wallet-label">ACTIVE ELIXIR:</span>
+                  <span className="shop-wallet-val" style={{ color: "#96ffcf" }}>
+                    {(hero.activeElixir ?? "none") !== "none"
+                      ? `${hero.activeElixir?.replace("_", " ").toUpperCase()} (${Math.ceil(
+                          hero.activeElixirTimer ?? 0
+                        )}s)`
+                      : "NONE"}
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">MONSTER CORES:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ffd875" }}>
+                    {hero.monsterCores ?? 0} ✦
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+                padding: "10px 14px",
+                marginBottom: "12px",
+                borderRadius: "10px",
+                background: "rgba(12, 42, 32, 0.72)",
+                border: "1px solid rgba(78, 255, 178, 0.35)",
+              }}
+            >
+              <p className="shop-greeting" style={{ margin: 0, flex: "1 1 540px" }}>
+                &ldquo;Welcome to my bubbling cauldron! Chop wild bushes or slay monsters across all
+                10 realms to forage <strong>4 Biome Herbs</strong>, then distill them with{" "}
+                <strong>Monster Cores (✦)</strong> into 90-second <strong>Alchemical Buff Elixirs</strong>{" "}
+                that supercharge your blade, movement speed, armor, or elemental spells!&rdquo;
+              </p>
+              <button
+                type="button"
+                onClick={grantAlchemyPlaytestBundle}
+                className="char-equip-btn"
+                style={{
+                  background: "linear-gradient(180deg, #32e69c 0%, #118a58 100%)",
+                  borderColor: "rgba(148, 255, 208, 0.85)",
+                  color: "#062115",
+                  fontWeight: 800,
+                  whiteSpace: "nowrap",
+                }}
+                title="Playtest Shortcut: Grant +6 of all 4 Biome Herbs & +6 Monster Cores"
+              >
+                ★ Playtest: +6 All Herbs &amp; +6 Cores
+              </button>
+            </div>
+
+            {/* FORAGED HERB SATCHEL BAR */}
+            {(() => {
+              const herbs = hero.herbs ?? {
+                sun_lotus: 0,
+                frost_cap: 0,
+                ember_root: 0,
+                starlight_dew: 0,
+              };
+              const herbCatalog: Array<{
+                id: HerbId;
+                name: string;
+                icon: string;
+                biomeSource: string;
+                color: string;
+              }> = [
+                {
+                  id: "sun_lotus",
+                  name: "Sun-Lotus",
+                  icon: "🌻",
+                  biomeSource: "Village, Grove, Highlands & Oasis",
+                  color: "#ffd24c",
+                },
+                {
+                  id: "frost_cap",
+                  name: "Glacial Frost-Cap",
+                  icon: "🍄",
+                  biomeSource: "Frostpeak Caverns & Coral Atoll",
+                  color: "#6ae8ff",
+                },
+                {
+                  id: "ember_root",
+                  name: "Caldera Ember-Root",
+                  icon: "🌶️",
+                  biomeSource: "Skyward Caldera & Obsidian Citadel",
+                  color: "#ff785a",
+                },
+                {
+                  id: "starlight_dew",
+                  name: "Astral Starlight-Dew",
+                  icon: "✨",
+                  biomeSource: "Mycelial Hollow, Sky-Isles & Rifts",
+                  color: "#d99eff",
+                },
+              ];
+
+              const elixirsList: Array<{
+                id: Exclude<ElixirId, "none">;
+                name: string;
+                subtitle: string;
+                icon: string;
+                herbA: HerbId;
+                herbACount: number;
+                herbB: HerbId;
+                herbBCount: number;
+                cores: number;
+                buffSummary: string;
+                desc: string;
+                accent: string;
+              }> = [
+                {
+                  id: "titans_draught",
+                  name: "Titan's Draught",
+                  subtitle: "OFFENSIVE BERSERKER ELIXIR • 90s",
+                  icon: "🧪",
+                  herbA: "ember_root",
+                  herbACount: 2,
+                  herbB: "sun_lotus",
+                  herbBCount: 1,
+                  cores: 1,
+                  buffSummary: "+1 Sword DMG & +25% Critical Strike Chance (90s)",
+                  desc: "Infuses volcanic Ember-Root with Sun-Lotus nectar to grant +1 bonus damage on every sword swing and +25% Critical Strike chance for 90 seconds.",
+                  accent: "#ff785a",
+                },
+                {
+                  id: "gale_nectar",
+                  name: "Gale-Strider Nectar",
+                  subtitle: "VELOCITY & REFLEX ELIXIR • 90s",
+                  icon: "🍃",
+                  herbA: "sun_lotus",
+                  herbACount: 2,
+                  herbB: "starlight_dew",
+                  herbBCount: 1,
+                  cores: 1,
+                  buffSummary: "+30% Move Speed & -50% Dash/Boomerang Cooldown (90s)",
+                  desc: "Distills golden Sun-Lotus petals and Starlight-Dew into an effervescent tonic that boosts movement speed by +30% and halves dash & boomerang cooldowns.",
+                  accent: "#4eff91",
+                },
+                {
+                  id: "aegis_tonic",
+                  name: "Glacial Aegis Tonic",
+                  subtitle: "FORTIFICATION & REGEN ELIXIR • 90s",
+                  icon: "🛡️",
+                  herbA: "frost_cap",
+                  herbACount: 2,
+                  herbB: "ember_root",
+                  herbBCount: 1,
+                  cores: 1,
+                  buffSummary: "-40% Damage Taken & +1 HP Regen Every 6s (90s)",
+                  desc: "Tempers Frostpeak mushroom caps with warm Ember-Root to sheathe you in crystalline bark, reducing all incoming damage by 40% and regenerating +1 HP every 6s.",
+                  accent: "#6ae8ff",
+                },
+                {
+                  id: "archmage_elixir",
+                  name: "Archmage Starlight Elixir",
+                  subtitle: "UNLIMITED ARCANE CHANNELING • 90s",
+                  icon: "🔮",
+                  herbA: "starlight_dew",
+                  herbACount: 2,
+                  herbB: "frost_cap",
+                  herbBCount: 1,
+                  cores: 2,
+                  buffSummary: "0 MP Flame Rod Cost & +15 MP/s Mana Surge (90s)",
+                  desc: "Pure astral ambrosia that reduces Flame Rod mana cost to 0 MP and surges your mana recovery by +15 MP/s for 90 seconds of nonstop spellcasting!",
+                  accent: "#d99eff",
+                },
+              ];
+
+              const herbLabel = (id: HerbId) =>
+                herbCatalog.find((h) => h.id === id)?.name ?? id;
+              const herbIcon = (id: HerbId) =>
+                herbCatalog.find((h) => h.id === id)?.icon ?? "🌿";
+
+              return (
+                <>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(4, 1fr)",
+                      gap: "10px",
+                      marginBottom: "14px",
+                    }}
+                  >
+                    {herbCatalog.map((hb) => (
+                      <div
+                        key={hb.id}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: "10px",
+                          background: "rgba(14, 24, 34, 0.85)",
+                          border: `1px solid ${hb.color}55`,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "2px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontWeight: 800,
+                              fontSize: "0.82rem",
+                              color: hb.color,
+                            }}
+                          >
+                            {hb.icon} {hb.name}
+                          </span>
+                          <span
+                            style={{
+                              fontWeight: 900,
+                              fontSize: "0.95rem",
+                              color: "#ffffff",
+                            }}
+                          >
+                            ×{herbs[hb.id] ?? 0}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: "0.66rem", color: "#9eb4d0" }}>
+                          Foraged in: {hb.biomeSource}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div
+                    className="shop-items-grid"
+                    style={{ gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}
+                  >
+                    {elixirsList.map((el) => {
+                      const isActive = hero.activeElixir === el.id && (hero.activeElixirTimer ?? 0) > 0;
+                      const haveA = herbs[el.herbA] ?? 0;
+                      const haveB = herbs[el.herbB] ?? 0;
+                      const cores = hero.monsterCores ?? 0;
+                      const canBrew =
+                        haveA >= el.herbACount &&
+                        haveB >= el.herbBCount &&
+                        cores >= el.cores;
+
+                      return (
+                        <div
+                          key={el.id}
+                          className={`shop-item-card ${isActive ? "shop-item-owned" : ""}`}
+                          style={{
+                            borderColor: isActive ? el.accent : "rgba(140, 165, 210, 0.3)",
+                            padding: "12px",
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: "0.66rem",
+                                  fontWeight: 800,
+                                  letterSpacing: "0.06em",
+                                  color: el.accent,
+                                }}
+                              >
+                                {el.subtitle}
+                              </span>
+                              {isActive && (
+                                <span
+                                  style={{
+                                    fontSize: "0.68rem",
+                                    fontWeight: 800,
+                                    color: "#4eff91",
+                                  }}
+                                >
+                                  ● ACTIVE ({Math.ceil(hero.activeElixirTimer ?? 0)}s)
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="shop-item-top" style={{ marginBottom: "6px" }}>
+                              <span
+                                className="shop-item-name"
+                                style={{ color: "#ffffff", fontSize: "0.95rem" }}
+                              >
+                                {el.icon} {el.name}
+                              </span>
+                            </div>
+
+                            <div
+                              style={{
+                                fontSize: "0.75rem",
+                                fontWeight: 800,
+                                color: "#ffe694",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              ✦ Effect: {el.buffSummary}
+                            </div>
+
+                            <p
+                              className="shop-item-desc"
+                              style={{ fontSize: "0.73rem", marginBottom: "10px" }}
+                            >
+                              {el.desc}
+                            </p>
+
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: "6px",
+                                marginBottom: "10px",
+                                fontSize: "0.71rem",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  padding: "3px 8px",
+                                  borderRadius: "6px",
+                                  background: "rgba(10, 18, 28, 0.8)",
+                                  border: `1px solid ${
+                                    haveA >= el.herbACount ? "#4eff9166" : "#ff6b6b66"
+                                  }`,
+                                  color: haveA >= el.herbACount ? "#b8ffd4" : "#ffb4b4",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {herbIcon(el.herbA)} {el.herbACount}× {herbLabel(el.herbA)} ({haveA}/
+                                {el.herbACount})
+                              </span>
+                              <span
+                                style={{
+                                  padding: "3px 8px",
+                                  borderRadius: "6px",
+                                  background: "rgba(10, 18, 28, 0.8)",
+                                  border: `1px solid ${
+                                    haveB >= el.herbBCount ? "#4eff9166" : "#ff6b6b66"
+                                  }`,
+                                  color: haveB >= el.herbBCount ? "#b8ffd4" : "#ffb4b4",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {herbIcon(el.herbB)} {el.herbBCount}× {herbLabel(el.herbB)} ({haveB}/
+                                {el.herbBCount})
+                              </span>
+                              <span
+                                style={{
+                                  padding: "3px 8px",
+                                  borderRadius: "6px",
+                                  background: "rgba(10, 18, 28, 0.8)",
+                                  border: `1px solid ${
+                                    cores >= el.cores ? "#ffd24c66" : "#ff6b6b66"
+                                  }`,
+                                  color: cores >= el.cores ? "#ffe694" : "#ffb4b4",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                ✦ {el.cores} Core{el.cores > 1 ? "s" : ""} ({cores}/{el.cores})
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={!canBrew}
+                            onClick={() => brewAndDrinkElixir(el.id)}
+                            className="shop-buy-btn"
+                            style={{
+                              fontSize: "0.8rem",
+                              padding: "8px 12px",
+                            }}
+                          >
+                            {canBrew
+                              ? isActive
+                                ? `⚗ Re-Brew & Refresh ${el.name} (90s + +2 Hearts)`
+                                : `⚗ Brew & Quaff ${el.name} (90s + +2 Hearts)`
+                              : "Requires More Foraged Herbs / Cores"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>[</strong> or <strong>Esc</strong> anytime to close Apothecary
+                Selene&apos;s Alchemy Cauldron. Chop bushes or slay enemies to forage more herbs!
+              </span>
+              <button
+                type="button"
+                onClick={() => setAlchemyOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Cauldron ([)
               </button>
             </div>
           </div>

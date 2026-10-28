@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  ALCHEMY_CAULDRON_POS,
   ATOLL_PEARL_CHEST_POS,
   ATOLL_VICTORY_CHEST_POS,
   BIG_KEY_CHEST_POS,
@@ -147,6 +148,15 @@ export type MountId =
 
 export type ColosseumTierId = "bronze" | "silver" | "gold";
 
+export type HerbId = "sun_lotus" | "frost_cap" | "ember_root" | "starlight_dew";
+
+export type ElixirId =
+  | "none"
+  | "titans_draught"
+  | "gale_nectar"
+  | "aegis_tonic"
+  | "archmage_elixir";
+
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
   propId?: string;
@@ -268,6 +278,10 @@ export interface HeroState {
   unlockedMounts?: MountId[];
   mountAttackTimer?: number;
   mountTrampleCooldowns?: Record<string, number>;
+  herbs?: Record<HerbId, number>;
+  activeElixir?: ElixirId;
+  activeElixirTimer?: number;
+  elixirRegenTimer?: number;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -704,6 +718,7 @@ export interface SerializableGameState {
   sanctuaryOpen: boolean;
   stablesOpen: boolean;
   colosseumOpen: boolean;
+  alchemyOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -739,6 +754,9 @@ export interface GameActions {
   setSanctuaryOpen: (open: boolean) => void;
   setStablesOpen: (open: boolean) => void;
   setColosseumOpen: (open: boolean) => void;
+  setAlchemyOpen: (open: boolean) => void;
+  brewAndDrinkElixir: (elixir: Exclude<ElixirId, "none">) => void;
+  grantAlchemyPlaytestBundle: () => void;
   startColosseumTrial: (tier: ColosseumTierId) => void;
   grantColosseumPlaytestBundle: () => void;
   whistleToggleMount: () => void;
@@ -1079,6 +1097,15 @@ function createInitialState(
       unlockedMounts: ["none", "sun_courser"],
       mountAttackTimer: 1.5,
       mountTrampleCooldowns: {},
+      herbs: {
+        sun_lotus: 2,
+        frost_cap: 2,
+        ember_root: 2,
+        starlight_dew: 2,
+      },
+      activeElixir: "none",
+      activeElixirTimer: 0,
+      elixirRegenTimer: 6.0,
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1291,6 +1318,7 @@ function createInitialState(
     sanctuaryOpen: false,
     stablesOpen: false,
     colosseumOpen: false,
+    alchemyOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -1821,7 +1849,171 @@ export const useGameStore = create<GameStore>((set, get) => ({
       riftOpen: open ? false : state.riftOpen,
       sanctuaryOpen: open ? false : state.sanctuaryOpen,
       stablesOpen: open ? false : state.stablesOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
     }));
+  },
+
+  setAlchemyOpen: (open: boolean) => {
+    set((state) => ({
+      alchemyOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+    }));
+  },
+
+  brewAndDrinkElixir: (elixir: Exclude<ElixirId, "none">) => {
+    const state = get();
+    const currentHerbs: Record<HerbId, number> = {
+      sun_lotus: 0,
+      frost_cap: 0,
+      ember_root: 0,
+      starlight_dew: 0,
+      ...(state.hero.herbs ?? {}),
+    };
+
+    const RECIPES: Record<
+      Exclude<ElixirId, "none">,
+      {
+        name: string;
+        desc: string;
+        duration: number;
+        rupeeCost: number;
+        herbCosts: Partial<Record<HerbId, number>>;
+      }
+    > = {
+      titans_draught: {
+        name: "Titan's Fury Draught",
+        desc: "+1 Sword & Hammer DMG and +25% Critical Hit Chance for 90s!",
+        duration: 90,
+        rupeeCost: 30,
+        herbCosts: { ember_root: 2, sun_lotus: 1 },
+      },
+      gale_nectar: {
+        name: "Zephyr Gale Nectar",
+        desc: "+30% Movement Speed and -50% Dash & Boomerang Cooldowns for 90s!",
+        duration: 90,
+        rupeeCost: 30,
+        herbCosts: { sun_lotus: 2, starlight_dew: 1 },
+      },
+      aegis_tonic: {
+        name: "Sovereign Aegis Tonic",
+        desc: "-40% All Damage Taken and regenerates +1 HP every 6.0s for 90s!",
+        duration: 90,
+        rupeeCost: 35,
+        herbCosts: { frost_cap: 2, sun_lotus: 1 },
+      },
+      archmage_elixir: {
+        name: "Archmage Ley-Font Elixir",
+        desc: "Zero MP Flame Rod Cost and +15 MP/s Arcane Regeneration for 90s!",
+        duration: 90,
+        rupeeCost: 40,
+        herbCosts: { starlight_dew: 2, frost_cap: 1 },
+      },
+    };
+
+    const recipe = RECIPES[elixir];
+    for (const [hKey, needed] of Object.entries(recipe.herbCosts) as Array<
+      [HerbId, number]
+    >) {
+      if ((currentHerbs[hKey] ?? 0) < needed) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: "Insufficient Foraged Herbs for Brew!",
+            subtext: `Forage wild herbs by chopping bushes or defeating monsters across the realm (or click Playtest Bundle)!`,
+            timer: 3.6,
+          },
+        });
+        return;
+      }
+    }
+
+    if (state.hero.rupees < recipe.rupeeCost) {
+      soundEngine.playGateLocked();
+      set({
+        banner: {
+          id: Date.now(),
+          text: "Insufficient Rupees for Cauldron Distillation!",
+          subtext: `Brewing ${recipe.name} requires ${recipe.rupeeCost} Rupees.`,
+          timer: 3.2,
+        },
+      });
+      return;
+    }
+
+    for (const [hKey, needed] of Object.entries(recipe.herbCosts) as Array<
+      [HerbId, number]
+    >) {
+      currentHerbs[hKey] = Math.max(0, (currentHerbs[hKey] ?? 0) - needed);
+    }
+
+    soundEngine.unlock();
+    soundEngine.playPotionDrink();
+    soundEngine.playFairyRevive();
+
+    set({
+      hero: {
+        ...state.hero,
+        rupees: state.hero.rupees - recipe.rupeeCost,
+        herbs: currentHerbs,
+        activeElixir: elixir,
+        activeElixirTimer: recipe.duration,
+        elixirRegenTimer: 6.0,
+        hp: Math.min(state.hero.maxHp, state.hero.hp + 4),
+        mp: Math.min(state.hero.maxMp, (state.hero.mp ?? 100) + 40),
+      },
+      banner: {
+        id: Date.now(),
+        text: `⚗ Brewed & Quaffed: ${recipe.name} (90s)!`,
+        subtext: `${recipe.desc} (+2 Hearts & +40 MP instant refreshment!)`,
+        timer: 4.8,
+      },
+    });
+  },
+
+  grantAlchemyPlaytestBundle: () => {
+    soundEngine.unlock();
+    soundEngine.playVictoryFanfare();
+    set((state) => {
+      const prevHerbs = state.hero.herbs ?? {
+        sun_lotus: 0,
+        frost_cap: 0,
+        ember_root: 0,
+        starlight_dew: 0,
+      };
+      return {
+        hero: {
+          ...state.hero,
+          rupees: state.hero.rupees + 400,
+          herbs: {
+            sun_lotus: (prevHerbs.sun_lotus ?? 0) + 12,
+            frost_cap: (prevHerbs.frost_cap ?? 0) + 12,
+            ember_root: (prevHerbs.ember_root ?? 0) + 12,
+            starlight_dew: (prevHerbs.starlight_dew ?? 0) + 12,
+          },
+          activeElixir:
+            state.hero.activeElixir && state.hero.activeElixir !== "none"
+              ? state.hero.activeElixir
+              : "titans_draught",
+          activeElixirTimer: 90,
+          elixirRegenTimer: 6.0,
+        },
+        banner: {
+          id: Date.now(),
+          text: "Apothecary Satchel Restocked! (+12 of All 4 Biome Herbs & +400 Rupees)",
+          subtext: "Brew & quaff any Alchemical Elixir at Apothecary Selene's Cauldron!",
+          timer: 4.4,
+        },
+      };
+    });
   },
 
   startColosseumTrial: (tier: ColosseumTierId) => {
@@ -4632,18 +4824,37 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const hasRelic = (r: RelicId): boolean =>
       Boolean(hero.equippedRelics && hero.equippedRelics.includes(r));
 
-    // Passive Magic Power regeneration (2.5 MP/s base, or 5.0 MP/s with Archmage's Ley-Crystal!)
-    const mpRegenRate = hasRelic("arcane_conduit") ? 5.0 : 2.5;
+    // Update Active Alchemical Elixir Timer & Sovereign Aegis Tonic HP Regeneration
+    if ((hero.activeElixirTimer ?? 0) > 0) {
+      hero.activeElixirTimer = Math.max(0, (hero.activeElixirTimer ?? 0) - dt);
+      if (hero.activeElixir === "aegis_tonic") {
+        hero.elixirRegenTimer = (hero.elixirRegenTimer ?? 6.0) - dt;
+        if (hero.elixirRegenTimer <= 0) {
+          hero.elixirRegenTimer = 6.0;
+          if (hero.hp < hero.maxHp) {
+            hero.hp = Math.min(hero.maxHp, hero.hp + 1);
+          }
+        }
+      }
+      if (hero.activeElixirTimer <= 0) {
+        hero.activeElixir = "none";
+      }
+    } else {
+      hero.activeElixir = "none";
+    }
+
+    const activeElixir: ElixirId = hero.activeElixir ?? "none";
+
+    // Passive Magic Power regeneration (2.5 MP/s base, 5.0 MP/s with Archmage's Ley-Crystal, +15.0 MP/s with Archmage Ley-Font Elixir!)
+    const mpRegenRate =
+      (hasRelic("arcane_conduit") ? 5.0 : 2.5) +
+      (activeElixir === "archmage_elixir" ? 15.0 : 0);
     hero.maxMp = hero.maxMp || 100;
     hero.mp = Math.min(hero.maxMp, (hero.mp ?? 100) + dt * mpRegenRate);
     hero.maxBombs = hero.maxBombs ?? 0;
     hero.bombs = hero.bombs ?? 0;
 
-    // Tunic & Relic damage multiplier:
-    // - Forest Green Tunic (default): 1.0x (0% physical/magical reduction)
-    // - Sapphire Mail (blue_mail): 0.5x (50% physical & magical damage reduction!)
-    // - Crimson Dragon Mail (red_mail): 0.25x (75% physical & magical damage reduction!)
-    // - Immortal Phoenix Ankh (aegis_ankh): additional 0.75x multiplier (-25% incoming damage!)
+    // Tunic, Relic, Steed & Elixir damage multiplier:
     const getTunicDamageMultiplier = (): number => {
       const baseMult =
         hero.equippedTunic === "red_mail"
@@ -4652,7 +4863,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? 0.5
           : 1.0;
       const relicMult = hasRelic("aegis_ankh") ? baseMult * 0.75 : baseMult;
-      return hero.mountedSteed === "war_drake" ? relicMult * 0.7 : relicMult;
+      const steedMult = hero.mountedSteed === "war_drake" ? relicMult * 0.7 : relicMult;
+      return activeElixir === "aegis_tonic" ? steedMult * 0.6 : steedMult;
     };
 
     // Helper: check if hero died and auto-revive with Bottled Fairy OR Immortal Phoenix Ankh (`aegis_ankh`)!
@@ -5802,7 +6014,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     ) {
       const isCharged = (hero.fireRodChargeTimer ?? 0) >= FIRE_CHARGE_THRESHOLD;
       hero.fireRodChargeTimer = 0;
-      const mpCost = hasRelic("arcane_conduit") ? (isCharged ? 10 : 5) : (isCharged ? 16 : 8);
+      const mpCost =
+        activeElixir === "archmage_elixir"
+          ? 0
+          : hasRelic("arcane_conduit")
+          ? isCharged
+            ? 10
+            : 5
+          : isCharged
+          ? 16
+          : 8;
       if (hero.mp < mpCost) {
         soundEngine.playGateLocked();
         hero.fireRodCooldown = 0.35;
@@ -6211,11 +6432,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !boomerang &&
       hero.boomerangCooldown <= 0
     ) {
-      // Trigger Boomerang Throw (Q or 1) — 2.0 second cooldown prevents close-range spam!
+      // Trigger Boomerang Throw (Q or 1) — 2.0 second cooldown prevents close-range spam (1.0s with Zephyr Gale Nectar)!
       hero.isBlocking = false;
       hero.throwAnimTimer = 0.28;
       hero.weaponLockTimer = 0.34;
-      hero.boomerangCooldown = 2.0;
+      hero.boomerangCooldown = activeElixir === "gale_nectar" ? 1.0 : 2.0;
       soundEngine.playBoomerangThrow();
       boomerang = {
         zone,
@@ -6320,7 +6541,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !state.sanctuaryOpen
     ) {
       hero.dashTimer = 0.22;
-      hero.dashCooldown = hasRelic("wind_feather") ? 0.58 : 0.9;
+      const baseDashCd = hasRelic("wind_feather") ? 0.58 : 0.9;
+      hero.dashCooldown = activeElixir === "gale_nectar" ? baseDashCd * 0.5 : baseDashCd;
       hero.invulnerableTimer = Math.max(hero.invulnerableTimer, 0.28);
       hero.isBlocking = false;
       if (Math.hypot(input.moveX, input.moveZ) > 0.05) {
@@ -6347,6 +6569,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ? 1.5
         : 1.0;
     const dashSpeedMult = isDashing ? 2.25 : 1.0;
+    const elixirSpeedMult = activeElixir === "gale_nectar" ? 1.3 : 1.0;
     const bootsMultiplier =
       (hero.equippedBoots === "swift_boots"
         ? 1.25
@@ -6357,6 +6580,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       relicSpeedMult *
       companionSpeedMult *
       mountSpeedMult *
+      elixirSpeedMult *
       dashSpeedMult;
 
     const initialGatePassable =
@@ -8314,6 +8538,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
           lootedBushIds.push(prop.id);
         }
 
+        // Forage wild Biome Herbs when chopping bushes for the first time!
+        if (!alreadyCutOnce && Math.random() < 0.45) {
+          const herbPool: HerbId[] =
+            zone === "caverns" || zone === "atoll"
+              ? ["frost_cap", "starlight_dew"]
+              : zone === "caldera" || zone === "desert" || zone === "citadel"
+              ? ["ember_root", "sun_lotus"]
+              : zone === "sky" || zone === "hollow" || zone === "rift"
+              ? ["starlight_dew", "frost_cap"]
+              : ["sun_lotus", "ember_root"];
+          const pickedHerb = herbPool[Math.floor(Math.random() * herbPool.length)];
+          hero.herbs = {
+            sun_lotus: 0,
+            frost_cap: 0,
+            ember_root: 0,
+            starlight_dew: 0,
+            ...(hero.herbs ?? {}),
+          };
+          hero.herbs[pickedHerb] = (hero.herbs[pickedHerb] ?? 0) + 1;
+        }
+
         if (bushRupeesEarned < MAX_BUSH_RUPEES_CAP) {
           const dropChance = alreadyCutOnce ? 0.05 : 0.38;
           if (Math.random() < dropChance) {
@@ -8412,7 +8657,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
 
     const rollComboCritBonus = (): number => {
-      const critChance = Math.min(0.4, (hero.comboCount ?? 0) * 0.04);
+      const elixirCritBonus = activeElixir === "titans_draught" ? 0.25 : 0;
+      const critChance = Math.min(0.65, (hero.comboCount ?? 0) * 0.04 + elixirCritBonus);
       if (critChance > 0 && Math.random() < critChance) {
         return 1;
       }
@@ -8425,6 +8671,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
       enemy.state = "dead";
       stats.enemiesDefeated += 1;
       registerComboHit();
+
+      // Monsters also drop Alchemical Biome Herbs (100% on Boss/Bounty, 40% on regular foes)
+      if (enemy.kind === "boss" || enemy.isBounty || Math.random() < 0.4) {
+        const herbByZone: HerbId =
+          zone === "caverns" || zone === "atoll"
+            ? "frost_cap"
+            : zone === "caldera" || zone === "citadel" || zone === "desert"
+            ? "ember_root"
+            : zone === "sky" || zone === "hollow" || zone === "rift"
+            ? "starlight_dew"
+            : "sun_lotus";
+        hero.herbs = {
+          sun_lotus: 0,
+          frost_cap: 0,
+          ember_root: 0,
+          starlight_dew: 0,
+          ...(hero.herbs ?? {}),
+        };
+        const herbQty = enemy.kind === "boss" ? 2 : 1;
+        hero.herbs[herbByZone] = (hero.herbs[herbByZone] ?? 0) + herbQty;
+      }
       const greedCoreBonus =
         hasRelic("greed_crown") &&
         (enemy.kind === "boss" || enemy.isBounty || enemy.kind === "knight")
@@ -11475,7 +11742,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
               }
             } else {
               enemy.provoked = true;
-              const relicSwordBonus = hasRelic("berserker_torc") ? 1 : 0;
+              const relicSwordBonus =
+                (hasRelic("berserker_torc") ? 1 : 0) +
+                (activeElixir === "titans_draught" ? 1 : 0);
               const critBonus = rollComboCritBonus();
               const strikeDamage =
                 ((hero.swordDamage || 1) + relicSwordBonus) * (isSpin ? 2 : 1) + critBonus;
@@ -13788,6 +14057,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Grand Colosseum War-Gate & Horn Monument — Press [F] or [O] to Enter the 3-Tier Gladiatorial Boss-Rush & Wave Survival Gauntlet!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(ALCHEMY_CAULDRON_POS.x - hero.x, ALCHEMY_CAULDRON_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Apothecary Selene's Alchemy Cauldron — Press [F] or [ [ ] to Brew & Quaff 90s Buff Elixirs from Foraged Herbs!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -13808,6 +14083,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let sanctuaryOpen = state.sanctuaryOpen;
     let stablesOpen = state.stablesOpen;
     let colosseumOpen = state.colosseumOpen;
+    let alchemyOpen = state.alchemyOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -13821,6 +14097,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       sanctuaryOpen = false;
       stablesOpen = false;
       colosseumOpen = false;
+      alchemyOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(RIFT_ENTRANCE_POS.x - hero.x, RIFT_ENTRANCE_POS.z - hero.z) <= 3.5 &&
@@ -13834,6 +14111,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       sanctuaryOpen = false;
       stablesOpen = false;
       colosseumOpen = false;
+      alchemyOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(COMPANION_ALTAR_POS.x - hero.x, COMPANION_ALTAR_POS.z - hero.z) <= 3.5 &&
@@ -13847,6 +14125,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       shopOpen = false;
       stablesOpen = false;
       colosseumOpen = false;
+      alchemyOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(MOUNT_STABLES_POS.x - hero.x, MOUNT_STABLES_POS.z - hero.z) <= 3.8 &&
@@ -13860,6 +14139,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       atlasOpen = false;
       shopOpen = false;
       colosseumOpen = false;
+      alchemyOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(COLOSSEUM_GATE_POS.x - hero.x, COLOSSEUM_GATE_POS.z - hero.z) <= 3.8 &&
@@ -13867,6 +14147,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       colosseumOpen = true;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+      alchemyOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(ALCHEMY_CAULDRON_POS.x - hero.x, ALCHEMY_CAULDRON_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      alchemyOpen = true;
+      colosseumOpen = false;
       stablesOpen = false;
       sanctuaryOpen = false;
       riftOpen = false;
@@ -14114,6 +14409,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       sanctuaryOpen,
       stablesOpen,
       colosseumOpen,
+      alchemyOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

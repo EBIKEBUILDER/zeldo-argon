@@ -29,6 +29,7 @@ import {
   sampleWayfinderPolyline,
 } from "@/game/questSystem";
 import {
+  ALCHEMY_CAULDRON_POS,
   ATOLL_PEARL_CHEST_POS,
   ATOLL_VICTORY_CHEST_POS,
   BIG_KEY_CHEST_POS,
@@ -6023,6 +6024,144 @@ export default function BabylonCanvas() {
     colosseumGroundHalo.isPickable = false;
     colosseumGroundHalo.parent = colosseumGateNode;
 
+    // 1g. Overworld Apothecary Alchemy Cauldron & Herbalist Selene (`ALCHEMY_CAULDRON_POS = -16.2, -22.5`)
+    const alchemyCauldronNode = new TransformNode("alchemyCauldronNode", scene);
+    alchemyCauldronNode.position.set(ALCHEMY_CAULDRON_POS.x, 0, ALCHEMY_CAULDRON_POS.z);
+
+    const alchemyBrewMat = makeMat(
+      "alchemyBrewMat",
+      new Color3(0.18, 0.96, 0.64),
+      new Color3(0.08, 0.72, 0.45),
+      new Color3(0.85, 1.0, 0.92)
+    );
+    const seleneRobeMat = makeMat(
+      "seleneRobeMat",
+      new Color3(0.24, 0.56, 0.48),
+      new Color3(0.06, 0.18, 0.14),
+      new Color3(0.55, 0.85, 0.75)
+    );
+
+    const cauldronHearth = MeshBuilder.CreateCylinder(
+      "cauldronHearth",
+      { diameterTop: 2.35, diameterBottom: 2.75, height: 0.24, tessellation: 14 },
+      scene
+    );
+    cauldronHearth.position.set(0, 0.12, 0);
+    cauldronHearth.material = dgPillarMat;
+    cauldronHearth.isPickable = false;
+    cauldronHearth.parent = alchemyCauldronNode;
+
+    const cauldronEmbers = MeshBuilder.CreateCylinder(
+      "cauldronEmbers",
+      { diameter: 1.38, height: 0.12, tessellation: 12 },
+      scene
+    );
+    cauldronEmbers.position.set(0, 0.25, 0);
+    cauldronEmbers.material = forgeEmberMat;
+    cauldronEmbers.isPickable = false;
+    cauldronEmbers.parent = alchemyCauldronNode;
+
+    const cauldronBowl = MeshBuilder.CreateSphere(
+      "cauldronBowl",
+      { diameterX: 1.48, diameterY: 1.15, diameterZ: 1.48, segments: 12 },
+      scene
+    );
+    cauldronBowl.position.set(0, 0.72, 0);
+    cauldronBowl.material = darkObsidianMat;
+    cauldronBowl.isPickable = false;
+    cauldronBowl.parent = alchemyCauldronNode;
+
+    const cauldronRim = MeshBuilder.CreateTorus(
+      "cauldronRim",
+      { diameter: 1.34, thickness: 0.16, tessellation: 18 },
+      scene
+    );
+    cauldronRim.position.set(0, 1.12, 0);
+    cauldronRim.material = darkObsidianMat;
+    cauldronRim.isPickable = false;
+    cauldronRim.parent = alchemyCauldronNode;
+
+    const cauldronLiquid = MeshBuilder.CreateCylinder(
+      "cauldronLiquid",
+      { diameter: 1.22, height: 0.08, tessellation: 16 },
+      scene
+    );
+    cauldronLiquid.position.set(0, 1.13, 0);
+    cauldronLiquid.material = alchemyBrewMat;
+    cauldronLiquid.isPickable = false;
+    cauldronLiquid.parent = alchemyCauldronNode;
+
+    const cauldronAlembicRing = MeshBuilder.CreateTorus(
+      "cauldronAlembicRing",
+      { diameter: 1.56, thickness: 0.08, tessellation: 22 },
+      scene
+    );
+    cauldronAlembicRing.position.set(0, 1.65, 0);
+    cauldronAlembicRing.material = alchemyBrewMat;
+    cauldronAlembicRing.isPickable = false;
+    cauldronAlembicRing.parent = alchemyCauldronNode;
+
+    const cauldronCrystal = MeshBuilder.CreatePolyhedron(
+      "cauldronCrystal",
+      { type: 1, size: 0.22 },
+      scene
+    );
+    cauldronCrystal.position.set(0, 1.95, 0);
+    cauldronCrystal.material = alchemyBrewMat;
+    cauldronCrystal.isPickable = false;
+    cauldronCrystal.parent = alchemyCauldronNode;
+
+    // Apothecary Selene NPC beside the Cauldron
+    const seleneBody = MeshBuilder.CreateCylinder(
+      "seleneBody",
+      { diameterTop: 0.54, diameterBottom: 0.76, height: 1.04, tessellation: 10 },
+      scene
+    );
+    seleneBody.position.set(-1.18, 0.72, -0.35);
+    seleneBody.material = seleneRobeMat;
+    seleneBody.isPickable = false;
+    seleneBody.parent = alchemyCauldronNode;
+
+    const seleneHead = MeshBuilder.CreateSphere(
+      "seleneHead",
+      { diameter: 0.48, segments: 10 },
+      scene
+    );
+    seleneHead.position.set(-1.18, 1.42, -0.35);
+    seleneHead.material = skinMat;
+    seleneHead.isPickable = false;
+    seleneHead.parent = alchemyCauldronNode;
+
+    const seleneHatBrim = MeshBuilder.CreateCylinder(
+      "seleneHatBrim",
+      { diameter: 0.92, height: 0.06, tessellation: 14 },
+      scene
+    );
+    seleneHatBrim.position.set(-1.18, 1.64, -0.35);
+    seleneHatBrim.material = seleneRobeMat;
+    seleneHatBrim.isPickable = false;
+    seleneHatBrim.parent = alchemyCauldronNode;
+
+    const seleneHatCone = MeshBuilder.CreateCylinder(
+      "seleneHatCone",
+      { diameterTop: 0.06, diameterBottom: 0.52, height: 0.58, tessellation: 10 },
+      scene
+    );
+    seleneHatCone.position.set(-1.18, 1.94, -0.35);
+    seleneHatCone.material = seleneRobeMat;
+    seleneHatCone.isPickable = false;
+    seleneHatCone.parent = alchemyCauldronNode;
+
+    const alchemyGroundHalo = MeshBuilder.CreateTorus(
+      "alchemyGroundHalo",
+      { diameter: 3.15, thickness: 0.08, tessellation: 28 },
+      scene
+    );
+    alchemyGroundHalo.position.set(0, 0.14, 0);
+    alchemyGroundHalo.material = alchemyBrewMat;
+    alchemyGroundHalo.isPickable = false;
+    alchemyGroundHalo.parent = alchemyCauldronNode;
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -9597,6 +9736,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // [ (BracketLeft) toggles Apothecary Selene's Alchemy Cauldron & Buff Elixirs Modal
+      if (code === "BracketLeft" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setAlchemyOpen(!store.alchemyOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -10604,11 +10750,12 @@ export default function BabylonCanvas() {
         smithArmNode.rotation.x = Math.sin(t * 6.5) * 0.55;
       }
 
-      // Sync 3D Abyssal Rift Obelisk, Spirit Companion Sanctuary, Royal Stables & Colosseum War-Gate (Map 1 Overworld)
+      // Sync 3D Abyssal Rift Obelisk, Spirit Companion Sanctuary, Royal Stables, Colosseum War-Gate & Alchemy Cauldron (Map 1 Overworld)
       riftEntranceNode.setEnabled(inOverworld);
       companionAltarNode.setEnabled(inOverworld);
       mountStablesNode.setEnabled(inOverworld);
       colosseumGateNode.setEnabled(inOverworld);
+      alchemyCauldronNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -10666,6 +10813,21 @@ export default function BabylonCanvas() {
         colosseumCrown.rotation.y = t * 2.8;
         colosseumCrown.position.y = 1.72 + Math.sin(t * 4.2) * 0.14;
         colosseumGroundHalo.rotation.y = -t * 1.9;
+
+        const cauldronGroundY = sampleTerrainHeight(
+          activeCells,
+          ALCHEMY_CAULDRON_POS.x,
+          ALCHEMY_CAULDRON_POS.z
+        );
+        alchemyCauldronNode.position.set(
+          ALCHEMY_CAULDRON_POS.x,
+          cauldronGroundY,
+          ALCHEMY_CAULDRON_POS.z
+        );
+        cauldronAlembicRing.rotation.y = t * 2.5;
+        cauldronCrystal.rotation.y = -t * 3.1;
+        cauldronCrystal.position.y = 1.95 + Math.sin(t * 4.4) * 0.14;
+        alchemyGroundHalo.rotation.y = t * 1.6;
       }
 
       // Sync 3D Active Spirit Companion Orbiting / Following the Hero (`snap.hero.activeCompanion`)

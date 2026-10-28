@@ -292,6 +292,12 @@ export const COLOSSEUM_GATE_POS = {
   z: -13.5,
 };
 
+// Map 1 Apothecary Selene's Alchemy Cauldron & Herb Garden (Brew timed Combat Buff Elixirs from foraged biome flora!)
+export const ALCHEMY_CAULDRON_POS = {
+  x: -16.2,
+  z: -22.5,
+};
+
 // Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,
