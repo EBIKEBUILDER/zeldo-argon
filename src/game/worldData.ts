@@ -286,6 +286,12 @@ export const MOUNT_STABLES_POS = {
   z: -31.8,
 };
 
+// Map 1 Grand Colosseum War-Gate & Horn Monument (Enters the 3-Tier Gladiatorial Wave Survival & Boss-Rush Gauntlet!)
+export const COLOSSEUM_GATE_POS = {
+  x: -6.2,
+  z: -13.5,
+};
+
 // Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,

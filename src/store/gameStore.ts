@@ -21,6 +21,7 @@ import {
   CITADEL_BOSS_GATE_POS,
   CITADEL_EXIT_GATE_POS,
   CITADEL_VICTORY_CHEST_POS,
+  COLOSSEUM_GATE_POS,
   COMPANION_ALTAR_POS,
   computeBossChargePathLength,
   computeEnemyChargePathLength,
@@ -143,6 +144,8 @@ export type MountId =
   | "sun_courser"
   | "frost_stag"
   | "war_drake";
+
+export type ColosseumTierId = "bronze" | "silver" | "gold";
 
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
@@ -620,6 +623,12 @@ export interface GameFlags {
   riftBossChestOpened?: boolean;
   riftNextFloorPos?: { x: number; z: number };
   riftBossDefeated?: boolean;
+  // Grand Colosseum Wave Survival & Boss-Rush Gauntlet State
+  colosseumActive?: boolean;
+  colosseumTier?: ColosseumTierId;
+  colosseumWave?: number;
+  colosseumTotalWaves?: number;
+  colosseumCompletedTiers?: ColosseumTierId[];
 }
 
 export interface GameStats {
@@ -694,6 +703,7 @@ export interface SerializableGameState {
   riftOpen: boolean;
   sanctuaryOpen: boolean;
   stablesOpen: boolean;
+  colosseumOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -728,6 +738,9 @@ export interface GameActions {
   setRiftOpen: (open: boolean) => void;
   setSanctuaryOpen: (open: boolean) => void;
   setStablesOpen: (open: boolean) => void;
+  setColosseumOpen: (open: boolean) => void;
+  startColosseumTrial: (tier: ColosseumTierId) => void;
+  grantColosseumPlaytestBundle: () => void;
   whistleToggleMount: () => void;
   summonOrUnlockMount: (mountId: MountId) => void;
   grantStablesPlaytestBundle: () => void;
@@ -1277,6 +1290,7 @@ function createInitialState(
     riftOpen: false,
     sanctuaryOpen: false,
     stablesOpen: false,
+    colosseumOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -1469,6 +1483,132 @@ const DEFAULT_PROP_META: Record<
   temple_arch: { label: "Temple Archway", hasCollider: false, w: 10.0, d: 3.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
   custom_model: { label: "Custom 3D Mesh", hasCollider: true, w: 2.2, d: 2.2, scaleX: 1, scaleY: 1, scaleZ: 1, kind: "ruin" },
 };
+
+function buildColosseumWaveEnemies(tier: ColosseumTierId, wave: number): EnemyState[] {
+  const mkEnemy = (
+    id: string,
+    kind: EnemyKind,
+    x: number,
+    z: number,
+    hp: number,
+    damage: number,
+    speed: number,
+    opts?: {
+      shieldArmor?: EnemyShieldArmor;
+      shockArmor?: boolean;
+      isBounty?: boolean;
+    }
+  ): EnemyState => ({
+    id,
+    kind,
+    zone: "rift",
+    x,
+    z,
+    spawnX: x,
+    spawnZ: z,
+    facing: Math.PI,
+    hp,
+    maxHp: hp,
+    weight: getDefaultEnemyWeight(kind),
+    state: kind === "boss" ? "aggro" : "aggro",
+    stateTimer: 0,
+    hitFlashTimer: 0,
+    knockbackImmunityTimer: 0,
+    stunTimer: 0,
+    lastHitSwingId: -1,
+    knockbackVx: 0,
+    knockbackVz: 0,
+    aggroRadius: 24.0,
+    speed,
+    damage,
+    rupeeDrop: kind === "boss" ? "boss" : opts?.isBounty ? "red" : "blue",
+    shieldArmor: opts?.shieldArmor ?? "none",
+    initialShieldArmor: opts?.shieldArmor ?? "none",
+    shockArmor: opts?.shockArmor ?? false,
+    initialShockArmor: opts?.shockArmor ?? false,
+    isBounty: opts?.isBounty ?? false,
+    initialIsBounty: opts?.isBounty ?? false,
+    burrowed: kind === "burrower",
+    provoked: true,
+    chargeAngle: Math.PI,
+    chargePathLength: 12.0,
+    chargeDistanceTraveled: 0,
+    actionCounter: 0,
+    actionCooldown: 0.85,
+  });
+
+  if (tier === "bronze") {
+    if (wave === 1) {
+      return [
+        mkEnemy("col-br-w1-1", "goblin", -7.5, 4.5, 4, 1, 5.4, { shieldArmor: "wood" }),
+        mkEnemy("col-br-w1-2", "goblin", 7.5, 4.5, 4, 1, 5.4, { shieldArmor: "wood" }),
+        mkEnemy("col-br-w1-3", "archer", -5.5, 9.5, 3, 1, 4.6),
+        mkEnemy("col-br-w1-4", "slime", 5.5, 9.5, 3, 1, 5.0, { shockArmor: true }),
+      ];
+    }
+    if (wave === 2) {
+      return [
+        mkEnemy("col-br-w2-1", "knight", -6.5, 6.0, 7, 1, 5.0),
+        mkEnemy("col-br-w2-2", "knight", 6.5, 6.0, 7, 1, 5.0),
+        mkEnemy("col-br-w2-3", "wraith", 0, 10.5, 4, 1, 5.2),
+        mkEnemy("col-br-w2-4", "burrower", 0, 2.5, 5, 1, 5.4),
+      ];
+    }
+    return [
+      mkEnemy("col-br-w3-boss", "boss", 0, 7.5, 15, 2, 4.4),
+      mkEnemy("col-br-w3-g1", "goblin", -8.0, 5.0, 4, 1, 5.6, { isBounty: true }),
+      mkEnemy("col-br-w3-g2", "goblin", 8.0, 5.0, 4, 1, 5.6, { isBounty: true }),
+    ];
+  }
+
+  if (tier === "silver") {
+    if (wave === 1) {
+      return [
+        mkEnemy("col-si-w1-1", "goblin", -8.0, 4.5, 5, 1, 5.6, { shieldArmor: "ice" }),
+        mkEnemy("col-si-w1-2", "goblin", 8.0, 4.5, 5, 1, 5.6, { shieldArmor: "ice" }),
+        mkEnemy("col-si-w1-3", "wraith", -5.5, 9.8, 5, 1, 5.5),
+        mkEnemy("col-si-w1-4", "wraith", 5.5, 9.8, 5, 1, 5.5),
+        mkEnemy("col-si-w1-5", "bomber", 0, 11.2, 5, 2, 5.2),
+      ];
+    }
+    if (wave === 2) {
+      return [
+        mkEnemy("col-si-w2-1", "knight", -7.2, 6.2, 9, 2, 5.2, { shockArmor: true }),
+        mkEnemy("col-si-w2-2", "knight", 7.2, 6.2, 9, 2, 5.2, { shieldArmor: "ice" }),
+        mkEnemy("col-si-w2-3", "slime", -4.5, 2.5, 4, 1, 5.4, { shockArmor: true }),
+        mkEnemy("col-si-w2-4", "slime", 4.5, 2.5, 4, 1, 5.4, { shockArmor: true }),
+        mkEnemy("col-si-w2-5", "burrower", 0, 8.5, 6, 2, 5.6, { isBounty: true }),
+      ];
+    }
+    return [
+      mkEnemy("col-si-w3-boss", "boss", 0, 8.0, 21, 2, 4.7),
+      mkEnemy("col-si-w3-k1", "knight", -8.2, 5.5, 8, 2, 5.2, { isBounty: true }),
+      mkEnemy("col-si-w3-k2", "knight", 8.2, 5.5, 8, 2, 5.2, { isBounty: true }),
+    ];
+  }
+
+  // Gold Tier: Sovereign Boss-Rush Gauntlet!
+  if (wave === 1) {
+    return [
+      mkEnemy("col-go-w1-boss", "boss", 0, 7.5, 18, 2, 4.6),
+      mkEnemy("col-go-w1-m1", "minion", -7.8, 5.0, 5, 1, 5.8),
+      mkEnemy("col-go-w1-m2", "minion", 7.8, 5.0, 5, 1, 5.8),
+    ];
+  }
+  if (wave === 2) {
+    return [
+      mkEnemy("col-go-w2-boss", "boss", 0, 8.0, 21, 2, 4.9),
+      mkEnemy("col-go-w2-k1", "knight", -8.0, 5.5, 9, 2, 5.4, { shieldArmor: "ice" }),
+      mkEnemy("col-go-w2-k2", "knight", 8.0, 5.5, 9, 2, 5.4, { shockArmor: true }),
+    ];
+  }
+  return [
+    mkEnemy("col-go-w3-boss", "boss", 0, 8.5, 27, 2, 5.1),
+    mkEnemy("col-go-w3-k1", "knight", -8.5, 5.5, 10, 2, 5.5, { isBounty: true }),
+    mkEnemy("col-go-w3-k2", "knight", 8.5, 5.5, 10, 2, 5.5, { isBounty: true }),
+    mkEnemy("col-go-w3-w1", "wraith", 0, 12.0, 6, 2, 5.8, { isBounty: true }),
+  ];
+}
 
 export const useGameStore = create<GameStore>((set, get) => ({
   ...createInitialState("title", false),
@@ -1666,6 +1806,282 @@ export const useGameStore = create<GameStore>((set, get) => ({
       forgeOpen: open ? false : state.forgeOpen,
       riftOpen: open ? false : state.riftOpen,
       sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+    }));
+  },
+
+  setColosseumOpen: (open: boolean) => {
+    set((state) => ({
+      colosseumOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+    }));
+  },
+
+  startColosseumTrial: (tier: ColosseumTierId) => {
+    const state = get();
+    soundEngine.unlock();
+    soundEngine.playPortalTransition();
+    soundEngine.playGateUnlock();
+
+    const nonRiftProps = state.mapProps.filter((p) => p.zone !== "rift");
+    const nonRiftEnemies = state.enemies.filter((e) => e.zone !== "rift");
+    const nonRiftRupees = state.rupees.filter((r) => r.zone !== "rift");
+    const nonRiftPortals = state.portals.filter((pt) => pt.zone !== "rift");
+
+    // Build a Circular Gladiatorial Colosseum Amphitheater in `zone: "rift"`
+    const colosseumProps: MapPropInstance[] = [];
+    const pillarCount = 16;
+    const ringRadius = 18.8;
+    for (let i = 0; i < pillarCount; i++) {
+      const ang = (i / pillarCount) * Math.PI * 2;
+      // Leave South Exit Portal opening clear
+      if (Math.abs(Math.sin(ang)) < 0.22 && Math.cos(ang) < -0.85) continue;
+      const px = Number((Math.sin(ang) * ringRadius).toFixed(2));
+      const pz = Number((Math.cos(ang) * ringRadius).toFixed(2));
+      colosseumProps.push({
+        id: `colosseum-pillar-${i}`,
+        name: `Colosseum Pillar ${i + 1}`,
+        zone: "rift",
+        prefab: "dungeon_pillar",
+        x: px,
+        y: 0,
+        z: pz,
+        rotY: ang,
+        scaleX: 1.25,
+        scaleY: 1.35,
+        scaleZ: 1.25,
+        hasCollider: true,
+        colliderWidth: 2.2,
+        colliderDepth: 2.2,
+        colliderKind: "pillar",
+      });
+      if (i % 2 === 0) {
+        colosseumProps.push({
+          id: `colosseum-torch-${i}`,
+          name: `Colosseum Brazier ${i + 1}`,
+          zone: "rift",
+          prefab: "wall_torch",
+          x: Number((Math.sin(ang) * (ringRadius - 1.55)).toFixed(2)),
+          y: 0,
+          z: Number((Math.cos(ang) * (ringRadius - 1.55)).toFixed(2)),
+          rotY: ang + Math.PI,
+          scaleX: 1,
+          scaleY: 1,
+          scaleZ: 1,
+          hasCollider: true,
+          colliderWidth: 0.9,
+          colliderDepth: 0.9,
+          colliderKind: "pillar",
+          lit: true,
+        });
+      }
+    }
+
+    // 4 Tactical Hookshot Grapple Posts around the arena perimeter
+    const grappleCoords = [
+      { x: -11.5, z: -11.5 },
+      { x: 11.5, z: -11.5 },
+      { x: -11.5, z: 11.5 },
+      { x: 11.5, z: 11.5 },
+    ];
+    grappleCoords.forEach((gp, idx) => {
+      colosseumProps.push({
+        id: `colosseum-grapple-${idx}`,
+        name: `Arena Grapple Post ${idx + 1}`,
+        zone: "rift",
+        prefab: "grapple_post",
+        x: gp.x,
+        y: 0,
+        z: gp.z,
+        rotY: 0,
+        scaleX: 1,
+        scaleY: 1,
+        scaleZ: 1,
+        hasCollider: true,
+        colliderWidth: 1.1,
+        colliderDepth: 1.1,
+        colliderKind: "pillar",
+      });
+    });
+
+    // 4 Arena Supply Clay Pots (Hearts & Rupees)
+    const potCoords = [
+      { x: -13.8, z: 0, reward: "heart" as PotRewardKind },
+      { x: 13.8, z: 0, reward: "heart" as PotRewardKind },
+      { x: -6.5, z: -14.2, reward: "blue" as PotRewardKind },
+      { x: 6.5, z: -14.2, reward: "red" as PotRewardKind },
+    ];
+    potCoords.forEach((pt, idx) => {
+      colosseumProps.push({
+        id: `colosseum-pot-${idx}`,
+        name: `Colosseum Supply Pot ${idx + 1}`,
+        zone: "rift",
+        prefab: "clay_pot",
+        x: pt.x,
+        y: 0,
+        z: pt.z,
+        rotY: 0,
+        scaleX: 1,
+        scaleY: 1,
+        scaleZ: 1,
+        hasCollider: true,
+        colliderWidth: 1.15,
+        colliderDepth: 1.15,
+        colliderKind: "ruin",
+        potReward: pt.reward,
+      });
+    });
+
+    const colosseumExitPortal: MapPortal = {
+      id: "portal-colosseum-exit",
+      zone: "rift",
+      x: 0,
+      z: -16.8,
+      radius: 1.9,
+      targetZone: "overworld",
+      targetX: COLOSSEUM_GATE_POS.x,
+      targetZ: COLOSSEUM_GATE_POS.z - 2.6,
+      targetFacing: Math.PI,
+      label: "Return to Crossroads Village Plaza",
+      sublabel: "Grand Colosseum Exit",
+      color: "gold",
+    };
+
+    const wave1Enemies = buildColosseumWaveEnemies(tier, 1);
+
+    const TIER_META: Record<
+      ColosseumTierId,
+      { title: string; bossName: string; floorHex: string }
+    > = {
+      bronze: {
+        title: "Grand Colosseum • Bronze Vanguard Trial",
+        bossName: "Kragmos, the Bronze Pit-Warlord",
+        floorHex: "#4a3828",
+      },
+      silver: {
+        title: "Grand Colosseum • Silver Blood-Pit Trial",
+        bossName: "Vaelkor's Blood-Pit Colossus",
+        floorHex: "#2d3748",
+      },
+      gold: {
+        title: "Grand Colosseum • Gold Sovereign Boss-Rush",
+        bossName: "Astraea Ultima, Sovereign of the Arena",
+        floorHex: "#443216",
+      },
+    };
+    const meta = TIER_META[tier];
+
+    set({
+      zone: "rift",
+      colosseumOpen: false,
+      riftOpen: false,
+      atlasOpen: false,
+      shopOpen: false,
+      characterOpen: false,
+      questLogOpen: false,
+      forgeOpen: false,
+      sanctuaryOpen: false,
+      stablesOpen: false,
+      warpBeamTimer: 1.4,
+      hero: {
+        ...state.hero,
+        hp: state.hero.maxHp,
+        mp: state.hero.maxMp,
+        x: 0,
+        z: -11.5,
+        facing: 0,
+        knockbackVx: 0,
+        knockbackVz: 0,
+        knockbackLockTimer: 0,
+        portalCooldown: 1.2,
+      },
+      boomerang: null,
+      hookshot: null,
+      arrows: [],
+      fireballs: [],
+      projectiles: [],
+      mapProps: [...nonRiftProps, ...colosseumProps],
+      enemies: [...nonRiftEnemies, ...wave1Enemies],
+      rupees: nonRiftRupees,
+      portals: [...nonRiftPortals, colosseumExitPortal],
+      terrainRevision: state.terrainRevision + 1,
+      flags: {
+        ...state.flags,
+        bossState: "ARMORED",
+        bossArmorTimer: 0,
+        riftActive: true,
+        riftDepth: tier === "gold" ? 5 : tier === "silver" ? 3 : 1,
+        riftSeed: tier === "gold" ? 999 : tier === "silver" ? 555 : 111,
+        riftBiome: tier === "gold" ? "pharaoh" : tier === "silver" ? "glacial" : "brimstone",
+        riftBiomeTitle: `${meta.title} (Wave 1/3)`,
+        riftFloorColorHex: meta.floorHex,
+        riftBossName: meta.bossName,
+        riftEliteAffix: "Gladiatorial Arena",
+        riftRooms: [
+          {
+            col: 1,
+            row: 1,
+            cx: 0,
+            cz: 0,
+            role: "boss",
+            distFromStart: 0,
+          },
+        ],
+        riftShrinePos: { x: 0, z: -13.5 },
+        riftShrineClaimed: false,
+        riftVaultChestPos: undefined,
+        riftVaultChestOpened: true,
+        riftBossChestPos: { x: 0, z: 0 },
+        riftBossChestOpened: false,
+        riftNextFloorPos: undefined,
+        riftBossDefeated: false,
+        colosseumActive: true,
+        colosseumTier: tier,
+        colosseumWave: 1,
+        colosseumTotalWaves: 3,
+      },
+      banner: {
+        id: Date.now(),
+        text: `⚔ ${meta.title.toUpperCase()} — WAVE 1/3 BEGINS!`,
+        subtext:
+          "Defeat all gladiatorial challengers in each wave! Between waves you recover +2 Hearts & +40 MP!",
+        timer: 5.5,
+      },
+    });
+  },
+
+  grantColosseumPlaytestBundle: () => {
+    soundEngine.unlock();
+    soundEngine.playVictoryFanfare();
+    set((state) => ({
+      hero: {
+        ...state.hero,
+        maxHp: Math.min(40, state.hero.maxHp + 4),
+        hp: Math.min(40, state.hero.maxHp + 4),
+        maxMp: Math.max(125, state.hero.maxMp),
+        mp: Math.max(125, state.hero.maxMp),
+        swordDamage: Math.max(3, state.hero.swordDamage ?? 1),
+        monsterCores: (state.hero.monsterCores ?? 0) + 18,
+        rupees: state.hero.rupees + 1000,
+      },
+      flags: {
+        ...state.flags,
+        colosseumCompletedTiers: ["bronze", "silver", "gold"],
+      },
+      banner: {
+        id: Date.now(),
+        text: "Grand Colosseum Champion Bundle Unlocked!",
+        subtext:
+          "All 3 Gladiatorial Trial Crowns awarded (+2 Heart Containers, +18 Monster Cores, +1,000 Rupees & +1 Sword DMG)!",
+        timer: 4.8,
+      },
     }));
   },
 
@@ -2166,6 +2582,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       zone: "rift",
       riftOpen: false,
+      colosseumOpen: false,
       atlasOpen: false,
       shopOpen: false,
       characterOpen: false,
@@ -2215,6 +2632,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         riftBossChestOpened: false,
         riftNextFloorPos: gen.nextFloorPortalPos,
         riftBossDefeated: false,
+        colosseumActive: false,
       },
       banner: {
         id: Date.now() + Math.floor(Math.random() * 1000),
@@ -13362,7 +13780,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
           Math.hypot(MOUNT_STABLES_POS.x - hero.x, MOUNT_STABLES_POS.z - hero.z) <= 3.8
         ) {
           hero.interactPrompt =
-            "Crossroads Royal Stables (Stablemaster Garrick) — Press [F] to Open Stables, or [V] to Whistle Your Steed!";
+            "Crossroads Royal Stables (Stablemaster Garrick) — Press [F] to Open Stables, or [Y] to Whistle Your Steed!";
+        } else if (
+          zone === "overworld" &&
+          Math.hypot(COLOSSEUM_GATE_POS.x - hero.x, COLOSSEUM_GATE_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Grand Colosseum War-Gate & Horn Monument — Press [F] or [O] to Enter the 3-Tier Gladiatorial Boss-Rush & Wave Survival Gauntlet!";
         } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
@@ -13383,6 +13807,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let riftOpen = state.riftOpen;
     let sanctuaryOpen = state.sanctuaryOpen;
     let stablesOpen = state.stablesOpen;
+    let colosseumOpen = state.colosseumOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -13395,6 +13820,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       riftOpen = false;
       sanctuaryOpen = false;
       stablesOpen = false;
+      colosseumOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(RIFT_ENTRANCE_POS.x - hero.x, RIFT_ENTRANCE_POS.z - hero.z) <= 3.5 &&
@@ -13407,6 +13833,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       shopOpen = false;
       sanctuaryOpen = false;
       stablesOpen = false;
+      colosseumOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(COMPANION_ALTAR_POS.x - hero.x, COMPANION_ALTAR_POS.z - hero.z) <= 3.5 &&
@@ -13419,6 +13846,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       atlasOpen = false;
       shopOpen = false;
       stablesOpen = false;
+      colosseumOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(MOUNT_STABLES_POS.x - hero.x, MOUNT_STABLES_POS.z - hero.z) <= 3.8 &&
@@ -13431,12 +13859,113 @@ export const useGameStore = create<GameStore>((set, get) => ({
       forgeOpen = false;
       atlasOpen = false;
       shopOpen = false;
+      colosseumOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(COLOSSEUM_GATE_POS.x - hero.x, COLOSSEUM_GATE_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      colosseumOpen = true;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
     }
 
     // =========================================================
-    // DIABLO-STYLE PROCEDURAL RIFT INTERACTIONS (SHRINE, VAULT CHEST, BOSS CHEST & NEXT FLOOR DESCENT)
+    // DIABLO-STYLE PROCEDURAL RIFT & GRAND COLOSSEUM INTERACTIONS
     // =========================================================
     if (zone === "rift") {
+      if (flags.colosseumActive) {
+        const aliveColosseumFoes = enemies.filter(
+          (e) => e.zone === "rift" && e.state !== "dead"
+        );
+        if (aliveColosseumFoes.length === 0) {
+          const curWave = flags.colosseumWave ?? 1;
+          const totalWaves = flags.colosseumTotalWaves ?? 3;
+          const tier: ColosseumTierId = flags.colosseumTier ?? "bronze";
+          if (curWave < totalWaves) {
+            const nextWave = curWave + 1;
+            flags.colosseumWave = nextWave;
+            flags.bossState = "ARMORED";
+            flags.bossArmorTimer = 0;
+            flags.riftBossDefeated = false;
+            const baseTitle =
+              tier === "gold"
+                ? "Grand Colosseum • Gold Sovereign Boss-Rush"
+                : tier === "silver"
+                ? "Grand Colosseum • Silver Blood-Pit Trial"
+                : "Grand Colosseum • Bronze Vanguard Trial";
+            flags.riftBiomeTitle = `${baseTitle} (Wave ${nextWave}/${totalWaves})`;
+
+            hero.hp = Math.min(hero.maxHp, hero.hp + 4);
+            hero.mp = Math.min(hero.maxMp, (hero.mp ?? 100) + 40);
+            const nextWaveEnemies = buildColosseumWaveEnemies(tier, nextWave);
+            for (let idx = enemies.length - 1; idx >= 0; idx--) {
+              if (enemies[idx].zone === "rift") {
+                enemies.splice(idx, 1);
+              }
+            }
+            enemies.push(...nextWaveEnemies);
+            soundEngine.playSecretSolve();
+            soundEngine.playGateUnlock();
+            banner = {
+              id: Date.now(),
+              text:
+                nextWave === totalWaves
+                  ? `👑 COLOSSEUM FINAL WAVE ${nextWave}/${totalWaves}: ARENA CHAMPION AWAKENS!`
+                  : `⚔ COLOSSEUM WAVE ${nextWave}/${totalWaves} UNLEASHED! (+2 Hearts & +40 MP Restored)`,
+              subtext:
+                nextWave === totalWaves
+                  ? `Crack ${flags.riftBossName ?? "the Champion"}'s shell [R/T/B], shoot the Open Eye [E/Q], and punish with your Sword!`
+                  : "Vanquish all challengers to advance to the Final Champion Wave!",
+              timer: 5.2,
+            };
+          } else {
+            flags.colosseumActive = false;
+            flags.riftBossDefeated = true;
+            flags.bossState = "DEAD";
+            const prevCompleted = flags.colosseumCompletedTiers ?? [];
+            const isFirstClear = !prevCompleted.includes(tier);
+            if (isFirstClear) {
+              flags.colosseumCompletedTiers = [...prevCompleted, tier];
+            }
+
+            const rewardCores = tier === "gold" ? 12 : tier === "silver" ? 7 : 4;
+            const rewardRupees = tier === "gold" ? 800 : tier === "silver" ? 450 : 250;
+            hero.monsterCores = (hero.monsterCores ?? 0) + rewardCores;
+            hero.rupees += rewardRupees;
+
+            let firstClearBonusText = "";
+            if (isFirstClear) {
+              hero.maxHp = Math.min(40, hero.maxHp + 2);
+              if (tier === "silver") {
+                hero.maxMp = (hero.maxMp || 100) + 25;
+                firstClearBonusText = " + First-Clear: +1 Heart Container & +25 Max MP!";
+              } else if (tier === "gold") {
+                hero.swordDamage = (hero.swordDamage ?? 1) + 1;
+                firstClearBonusText =
+                  " + First-Clear: +1 Heart Container & +1 Permanent Sword DMG!";
+              } else {
+                firstClearBonusText = " + First-Clear: +1 Heart Container!";
+              }
+            }
+            hero.hp = hero.maxHp;
+            hero.mp = hero.maxMp;
+            soundEngine.playVictoryFanfare();
+            soundEngine.playGateUnlock();
+            banner = {
+              id: Date.now(),
+              text: `🏆 GRAND COLOSSEUM ${tier.toUpperCase()} TRIAL CONQUERED!`,
+              subtext: `Earned +${rewardCores} Monster Cores (✦) & +${rewardRupees} Rupees${firstClearBonusText} Open the Center Hoard Chest!`,
+              timer: 6.8,
+            };
+          }
+        }
+      }
       if (
         flags.riftShrinePos &&
         !flags.riftShrineClaimed &&
@@ -13584,6 +14113,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       riftOpen,
       sanctuaryOpen,
       stablesOpen,
+      colosseumOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

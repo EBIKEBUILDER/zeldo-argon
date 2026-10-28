@@ -45,6 +45,7 @@ import {
   CITADEL_BOSS_GATE_POS,
   CITADEL_EXIT_GATE_POS,
   CITADEL_VICTORY_CHEST_POS,
+  COLOSSEUM_GATE_POS,
   COMPANION_ALTAR_POS,
   CRYPT_SHORTCUT_DOOR_POS,
   CustomModelAsset,
@@ -5955,6 +5956,73 @@ export default function BabylonCanvas() {
     stablesGroundHalo.isPickable = false;
     stablesGroundHalo.parent = mountStablesNode;
 
+    // 1f. Overworld Grand Colosseum War-Gate & Horn Monument (`COLOSSEUM_GATE_POS = -6.2, -13.5`)
+    const colosseumGateNode = new TransformNode("colosseumGateNode", scene);
+    colosseumGateNode.position.set(COLOSSEUM_GATE_POS.x, 0, COLOSSEUM_GATE_POS.z);
+
+    const colosseumPad = MeshBuilder.CreateCylinder(
+      "colosseumPad",
+      { diameterTop: 3.4, diameterBottom: 3.9, height: 0.24, tessellation: 14 },
+      scene
+    );
+    colosseumPad.position.set(0, 0.12, 0);
+    colosseumPad.material = darkObsidianMat;
+    colosseumPad.isPickable = false;
+    colosseumPad.parent = colosseumGateNode;
+
+    for (const side of [-1, 1]) {
+      const colPillar = MeshBuilder.CreateCylinder(
+        `colosseumPillar-${side}`,
+        { diameterTop: 0.48, diameterBottom: 0.62, height: 2.65, tessellation: 10 },
+        scene
+      );
+      colPillar.position.set(side * 1.15, 1.38, 0);
+      colPillar.material = dgPillarMat;
+      colPillar.isPickable = false;
+      colPillar.parent = colosseumGateNode;
+
+      const colBrazier = MeshBuilder.CreatePolyhedron(
+        `colosseumBrazier-${side}`,
+        { type: 1, size: 0.24 },
+        scene
+      );
+      colBrazier.position.set(side * 1.15, 2.86, 0);
+      colBrazier.material = forgeEmberMat;
+      colBrazier.isPickable = false;
+      colBrazier.parent = colosseumGateNode;
+    }
+
+    const colosseumArch = MeshBuilder.CreateBox(
+      "colosseumArch",
+      { width: 2.95, height: 0.34, depth: 0.56 },
+      scene
+    );
+    colosseumArch.position.set(0, 2.62, 0);
+    colosseumArch.material = goldKeyMat;
+    colosseumArch.isPickable = false;
+    colosseumArch.parent = colosseumGateNode;
+
+    const colosseumCrown = MeshBuilder.CreateTorus(
+      "colosseumCrown",
+      { diameter: 1.08, thickness: 0.14, tessellation: 18 },
+      scene
+    );
+    colosseumCrown.position.set(0, 1.72, 0);
+    colosseumCrown.rotation.x = Math.PI / 2;
+    colosseumCrown.material = forgeEmberMat;
+    colosseumCrown.isPickable = false;
+    colosseumCrown.parent = colosseumGateNode;
+
+    const colosseumGroundHalo = MeshBuilder.CreateTorus(
+      "colosseumGroundHalo",
+      { diameter: 3.55, thickness: 0.09, tessellation: 28 },
+      scene
+    );
+    colosseumGroundHalo.position.set(0, 0.14, 0);
+    colosseumGroundHalo.material = forgeEmberMat;
+    colosseumGroundHalo.isPickable = false;
+    colosseumGroundHalo.parent = colosseumGateNode;
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -9522,6 +9590,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // O toggles Grand Colosseum Wave Survival & Boss-Rush Gauntlet Modal
+      if (code === "KeyO" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setColosseumOpen(!store.colosseumOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -10529,10 +10604,11 @@ export default function BabylonCanvas() {
         smithArmNode.rotation.x = Math.sin(t * 6.5) * 0.55;
       }
 
-      // Sync 3D Abyssal Rift Obelisk, Spirit Companion Sanctuary & Crossroads Royal Stables (Map 1 Overworld)
+      // Sync 3D Abyssal Rift Obelisk, Spirit Companion Sanctuary, Royal Stables & Colosseum War-Gate (Map 1 Overworld)
       riftEntranceNode.setEnabled(inOverworld);
       companionAltarNode.setEnabled(inOverworld);
       mountStablesNode.setEnabled(inOverworld);
+      colosseumGateNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -10576,6 +10652,20 @@ export default function BabylonCanvas() {
         );
         stablesHorseshoeCrest.rotation.y = t * 2.1;
         stablesGroundHalo.rotation.y = -t * 1.4;
+
+        const colGroundY = sampleTerrainHeight(
+          activeCells,
+          COLOSSEUM_GATE_POS.x,
+          COLOSSEUM_GATE_POS.z
+        );
+        colosseumGateNode.position.set(
+          COLOSSEUM_GATE_POS.x,
+          colGroundY,
+          COLOSSEUM_GATE_POS.z
+        );
+        colosseumCrown.rotation.y = t * 2.8;
+        colosseumCrown.position.y = 1.72 + Math.sin(t * 4.2) * 0.14;
+        colosseumGroundHalo.rotation.y = -t * 1.9;
       }
 
       // Sync 3D Active Spirit Companion Orbiting / Following the Hero (`snap.hero.activeCompanion`)

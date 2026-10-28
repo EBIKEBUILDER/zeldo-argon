@@ -4,6 +4,7 @@ import React, { useRef, useState } from "react";
 import {
   BootsId,
   BottleContentId,
+  ColosseumTierId,
   CompanionId,
   EditorPlaceCategory,
   MountId,
@@ -253,6 +254,7 @@ export default function GameOverlay() {
   const riftOpen = useGameStore((s) => s.riftOpen);
   const sanctuaryOpen = useGameStore((s) => s.sanctuaryOpen);
   const stablesOpen = useGameStore((s) => s.stablesOpen);
+  const colosseumOpen = useGameStore((s) => s.colosseumOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -280,6 +282,9 @@ export default function GameOverlay() {
   const setRiftOpen = useGameStore((s) => s.setRiftOpen);
   const setSanctuaryOpen = useGameStore((s) => s.setSanctuaryOpen);
   const setStablesOpen = useGameStore((s) => s.setStablesOpen);
+  const setColosseumOpen = useGameStore((s) => s.setColosseumOpen);
+  const startColosseumTrial = useGameStore((s) => s.startColosseumTrial);
+  const grantColosseumPlaytestBundle = useGameStore((s) => s.grantColosseumPlaytestBundle);
   const whistleToggleMount = useGameStore((s) => s.whistleToggleMount);
   const summonOrUnlockMount = useGameStore((s) => s.summonOrUnlockMount);
   const grantStablesPlaytestBundle = useGameStore((s) => s.grantStablesPlaytestBundle);
@@ -351,6 +356,7 @@ export default function GameOverlay() {
         if (riftOpen) setRiftOpen(false);
         if (sanctuaryOpen) setSanctuaryOpen(false);
         if (stablesOpen) setStablesOpen(false);
+        if (colosseumOpen) setColosseumOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -364,6 +370,7 @@ export default function GameOverlay() {
     riftOpen,
     sanctuaryOpen,
     stablesOpen,
+    colosseumOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -372,6 +379,7 @@ export default function GameOverlay() {
     setRiftOpen,
     setSanctuaryOpen,
     setStablesOpen,
+    setColosseumOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -1379,6 +1387,25 @@ export default function GameOverlay() {
                   title="Open the Crossroads Royal Stables to saddle or unlock 3D Steeds (Press Y to Whistle Mount, or Shift+Y for Stables)"
                 >
                   🐎 Stables ({(hero.mountedSteed ?? "none") !== "none" ? "Mounted" : "Y"})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setColosseumOpen(!colosseumOpen)}
+                  className={`char-toggle-btn ${
+                    colosseumOpen || Boolean(flags.colosseumActive) ? "active" : ""
+                  }`}
+                  style={
+                    flags.colosseumActive
+                      ? {
+                          borderColor: "rgba(255, 118, 92, 0.9)",
+                          background: "rgba(68, 18, 16, 0.92)",
+                          color: "#ffb49e",
+                        }
+                      : undefined
+                  }
+                  title="Open the Grand Colosseum Boss-Rush & Wave Survival Gauntlet Console (Shortcut: O)"
+                >
+                  🏛 Arena ({(flags.colosseumCompletedTiers ?? []).length}/3 • O)
                 </button>
                 <button
                   type="button"
@@ -4901,6 +4928,302 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Royal Stables
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          THE GRAND COLOSSEUM WAVE SURVIVAL & BOSS-RUSH GAUNTLET MODAL [O]
+         ========================================================= */}
+      {phase === "playing" && !editorMode && colosseumOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card" style={{ maxWidth: "980px", width: "95vw" }}>
+            <div className="shop-header">
+              <div>
+                <div
+                  className="shop-pill"
+                  style={{
+                    background: "rgba(255, 118, 92, 0.16)",
+                    borderColor: "rgba(255, 118, 92, 0.55)",
+                    color: "#ffb49e",
+                  }}
+                >
+                  GRAND COLOSSEUM AMPHITHEATER • 3-WAVE SURVIVAL &amp; BOSS-RUSH TRIALS
+                </div>
+                <h2 className="shop-title">THE GRAND COLOSSEUM OF CHAMPIONS</h2>
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <div
+                  className="shop-wallet"
+                  style={{
+                    borderColor: "rgba(255, 118, 92, 0.55)",
+                    background: "rgba(56, 18, 16, 0.65)",
+                  }}
+                >
+                  <span className="shop-wallet-label">CROWNS WON:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ffb49e" }}>
+                    {(flags.colosseumCompletedTiers ?? []).length}/3 🏆
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">MONSTER CORES:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ffd875" }}>
+                    {hero.monsterCores ?? 0} ✦
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">RUPEES:</span>
+                  <span className="shop-wallet-val">{hero.rupees}</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+                padding: "10px 14px",
+                marginBottom: "14px",
+                borderRadius: "10px",
+                background: "rgba(48, 16, 18, 0.72)",
+                border: "1px solid rgba(255, 118, 92, 0.35)",
+              }}
+            >
+              <p className="shop-greeting" style={{ margin: 0, flex: "1 1 540px" }}>
+                &ldquo;Step into the circular Colosseum Amphitheater! Each Gladiatorial Trial pits
+                you against <strong>3 escalating waves of elite monsters and Sovereign Bosses</strong>.
+                Between waves you recover <strong>+2 Hearts &amp; +40 MP</strong>, and conquering a
+                tier awards massive <strong>Monster Core &amp; Rupee jackpots</strong> plus permanent{" "}
+                <strong>First-Clear Champion Stats</strong>!&rdquo;
+              </p>
+              <button
+                type="button"
+                onClick={grantColosseumPlaytestBundle}
+                className="char-equip-btn"
+                style={{
+                  background: "linear-gradient(180deg, #ff784f 0%, #b82c1e 100%)",
+                  borderColor: "rgba(255, 180, 150, 0.85)",
+                  color: "#ffffff",
+                  fontWeight: 800,
+                  whiteSpace: "nowrap",
+                }}
+                title="Playtest Shortcut: Award all 3 Colosseum Crowns + +2 Heart Containers + +18 Monster Cores + +1,000 Rupees"
+              >
+                ★ Playtest: Award All 3 Champion Crowns
+              </button>
+            </div>
+
+            {(() => {
+              const completed = flags.colosseumCompletedTiers ?? [];
+              const trials: Array<{
+                id: ColosseumTierId;
+                name: string;
+                subtitle: string;
+                icon: string;
+                wavesDesc: string[];
+                rewardText: string;
+                firstClearText: string;
+                accent: string;
+              }> = [
+                {
+                  id: "bronze",
+                  name: "I. Bronze Vanguard Trial",
+                  subtitle: "3-WAVE SKIRMISHER & PIT-WARLORD GAUNTLET",
+                  icon: "🥉",
+                  wavesDesc: [
+                    "Wave 1: 2 Shielded Goblins, 1 Goblin Archer & 1 Shock Slime",
+                    "Wave 2: 2 Darknut Knights, 1 Frost Wraith & 1 Sand Burrower",
+                    "Wave 3 (Champion): Kragmos, the Bronze Pit-Warlord (15 HP Boss) + 2 Bounty Goblins",
+                  ],
+                  rewardText: "+4 Monster Cores (✦) & +250 Rupees",
+                  firstClearText: "First-Clear Bonus: +1 Full Heart Container (+2 Max HP)",
+                  accent: "#f0a868",
+                },
+                {
+                  id: "silver",
+                  name: "II. Silver Blood-Pit Trial",
+                  subtitle: "3-WAVE ELEMENTAL SIEGE & COLOSSUS GAUNTLET",
+                  icon: "🥈",
+                  wavesDesc: [
+                    "Wave 1: 2 Ice-Armored Goblins, 2 Frost Wraiths & 1 Sapper Bomber",
+                    "Wave 2: 2 Elemental Knights, 2 Shock Slimes & 1 Bounty Burrower",
+                    "Wave 3 (Champion): Vaelkor's Blood-Pit Colossus (21 HP Boss) + 2 Bounty Knights",
+                  ],
+                  rewardText: "+7 Monster Cores (✦) & +450 Rupees",
+                  firstClearText: "First-Clear Bonus: +1 Full Heart Container & +25 Max MP",
+                  accent: "#9ee8ff",
+                },
+                {
+                  id: "gold",
+                  name: "III. Gold Sovereign Boss-Rush",
+                  subtitle: "3 CONSECUTIVE BOSS WAVES • ULTIMATE ENDGAME TRIAL",
+                  icon: "👑",
+                  wavesDesc: [
+                    "Wave 1: Ignis Reborn, Sanctum Colossus (18 HP Boss) + 2 Vanguard Minions",
+                    "Wave 2: Pyrax Reborn, Caldera Wyrm-Lord (21 HP Boss) + 2 Elemental Knights",
+                    "Wave 3 (Sovereign): Astraea Ultima, Sovereign of the Arena (27 HP Boss) + 3 Bounty Elites",
+                  ],
+                  rewardText: "+12 Monster Cores (✦) & +800 Rupees",
+                  firstClearText:
+                    "First-Clear Bonus: +1 Full Heart Container & +1 Permanent Sword Damage!",
+                  accent: "#ffd24c",
+                },
+              ];
+
+              return (
+                <div
+                  className="shop-items-grid"
+                  style={{ gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}
+                >
+                  {trials.map((tr) => {
+                    const isCleared = completed.includes(tr.id);
+                    const isCurrentTrial =
+                      Boolean(flags.colosseumActive) && flags.colosseumTier === tr.id;
+
+                    return (
+                      <div
+                        key={tr.id}
+                        className={`shop-item-card ${isCleared ? "shop-item-owned" : ""}`}
+                        style={{
+                          borderColor: isCurrentTrial
+                            ? "#ff6b6b"
+                            : isCleared
+                            ? tr.accent
+                            : "rgba(140, 165, 210, 0.3)",
+                          padding: "12px",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: "0.66rem",
+                                fontWeight: 800,
+                                letterSpacing: "0.06em",
+                                color: tr.accent,
+                              }}
+                            >
+                              {tr.subtitle}
+                            </span>
+                            {isCleared && (
+                              <span
+                                style={{
+                                  fontSize: "0.66rem",
+                                  fontWeight: 800,
+                                  color: "#4eff91",
+                                }}
+                              >
+                                ✓ CROWN WON
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="shop-item-top" style={{ marginBottom: "8px" }}>
+                            <span
+                              className="shop-item-name"
+                              style={{ color: "#ffffff", fontSize: "0.94rem" }}
+                            >
+                              {tr.icon} {tr.name}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                              marginBottom: "10px",
+                              padding: "8px 10px",
+                              borderRadius: "8px",
+                              background: "rgba(10, 14, 24, 0.68)",
+                              border: "1px solid rgba(255, 255, 255, 0.08)",
+                              fontSize: "0.71rem",
+                              color: "#d6e2f5",
+                            }}
+                          >
+                            {tr.wavesDesc.map((wLine, idx) => (
+                              <div key={idx}>• {wLine}</div>
+                            ))}
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: "0.73rem",
+                              fontWeight: 800,
+                              color: "#ffd978",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            🏆 Repeatable Spoils: {tr.rewardText}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.72rem",
+                              fontWeight: 700,
+                              color: isCleared ? "#4eff91" : "#9ee8ff",
+                              marginBottom: "12px",
+                            }}
+                          >
+                            {isCleared ? `✓ Claimed: ${tr.firstClearText}` : `★ ${tr.firstClearText}`}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => startColosseumTrial(tr.id)}
+                          className="shop-buy-btn"
+                          style={{
+                            fontSize: "0.8rem",
+                            padding: "9px 12px",
+                            background:
+                              tr.id === "gold"
+                                ? "linear-gradient(180deg, #ffd24c 0%, #c4760a 100%)"
+                                : tr.id === "silver"
+                                ? "linear-gradient(180deg, #52d6ff 0%, #1d76b8 100%)"
+                                : "linear-gradient(180deg, #ff8b5c 0%, #b8421e 100%)",
+                            color: tr.id === "gold" ? "#1b1102" : "#ffffff",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {isCurrentTrial
+                            ? `⚔ Restart ${tr.name} (Wave ${flags.colosseumWave ?? 1}/3)`
+                            : isCleared
+                            ? `⚔ Replay ${tr.name}`
+                            : `⚔ Enter ${tr.name}`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>O</strong> or <strong>Esc</strong> anytime to close the Grand
+                Colosseum Console. Use the South Portal in the arena to return to Crossroads Village.
+              </span>
+              <button
+                type="button"
+                onClick={() => setColosseumOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Colosseum (O)
               </button>
             </div>
           </div>
