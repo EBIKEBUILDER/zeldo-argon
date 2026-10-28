@@ -51,6 +51,7 @@ import {
   HERO_SPAWN,
   HOLLOW_SPORE_CHEST_POS,
   HOLLOW_VICTORY_CHEST_POS,
+  HOMESTEAD_POS,
   INITIAL_ENEMIES,
   INITIAL_PORTALS,
   INITIAL_WORLD_RUPEES,
@@ -69,6 +70,7 @@ import {
   SKY_CELESTIAL_CHEST_POS,
   SKY_VICTORY_CHEST_POS,
   WARP_STONE_META,
+  WEATHER_OBELISK_POS,
   ZoneId,
 } from "@/game/worldData";
 import {
@@ -156,6 +158,24 @@ export type ElixirId =
   | "gale_nectar"
   | "aegis_tonic"
   | "archmage_elixir";
+
+export type WeatherId =
+  | "clear"
+  | "thunderstorm"
+  | "blizzard"
+  | "starfall"
+  | "blood_moon";
+
+export type HomesteadWingId =
+  | "hearth_bed"
+  | "herb_greenhouse"
+  | "trophy_vault";
+
+export type FishId =
+  | "brook_trout"
+  | "reef_snapper"
+  | "magma_koi"
+  | "golden_sturgeon";
 
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
@@ -282,6 +302,9 @@ export interface HeroState {
   activeElixir?: ElixirId;
   activeElixirTimer?: number;
   elixirRegenTimer?: number;
+  homesteadWings?: HomesteadWingId[];
+  fishCaught?: Record<FishId, number>;
+  greenhouseTimer?: number;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -643,6 +666,10 @@ export interface GameFlags {
   colosseumWave?: number;
   colosseumTotalWaves?: number;
   colosseumCompletedTiers?: ColosseumTierId[];
+  // Dynamic World Weather & Crimson Blood-Moon Eclipse State
+  activeWeather?: WeatherId;
+  weatherStrikeTimer?: number;
+  bloodMoonInvasionsCleared?: number;
 }
 
 export interface GameStats {
@@ -719,6 +746,8 @@ export interface SerializableGameState {
   stablesOpen: boolean;
   colosseumOpen: boolean;
   alchemyOpen: boolean;
+  weatherOpen: boolean;
+  homesteadOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -755,6 +784,14 @@ export interface GameActions {
   setStablesOpen: (open: boolean) => void;
   setColosseumOpen: (open: boolean) => void;
   setAlchemyOpen: (open: boolean) => void;
+  setWeatherOpen: (open: boolean) => void;
+  setHomesteadOpen: (open: boolean) => void;
+  setWorldWeather: (weather: WeatherId) => void;
+  triggerBloodMoonInvasion: () => void;
+  upgradeHomesteadWing: (wing: HomesteadWingId) => void;
+  restAtHomestead: () => void;
+  castFishingLine: () => void;
+  grantHomesteadPlaytestBundle: () => void;
   brewAndDrinkElixir: (elixir: Exclude<ElixirId, "none">) => void;
   grantAlchemyPlaytestBundle: () => void;
   startColosseumTrial: (tier: ColosseumTierId) => void;
@@ -1106,6 +1143,14 @@ function createInitialState(
       activeElixir: "none",
       activeElixirTimer: 0,
       elixirRegenTimer: 6.0,
+      homesteadWings: [],
+      fishCaught: {
+        brook_trout: 0,
+        reef_snapper: 0,
+        magma_koi: 0,
+        golden_sturgeon: 0,
+      },
+      greenhouseTimer: 25.0,
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1292,6 +1337,9 @@ function createInitialState(
       skyVictoryChestOpened: false,
       discoveredZones: ["overworld"],
       awakenedWarpZones: ["overworld"],
+      activeWeather: "clear",
+      weatherStrikeTimer: 3.5,
+      bloodMoonInvasionsCleared: 0,
     },
     stats: {
       enemiesDefeated: 0,
@@ -1319,6 +1367,8 @@ function createInitialState(
     stablesOpen: false,
     colosseumOpen: false,
     alchemyOpen: false,
+    weatherOpen: false,
+    homesteadOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -1865,7 +1915,439 @@ export const useGameStore = create<GameStore>((set, get) => ({
       sanctuaryOpen: open ? false : state.sanctuaryOpen,
       stablesOpen: open ? false : state.stablesOpen,
       colosseumOpen: open ? false : state.colosseumOpen,
+      weatherOpen: open ? false : state.weatherOpen,
     }));
+  },
+
+  setWeatherOpen: (open: boolean) => {
+    set((state) => ({
+      weatherOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
+      homesteadOpen: open ? false : state.homesteadOpen,
+    }));
+  },
+
+  setHomesteadOpen: (open: boolean) => {
+    set((state) => ({
+      homesteadOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
+      weatherOpen: open ? false : state.weatherOpen,
+    }));
+  },
+
+  upgradeHomesteadWing: (wing: HomesteadWingId) => {
+    const state = get();
+    const currentWings = [...(state.hero.homesteadWings ?? [])];
+    if (currentWings.includes(wing)) return;
+
+    const WING_META: Record<
+      HomesteadWingId,
+      { cores: number; rupees: number; name: string; desc: string }
+    > = {
+      hearth_bed: {
+        cores: 2,
+        rupees: 100,
+        name: "Sovereign's Hearth & Feather Bed",
+        desc: "Permanently grants +1 Full Heart Container (+2 Max HP) and unlocks free 100% HP/MP Rest at the Manor!",
+      },
+      herb_greenhouse: {
+        cores: 3,
+        rupees: 150,
+        name: "Alchemist's Glass Greenhouse",
+        desc: "Passively cultivates +1 Random Biome Herb every 25s while exploring & immediately harvests +4 of all Herbs!",
+      },
+      trophy_vault: {
+        cores: 4,
+        rupees: 220,
+        name: "Grand Reliquary & Trophy Gallery",
+        desc: "Permanently grants +1 Sword & Bow Damage and +25% Bonus Rupee Spoils across all realms!",
+      },
+    };
+
+    const meta = WING_META[wing];
+    const cores = state.hero.monsterCores ?? 0;
+    if (cores < meta.cores || state.hero.rupees < meta.rupees) {
+      soundEngine.playGateLocked();
+      set({
+        banner: {
+          id: Date.now(),
+          text: "Insufficient Homestead Building Materials!",
+          subtext: `Constructing ${meta.name} requires ${meta.cores} Monster Cores and ${meta.rupees} Rupees.`,
+          timer: 3.4,
+        },
+      });
+      return;
+    }
+
+    currentWings.push(wing);
+    const nextHero: HeroState = {
+      ...state.hero,
+      monsterCores: cores - meta.cores,
+      rupees: state.hero.rupees - meta.rupees,
+      homesteadWings: currentWings,
+    };
+
+    if (wing === "hearth_bed") {
+      nextHero.maxHp = Math.min(40, nextHero.maxHp + 2);
+      nextHero.hp = nextHero.maxHp;
+      nextHero.mp = nextHero.maxMp;
+    } else if (wing === "herb_greenhouse") {
+      const prevHerbs = nextHero.herbs ?? {
+        sun_lotus: 0,
+        frost_cap: 0,
+        ember_root: 0,
+        starlight_dew: 0,
+      };
+      nextHero.herbs = {
+        sun_lotus: (prevHerbs.sun_lotus ?? 0) + 4,
+        frost_cap: (prevHerbs.frost_cap ?? 0) + 4,
+        ember_root: (prevHerbs.ember_root ?? 0) + 4,
+        starlight_dew: (prevHerbs.starlight_dew ?? 0) + 4,
+      };
+      nextHero.greenhouseTimer = 25.0;
+    } else if (wing === "trophy_vault") {
+      nextHero.swordDamage = (nextHero.swordDamage ?? 1) + 1;
+    }
+
+    soundEngine.unlock();
+    soundEngine.playPegPound();
+    soundEngine.playVictoryFanfare();
+    set({
+      hero: nextHero,
+      banner: {
+        id: Date.now(),
+        text: `🏡 Constructed Manor Wing: ${meta.name}!`,
+        subtext: meta.desc,
+        timer: 4.8,
+      },
+    });
+  },
+
+  restAtHomestead: () => {
+    const state = get();
+    soundEngine.unlock();
+    soundEngine.playFairyRevive();
+    set({
+      hero: {
+        ...state.hero,
+        hp: state.hero.maxHp,
+        mp: state.hero.maxMp,
+        chillTimer: 0,
+      },
+      banner: {
+        id: Date.now(),
+        text: "🏡 Rested by the Homestead Hearth! (100% HP & MP Restored)",
+        subtext: "Your Hearts and Magic Power are completely replenished!",
+        timer: 3.6,
+      },
+    });
+  },
+
+  castFishingLine: () => {
+    const state = get();
+    const prevFish: Record<FishId, number> = {
+      brook_trout: 0,
+      reef_snapper: 0,
+      magma_koi: 0,
+      golden_sturgeon: 0,
+      ...(state.hero.fishCaught ?? {}),
+    };
+
+    const roll = Math.random();
+    const caught: FishId =
+      roll >= 0.84
+        ? "golden_sturgeon"
+        : roll >= 0.58
+        ? "magma_koi"
+        : roll >= 0.3
+        ? "reef_snapper"
+        : "brook_trout";
+
+    const firstSturgeon = caught === "golden_sturgeon" && (prevFish.golden_sturgeon ?? 0) === 0;
+    prevFish[caught] = (prevFish[caught] ?? 0) + 1;
+
+    const nextHero: HeroState = {
+      ...state.hero,
+      fishCaught: prevFish,
+    };
+
+    let bannerTitle = "";
+    let bannerSub = "";
+
+    if (caught === "brook_trout") {
+      nextHero.hp = Math.min(nextHero.maxHp, nextHero.hp + 4);
+      nextHero.mp = Math.min(nextHero.maxMp, (nextHero.mp ?? 100) + 25);
+      nextHero.rupees += 25;
+      bannerTitle = "🎣 Reeled In: Silver Brook-Trout!";
+      bannerSub = "Restored +2 Hearts & +25 MP, plus +25 Rupees from Master Angler Corin!";
+    } else if (caught === "reef_snapper") {
+      nextHero.rupees += 50;
+      const prevHerbs = nextHero.herbs ?? {
+        sun_lotus: 0,
+        frost_cap: 0,
+        ember_root: 0,
+        starlight_dew: 0,
+      };
+      nextHero.herbs = {
+        ...prevHerbs,
+        frost_cap: (prevHerbs.frost_cap ?? 0) + 1,
+        starlight_dew: (prevHerbs.starlight_dew ?? 0) + 1,
+      };
+      bannerTitle = "🎣 Reeled In: Azure Reef-Snapper!";
+      bannerSub = "Earned +50 Rupees, +1 Glacial Frost-Cap, and +1 Starlight-Dew!";
+    } else if (caught === "magma_koi") {
+      nextHero.rupees += 85;
+      nextHero.monsterCores = (nextHero.monsterCores ?? 0) + 2;
+      bannerTitle = "🎣 Reeled In: Molten Magma-Koi! (Rare Catch)";
+      bannerSub = "Earned +85 Rupees and +2 Crystallized Monster Cores (✦)!";
+    } else {
+      nextHero.rupees += 150;
+      nextHero.monsterCores = (nextHero.monsterCores ?? 0) + 3;
+      if (firstSturgeon) {
+        nextHero.maxHp = Math.min(40, nextHero.maxHp + 2);
+      }
+      nextHero.hp = nextHero.maxHp;
+      bannerTitle = "👑 LEGENDARY CATCH: Leviathan Golden Sturgeon!";
+      bannerSub = firstSturgeon
+        ? "First-Catch Jackpot: +1 Permanent Heart Container, +3 Monster Cores (✦) & +150 Rupees!"
+        : "Legendary Prize: +3 Monster Cores (✦), +150 Rupees & 100% Full Heal!";
+    }
+
+    soundEngine.unlock();
+    soundEngine.playSecretSolve();
+    if (caught === "golden_sturgeon") {
+      soundEngine.playVictoryFanfare();
+    } else {
+      soundEngine.playRupeePickup("red");
+    }
+
+    set({
+      hero: nextHero,
+      banner: {
+        id: Date.now(),
+        text: bannerTitle,
+        subtext: bannerSub,
+        timer: 4.5,
+      },
+    });
+  },
+
+  grantHomesteadPlaytestBundle: () => {
+    soundEngine.unlock();
+    soundEngine.playVictoryFanfare();
+    set((state) => {
+      const hadBed = (state.hero.homesteadWings ?? []).includes("hearth_bed");
+      const hadVault = (state.hero.homesteadWings ?? []).includes("trophy_vault");
+      const prevFish = state.hero.fishCaught ?? {
+        brook_trout: 0,
+        reef_snapper: 0,
+        magma_koi: 0,
+        golden_sturgeon: 0,
+      };
+      return {
+        hero: {
+          ...state.hero,
+          maxHp: Math.min(40, state.hero.maxHp + (hadBed ? 0 : 2)),
+          hp: Math.min(40, state.hero.maxHp + (hadBed ? 0 : 2)),
+          mp: state.hero.maxMp,
+          swordDamage: (state.hero.swordDamage ?? 1) + (hadVault ? 0 : 1),
+          monsterCores: (state.hero.monsterCores ?? 0) + 12,
+          rupees: state.hero.rupees + 600,
+          homesteadWings: ["hearth_bed", "herb_greenhouse", "trophy_vault"],
+          fishCaught: {
+            brook_trout: (prevFish.brook_trout ?? 0) + 2,
+            reef_snapper: (prevFish.reef_snapper ?? 0) + 2,
+            magma_koi: (prevFish.magma_koi ?? 0) + 2,
+            golden_sturgeon: (prevFish.golden_sturgeon ?? 0) + 1,
+          },
+        },
+        banner: {
+          id: Date.now(),
+          text: "🏡 Hero's Homestead Fully Upgraded & All 4 Fish Species Caught!",
+          subtext:
+            "All 3 Manor Wings constructed (+1 Heart Container, Greenhouse Auto-Herbs & +1 Sword/Bow DMG) + +12 Cores & +600 Rupees!",
+          timer: 4.8,
+        },
+      };
+    });
+  },
+
+  setWorldWeather: (weather: WeatherId) => {
+    const WEATHER_META: Record<
+      WeatherId,
+      { title: string; sub: string }
+    > = {
+      clear: {
+        title: "☀️ Celestial Sundial: Sunlit Zenith (Clear Skies)",
+        sub: "Calm skies and balanced natural illumination restored across the realm.",
+      },
+      thunderstorm: {
+        title: "⛈️ Celestial Sundial: Tempest Thunderstorm Unleashed!",
+        sub: "Sky-Bolts strike nearby enemies for 2 DMG + Stun every 3.8s, and Chain-Lightning deals +1 Storm DMG!",
+      },
+      blizzard: {
+        title: "❄️ Celestial Sundial: Rimefrost Blizzard Unleashed!",
+        sub: "Chills non-boss monsters (-25% Speed), grants -25% Damage Taken, and adds +1 Frost DMG to Bow Arrows!",
+      },
+      starfall: {
+        title: "🌠 Celestial Sundial: Astral Starfall Shower Unleashed!",
+        sub: "+8 MP/s Cosmic Mana Surge, +50% Rupee Value, and Starlight Shards heal +1 HP & +12 MP every 6s!",
+      },
+      blood_moon: {
+        title: "🌑 CRIMSON BLOOD-MOON ECLIPSE AWAKENED!",
+        sub: "+1 All Weapon DMG, +1 Extra Monster Core per Kill & 2x Rupee Spoils! Fallen monsters stir beneath the scarlet sky...",
+      },
+    };
+
+    soundEngine.unlock();
+    if (weather === "blood_moon") {
+      soundEngine.playBossRoar();
+    } else if (weather === "thunderstorm") {
+      soundEngine.playElectricShock();
+    } else {
+      soundEngine.playFairyRevive();
+    }
+
+    set((state) => ({
+      flags: {
+        ...state.flags,
+        activeWeather: weather,
+        weatherStrikeTimer: weather === "thunderstorm" ? 1.8 : 4.5,
+      },
+      banner: {
+        id: Date.now(),
+        text: WEATHER_META[weather].title,
+        subtext: WEATHER_META[weather].sub,
+        timer: 4.8,
+      },
+    }));
+  },
+
+  triggerBloodMoonInvasion: () => {
+    const state = get();
+    soundEngine.unlock();
+    soundEngine.playBossRoar();
+    soundEngine.playGateUnlock();
+
+    const activeZone = state.zone;
+    const hx = state.hero.x;
+    const hz = state.hero.z;
+
+    // Resurrect fallen non-boss monsters in the current zone AND spawn 3 Elite Blood-Moon Champions near the Hero!
+    const revivedEnemies = state.enemies.map((e) => {
+      if (e.zone === activeZone && e.state === "dead" && e.kind !== "boss") {
+        return {
+          ...e,
+          x: e.spawnX,
+          z: e.spawnZ,
+          hp: e.maxHp,
+          state: "idle" as EnemyAIState,
+          stateTimer: 0,
+          hitFlashTimer: 0.4,
+          stunTimer: 0,
+          isBounty: true,
+        };
+      }
+      return e;
+    });
+
+    const filteredEnemies = revivedEnemies.filter(
+      (e) => !e.id.startsWith("blood-moon-invader-")
+    );
+
+    const offsets = [
+      { ox: -5.2, oz: 4.8, kind: "knight" as EnemyKind, hp: 9 },
+      { ox: 5.2, oz: 4.8, kind: "wraith" as EnemyKind, hp: 6 },
+      { ox: 0, oz: 6.4, kind: "goblin" as EnemyKind, hp: 6 },
+    ];
+
+    const invasionPack: EnemyState[] = offsets.map((spec, idx) => {
+      const sx = Math.max(-28, Math.min(28, Number((hx + spec.ox).toFixed(2))));
+      const sz = Math.max(-28, Math.min(28, Number((hz + spec.oz).toFixed(2))));
+      return {
+        id: `blood-moon-invader-${idx}-${Date.now()}`,
+        kind: spec.kind,
+        zone: activeZone,
+        x: sx,
+        z: sz,
+        spawnX: sx,
+        spawnZ: sz,
+        facing: Math.PI,
+        hp: spec.hp,
+        maxHp: spec.hp,
+        weight: getDefaultEnemyWeight(spec.kind),
+        state: "aggro",
+        stateTimer: 0,
+        hitFlashTimer: 0.45,
+        knockbackImmunityTimer: 0,
+        stunTimer: 0,
+        lastHitSwingId: -1,
+        knockbackVx: 0,
+        knockbackVz: 0,
+        aggroRadius: 22.0,
+        speed: spec.kind === "knight" ? 5.2 : 5.6,
+        damage: 2,
+        rupeeDrop: "red",
+        shieldArmor: idx === 2 ? "ice" : "none",
+        initialShieldArmor: idx === 2 ? "ice" : "none",
+        shockArmor: idx === 0,
+        initialShockArmor: idx === 0,
+        isBounty: true,
+        initialIsBounty: true,
+        burrowed: false,
+        provoked: true,
+        chargeAngle: Math.PI,
+        chargePathLength: 11.0,
+        chargeDistanceTraveled: 0,
+        actionCounter: 0,
+        actionCooldown: 0.9,
+      };
+    });
+
+    const clearedCount = (state.flags.bloodMoonInvasionsCleared ?? 0) + 1;
+
+    set({
+      weatherOpen: false,
+      enemies: [...filteredEnemies, ...invasionPack],
+      hero: {
+        ...state.hero,
+        hp: state.hero.maxHp,
+        mp: state.hero.maxMp,
+        monsterCores: (state.hero.monsterCores ?? 0) + 4,
+        rupees: state.hero.rupees + 150,
+      },
+      flags: {
+        ...state.flags,
+        activeWeather: "blood_moon",
+        weatherStrikeTimer: 3.5,
+        bloodMoonInvasionsCleared: clearedCount,
+      },
+      banner: {
+        id: Date.now(),
+        text: "🌑 CRIMSON BLOOD-MOON WORLD INVASION UNLEASHED!",
+        subtext:
+          "3 Crowned Blood-Moon Champions materialized nearby & fallen foes rose again! (+4 Monster Cores & +150 Rupees Tribute + Double Spoils Active!)",
+        timer: 5.8,
+      },
+    });
   },
 
   brewAndDrinkElixir: (elixir: Exclude<ElixirId, "none">) => {
@@ -4844,17 +5326,44 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     const activeElixir: ElixirId = hero.activeElixir ?? "none";
+    const activeWeather: WeatherId = flags.activeWeather ?? "clear";
+    const hasHomesteadWing = (w: HomesteadWingId): boolean =>
+      Boolean(hero.homesteadWings && hero.homesteadWings.includes(w));
 
-    // Passive Magic Power regeneration (2.5 MP/s base, 5.0 MP/s with Archmage's Ley-Crystal, +15.0 MP/s with Archmage Ley-Font Elixir!)
+    // Passive Greenhouse Herb Cultivation (`herb_greenhouse` wing grows +1 random Biome Herb every 25s!)
+    if (hasHomesteadWing("herb_greenhouse")) {
+      hero.greenhouseTimer = (hero.greenhouseTimer ?? 25.0) - dt;
+      if (hero.greenhouseTimer <= 0) {
+        hero.greenhouseTimer = 25.0;
+        const allHerbs: HerbId[] = [
+          "sun_lotus",
+          "frost_cap",
+          "ember_root",
+          "starlight_dew",
+        ];
+        const grown = allHerbs[Math.floor(Math.random() * allHerbs.length)];
+        hero.herbs = {
+          sun_lotus: 0,
+          frost_cap: 0,
+          ember_root: 0,
+          starlight_dew: 0,
+          ...(hero.herbs ?? {}),
+        };
+        hero.herbs[grown] = (hero.herbs[grown] ?? 0) + 1;
+      }
+    }
+
+    // Passive Magic Power regeneration (2.5 MP/s base, 5.0 MP/s with Archmage's Ley-Crystal, +15.0 MP/s with Archmage Ley-Font Elixir, +8.0 MP/s during Starfall!)
     const mpRegenRate =
       (hasRelic("arcane_conduit") ? 5.0 : 2.5) +
-      (activeElixir === "archmage_elixir" ? 15.0 : 0);
+      (activeElixir === "archmage_elixir" ? 15.0 : 0) +
+      (activeWeather === "starfall" ? 8.0 : 0);
     hero.maxMp = hero.maxMp || 100;
     hero.mp = Math.min(hero.maxMp, (hero.mp ?? 100) + dt * mpRegenRate);
     hero.maxBombs = hero.maxBombs ?? 0;
     hero.bombs = hero.bombs ?? 0;
 
-    // Tunic, Relic, Steed & Elixir damage multiplier:
+    // Tunic, Relic, Steed, Elixir & Blizzard damage multiplier:
     const getTunicDamageMultiplier = (): number => {
       const baseMult =
         hero.equippedTunic === "red_mail"
@@ -4864,7 +5373,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           : 1.0;
       const relicMult = hasRelic("aegis_ankh") ? baseMult * 0.75 : baseMult;
       const steedMult = hero.mountedSteed === "war_drake" ? relicMult * 0.7 : relicMult;
-      return activeElixir === "aegis_tonic" ? steedMult * 0.6 : steedMult;
+      const elixirMult = activeElixir === "aegis_tonic" ? steedMult * 0.6 : steedMult;
+      return activeWeather === "blizzard" ? elixirMult * 0.75 : elixirMult;
     };
 
     // Helper: check if hero died and auto-revive with Bottled Fairy OR Immortal Phoenix Ankh (`aegis_ankh`)!
@@ -6478,7 +6988,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         soundEngine.playBowShoot();
         const bRune = hero.bowRuneTier ?? 0;
         const spreadAngles = bRune >= 1 ? [-0.18, 0, 0.18] : [0];
-        const arrowDmg = bRune === 2 ? 3 : 2;
+        const arrowDmg =
+          (bRune === 2 ? 3 : 2) +
+          (activeWeather === "blizzard" ? 1 : 0) +
+          (hasHomesteadWing("trophy_vault") ? 1 : 0);
         spreadAngles.forEach((offsetAngle, idx) => {
           const shotAngle = hero.facing + offsetAngle;
           arrows.push({
@@ -8657,12 +9170,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
 
     const rollComboCritBonus = (): number => {
+      const bloodMoonBonus = activeWeather === "blood_moon" ? 1 : 0;
       const elixirCritBonus = activeElixir === "titans_draught" ? 0.25 : 0;
       const critChance = Math.min(0.65, (hero.comboCount ?? 0) * 0.04 + elixirCritBonus);
       if (critChance > 0 && Math.random() < critChance) {
-        return 1;
+        return 1 + bloodMoonBonus;
       }
-      return 0;
+      return bloodMoonBonus;
     };
 
     // Helper to handle enemy defeat & rupee / recovery heart drops (including 5x Bounty Monster Fountain, Heirloom Sub-Quest, & Room 3 Ember Guards!)
@@ -8697,12 +9211,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
         (enemy.kind === "boss" || enemy.isBounty || enemy.kind === "knight")
           ? 1
           : 0;
+      const bloodMoonCoreBonus = activeWeather === "blood_moon" ? 1 : 0;
       const coreGain =
         (enemy.kind === "boss"
           ? 5
           : enemy.isBounty || enemy.kind === "knight"
           ? 2
-          : 1) + greedCoreBonus;
+          : 1) +
+        greedCoreBonus +
+        bloodMoonCoreBonus;
       hero.monsterCores = (hero.monsterCores ?? 0) + coreGain;
 
       // Crimson Leech Fang (`vampiric_fang`): +1 HP (Half-Heart) & +8 MP on every monster kill!
@@ -11238,6 +11755,71 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // 9b-3. Dynamic Weather Periodic Synergies (`thunderstorm` Sky-Bolts & `starfall` Cosmic Shards)
+    if (activeWeather === "thunderstorm" || activeWeather === "starfall") {
+      flags.weatherStrikeTimer = (flags.weatherStrikeTimer ?? 3.8) - dt;
+      if (flags.weatherStrikeTimer <= 0) {
+        if (activeWeather === "thunderstorm") {
+          flags.weatherStrikeTimer = 3.8;
+          let stormTarget: EnemyState | null = null;
+          let bestDist = 11.5;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - hero.x, e.z - hero.z);
+            if (d <= bestDist) {
+              bestDist = d;
+              stormTarget = e;
+            }
+          }
+          if (stormTarget) {
+            soundEngine.playElectricShock();
+            stormTarget.provoked = true;
+            if (stormTarget.kind !== "boss") {
+              stormTarget.hp -= 2;
+              stormTarget.hitFlashTimer = 0.32;
+              stormTarget.stunTimer = Math.max(stormTarget.stunTimer, 1.25);
+              if (stormTarget.kind !== "turret") {
+                stormTarget.state = "stunned";
+                stormTarget.stateTimer = Math.max(stormTarget.stateTimer, 1.25);
+              }
+              if (stormTarget.hp <= 0) {
+                handleEnemyDeath(stormTarget);
+              }
+            } else if (flags.bossState === "STUNNED") {
+              stormTarget.hp -= 2;
+              stormTarget.hitFlashTimer = 0.32;
+              if (stormTarget.hp <= 0) {
+                handleEnemyDeath(stormTarget);
+              }
+            }
+            lightningArcs.push({
+              id: `sky-bolt-${stormTarget.id}-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x1: hero.x,
+              z1: hero.z,
+              x2: stormTarget.x,
+              z2: stormTarget.z,
+              timer: 0.32,
+              maxTimer: 0.32,
+            });
+          }
+        } else if (activeWeather === "starfall") {
+          flags.weatherStrikeTimer = 6.0;
+          if (hero.hp < hero.maxHp || (hero.mp ?? 0) < hero.maxMp) {
+            hero.hp = Math.min(hero.maxHp, hero.hp + 1);
+            hero.mp = Math.min(hero.maxMp, (hero.mp ?? 0) + 12);
+          }
+        }
+      }
+    }
+
     // 9c. Update Thrown Clay Pots & Light Rocks in Flight (`thrownObjects`)
     const remainingThrown: ThrownObjectState[] = [];
     for (const obj of thrownObjects) {
@@ -13522,7 +14104,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const rupeeValueMult =
       1 +
       (hero.activeCompanion === "gold_sprite" ? 0.5 : 0) +
-      (hasRelic("greed_crown") ? 0.5 : 0);
+      (hasRelic("greed_crown") ? 0.5 : 0) +
+      (hasHomesteadWing("trophy_vault") ? 0.25 : 0) +
+      (activeWeather === "starfall" ? 0.5 : 0) +
+      (activeWeather === "blood_moon" ? 1.0 : 0);
 
     for (const rupee of rupees) {
       if (rupee.zone !== zone || rupee.collected) continue;
@@ -14063,6 +14648,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Apothecary Selene's Alchemy Cauldron — Press [F] or [ [ ] to Brew & Quaff 90s Buff Elixirs from Foraged Herbs!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(WEATHER_OBELISK_POS.x - hero.x, WEATHER_OBELISK_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Sky-Seer Lyra's Celestial Weather & Blood-Moon Sundial — Press [F] or [ ] ] to Command World Weather & Invasions!";
+        } else if (
+          zone === "overworld" &&
+          Math.hypot(HOMESTEAD_POS.x - hero.x, HOMESTEAD_POS.z - hero.z) <= 4.0
+        ) {
+          hero.interactPrompt =
+            "Hero's Homestead Manor, Boss Trophy Hall & 3D Fishing Pond — Press [F] or [ \\ ] to Enter Manor & Cast Fishing Line!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -14084,6 +14681,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let stablesOpen = state.stablesOpen;
     let colosseumOpen = state.colosseumOpen;
     let alchemyOpen = state.alchemyOpen;
+    let weatherOpen = state.weatherOpen;
+    let homesteadOpen = state.homesteadOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -14098,6 +14697,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       stablesOpen = false;
       colosseumOpen = false;
       alchemyOpen = false;
+      weatherOpen = false;
+      homesteadOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(RIFT_ENTRANCE_POS.x - hero.x, RIFT_ENTRANCE_POS.z - hero.z) <= 3.5 &&
@@ -14112,6 +14713,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       stablesOpen = false;
       colosseumOpen = false;
       alchemyOpen = false;
+      weatherOpen = false;
+      homesteadOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(COMPANION_ALTAR_POS.x - hero.x, COMPANION_ALTAR_POS.z - hero.z) <= 3.5 &&
@@ -14126,6 +14729,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       stablesOpen = false;
       colosseumOpen = false;
       alchemyOpen = false;
+      weatherOpen = false;
+      homesteadOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(MOUNT_STABLES_POS.x - hero.x, MOUNT_STABLES_POS.z - hero.z) <= 3.8 &&
@@ -14140,6 +14745,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       shopOpen = false;
       colosseumOpen = false;
       alchemyOpen = false;
+      weatherOpen = false;
+      homesteadOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(COLOSSEUM_GATE_POS.x - hero.x, COLOSSEUM_GATE_POS.z - hero.z) <= 3.8 &&
@@ -14154,6 +14761,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       atlasOpen = false;
       shopOpen = false;
       alchemyOpen = false;
+      weatherOpen = false;
+      homesteadOpen = false;
     } else if (
       zone === "overworld" &&
       Math.hypot(ALCHEMY_CAULDRON_POS.x - hero.x, ALCHEMY_CAULDRON_POS.z - hero.z) <= 3.8 &&
@@ -14161,6 +14770,40 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       alchemyOpen = true;
+      colosseumOpen = false;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+      weatherOpen = false;
+      homesteadOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(WEATHER_OBELISK_POS.x - hero.x, WEATHER_OBELISK_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      weatherOpen = true;
+      alchemyOpen = false;
+      colosseumOpen = false;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+      homesteadOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(HOMESTEAD_POS.x - hero.x, HOMESTEAD_POS.z - hero.z) <= 4.0 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      homesteadOpen = true;
+      weatherOpen = false;
+      alchemyOpen = false;
       colosseumOpen = false;
       stablesOpen = false;
       sanctuaryOpen = false;
@@ -14410,6 +15053,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       stablesOpen,
       colosseumOpen,
       alchemyOpen,
+      weatherOpen,
+      homesteadOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

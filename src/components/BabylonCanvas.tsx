@@ -68,6 +68,7 @@ import {
   HEIRLOOM_NPC_POS,
   HOLLOW_SPORE_CHEST_POS,
   HOLLOW_VICTORY_CHEST_POS,
+  HOMESTEAD_POS,
   LOCKED_GATE_POS,
   MapPortal,
   MapPropInstance,
@@ -80,6 +81,7 @@ import {
   SKY_CELESTIAL_CHEST_POS,
   SKY_VICTORY_CHEST_POS,
   WARP_STONE_META,
+  WEATHER_OBELISK_POS,
   ZoneId,
 } from "@/game/worldData";
 
@@ -6162,6 +6164,198 @@ export default function BabylonCanvas() {
     alchemyGroundHalo.isPickable = false;
     alchemyGroundHalo.parent = alchemyCauldronNode;
 
+    // 1h. Overworld Celestial Weather & Blood-Moon Sundial Obelisk (`WEATHER_OBELISK_POS = 16.2, -22.5`)
+    const weatherObeliskNode = new TransformNode("weatherObeliskNode", scene);
+    weatherObeliskNode.position.set(WEATHER_OBELISK_POS.x, 0, WEATHER_OBELISK_POS.z);
+
+    const bloodMoonMat = makeMat(
+      "bloodMoonMat",
+      new Color3(0.96, 0.16, 0.28),
+      new Color3(0.74, 0.08, 0.18),
+      new Color3(1.0, 0.65, 0.72)
+    );
+    const stormBoltMat = makeMat(
+      "stormBoltMat",
+      new Color3(0.42, 0.86, 1.0),
+      new Color3(0.24, 0.65, 0.96),
+      new Color3(0.95, 1.0, 1.0)
+    );
+
+    const weatherDais = MeshBuilder.CreateCylinder(
+      "weatherDais",
+      { diameterTop: 2.55, diameterBottom: 2.95, height: 0.24, tessellation: 16 },
+      scene
+    );
+    weatherDais.position.set(0, 0.12, 0);
+    weatherDais.material = darkObsidianMat;
+    weatherDais.isPickable = false;
+    weatherDais.parent = weatherObeliskNode;
+
+    const weatherSpire = MeshBuilder.CreateCylinder(
+      "weatherSpire",
+      { diameterTop: 0.28, diameterBottom: 0.82, height: 2.35, tessellation: 8 },
+      scene
+    );
+    weatherSpire.position.set(0, 1.28, 0);
+    weatherSpire.material = dgPillarMat;
+    weatherSpire.isPickable = false;
+    weatherSpire.parent = weatherObeliskNode;
+
+    const weatherSunMoonCore = MeshBuilder.CreateSphere(
+      "weatherSunMoonCore",
+      { diameter: 0.62, segments: 12 },
+      scene
+    );
+    weatherSunMoonCore.position.set(0, 2.75, 0);
+    weatherSunMoonCore.material = goldKeyMat;
+    weatherSunMoonCore.isPickable = false;
+    weatherSunMoonCore.parent = weatherObeliskNode;
+
+    const weatherAstrolabeOuter = MeshBuilder.CreateTorus(
+      "weatherAstrolabeOuter",
+      { diameter: 1.55, thickness: 0.08, tessellation: 24 },
+      scene
+    );
+    weatherAstrolabeOuter.position.set(0, 2.75, 0);
+    weatherAstrolabeOuter.rotation.x = Math.PI / 3;
+    weatherAstrolabeOuter.material = goldKeyMat;
+    weatherAstrolabeOuter.isPickable = false;
+    weatherAstrolabeOuter.parent = weatherObeliskNode;
+
+    const weatherAstrolabeInner = MeshBuilder.CreateTorus(
+      "weatherAstrolabeInner",
+      { diameter: 1.15, thickness: 0.07, tessellation: 22 },
+      scene
+    );
+    weatherAstrolabeInner.position.set(0, 2.75, 0);
+    weatherAstrolabeInner.rotation.z = Math.PI / 3;
+    weatherAstrolabeInner.material = stormBoltMat;
+    weatherAstrolabeInner.isPickable = false;
+    weatherAstrolabeInner.parent = weatherObeliskNode;
+
+    const weatherGroundHalo = MeshBuilder.CreateTorus(
+      "weatherGroundHalo",
+      { diameter: 3.25, thickness: 0.08, tessellation: 28 },
+      scene
+    );
+    weatherGroundHalo.position.set(0, 0.14, 0);
+    weatherGroundHalo.material = stormBoltMat;
+    weatherGroundHalo.isPickable = false;
+    weatherGroundHalo.parent = weatherObeliskNode;
+
+    // 24-Particle 3D Dynamic Weather Precipitate Pool (Rain, Snow, Starfall & Blood-Moon Embers)
+    const weatherParticlePool: Mesh[] = [];
+    for (let i = 0; i < 24; i++) {
+      const wp = MeshBuilder.CreateBox(
+        `weatherParticle-${i}`,
+        { width: 0.08, height: 0.65, depth: 0.08 },
+        scene
+      );
+      wp.isPickable = false;
+      wp.setEnabled(false);
+      weatherParticlePool.push(wp);
+    }
+
+    // 1i. Overworld Hero's Homestead Manor, Boss Trophy Plinth & 3D Angler's Fishing Pond (`HOMESTEAD_POS = -21.5, -31.8`)
+    const homesteadManorNode = new TransformNode("homesteadManorNode", scene);
+    homesteadManorNode.position.set(HOMESTEAD_POS.x, 0, HOMESTEAD_POS.z);
+
+    const pondWaterMat = makeMat(
+      "pondWaterMat",
+      new Color3(0.14, 0.72, 0.88),
+      new Color3(0.06, 0.36, 0.54),
+      new Color3(0.95, 1.0, 1.0),
+      0.86
+    );
+    const manorRoofMat = makeMat(
+      "manorRoofMat",
+      new Color3(0.72, 0.24, 0.18),
+      new Color3(0.14, 0.04, 0.03),
+      new Color3(0.45, 0.22, 0.16)
+    );
+
+    const manorWalls = MeshBuilder.CreateBox(
+      "manorWalls",
+      { width: 2.35, height: 1.48, depth: 1.95 },
+      scene
+    );
+    manorWalls.position.set(-0.65, 0.74, -0.45);
+    manorWalls.material = woodMat;
+    manorWalls.isPickable = false;
+    manorWalls.parent = homesteadManorNode;
+
+    const manorRoof = MeshBuilder.CreateCylinder(
+      "manorRoof",
+      { diameterTop: 0.12, diameterBottom: 3.15, height: 1.25, tessellation: 4 },
+      scene
+    );
+    manorRoof.position.set(-0.65, 2.02, -0.45);
+    manorRoof.rotation.y = Math.PI / 4;
+    manorRoof.material = manorRoofMat;
+    manorRoof.isPickable = false;
+    manorRoof.parent = homesteadManorNode;
+
+    const manorHearthDoor = MeshBuilder.CreateBox(
+      "manorHearthDoor",
+      { width: 0.68, height: 1.02, depth: 0.14 },
+      scene
+    );
+    manorHearthDoor.position.set(-0.65, 0.51, 0.52);
+    manorHearthDoor.material = goldKeyMat;
+    manorHearthDoor.isPickable = false;
+    manorHearthDoor.parent = homesteadManorNode;
+
+    const homesteadPondRim = MeshBuilder.CreateTorus(
+      "homesteadPondRim",
+      { diameter: 2.35, thickness: 0.24, tessellation: 24 },
+      scene
+    );
+    homesteadPondRim.position.set(1.25, 0.12, 0.35);
+    homesteadPondRim.material = dgPillarMat;
+    homesteadPondRim.isPickable = false;
+    homesteadPondRim.parent = homesteadManorNode;
+
+    const homesteadPondSurface = MeshBuilder.CreateCylinder(
+      "homesteadPondSurface",
+      { diameter: 2.18, height: 0.08, tessellation: 24 },
+      scene
+    );
+    homesteadPondSurface.position.set(1.25, 0.1, 0.35);
+    homesteadPondSurface.material = pondWaterMat;
+    homesteadPondSurface.isPickable = false;
+    homesteadPondSurface.parent = homesteadManorNode;
+
+    const homesteadLeapingFish = MeshBuilder.CreatePolyhedron(
+      "homesteadLeapingFish",
+      { type: 1, size: 0.22 },
+      scene
+    );
+    homesteadLeapingFish.position.set(1.25, 0.65, 0.35);
+    homesteadLeapingFish.scaling.set(1.4, 0.65, 0.55);
+    homesteadLeapingFish.material = goldKeyMat;
+    homesteadLeapingFish.isPickable = false;
+    homesteadLeapingFish.parent = homesteadManorNode;
+
+    const homesteadTrophyCrest = MeshBuilder.CreatePolyhedron(
+      "homesteadTrophyCrest",
+      { type: 2, size: 0.32 },
+      scene
+    );
+    homesteadTrophyCrest.position.set(-0.65, 2.95, -0.45);
+    homesteadTrophyCrest.material = goldKeyMat;
+    homesteadTrophyCrest.isPickable = false;
+    homesteadTrophyCrest.parent = homesteadManorNode;
+
+    const homesteadGroundHalo = MeshBuilder.CreateTorus(
+      "homesteadGroundHalo",
+      { diameter: 3.65, thickness: 0.08, tessellation: 28 },
+      scene
+    );
+    homesteadGroundHalo.position.set(0.15, 0.14, 0);
+    homesteadGroundHalo.material = goldKeyMat;
+    homesteadGroundHalo.isPickable = false;
+    homesteadGroundHalo.parent = homesteadManorNode;
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -9743,6 +9937,20 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // ] (BracketRight) toggles Celestial Weather & Crimson Blood-Moon Console Modal
+      if (code === "BracketRight" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setWeatherOpen(!store.weatherOpen);
+        return;
+      }
+
+      // \ (Backslash) toggles Hero's Homestead Manor, Boss Trophy Hall & 3D Fishing Pond Modal
+      if (code === "Backslash" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setHomesteadOpen(!store.homesteadOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -10194,6 +10402,64 @@ export default function BabylonCanvas() {
           dirLight.intensity = 0.48;
           sanctumPointLight.intensity = snap.flags.bossDefeated ? 1.35 : 0.72;
           heroLanternDisc.setEnabled(false);
+        }
+      }
+
+      // Dynamic World Weather & Blood-Moon Atmospheric Sky / Lighting Override
+      const activeWeather = snap.flags.activeWeather ?? "clear";
+      if (activeWeather === "thunderstorm") {
+        scene.clearColor.set(0.05, 0.09, 0.18, 1);
+        hemiLight.intensity *= 0.78;
+      } else if (activeWeather === "blizzard") {
+        scene.clearColor.set(0.18, 0.28, 0.36, 1);
+        hemiLight.intensity = Math.max(hemiLight.intensity, 0.96);
+      } else if (activeWeather === "starfall") {
+        scene.clearColor.set(0.06, 0.04, 0.16, 1);
+        hemiLight.intensity = Math.max(hemiLight.intensity, 0.88);
+      } else if (activeWeather === "blood_moon") {
+        scene.clearColor.set(0.24, 0.03, 0.06, 1);
+        hemiLight.intensity = Math.max(hemiLight.intensity, 0.84);
+      }
+
+      // Sync 3D Weather Particles around the Hero
+      for (let i = 0; i < weatherParticlePool.length; i++) {
+        const wp = weatherParticlePool[i];
+        if (activeWeather === "clear" || snap.editorMode) {
+          wp.setEnabled(false);
+          continue;
+        }
+        wp.setEnabled(true);
+        const seedA = (i * 1.618) % 1;
+        const seedB = ((i * 2.718) % 1) - 0.5;
+        const angle = (i / weatherParticlePool.length) * Math.PI * 2 + seedA * 0.5;
+        const dist = 2.2 + ((i * 3.7) % 11.5);
+        const px = snap.hero.x + Math.cos(angle) * dist + Math.sin(t * 0.8 + i) * 0.6;
+        const pz = snap.hero.z + Math.sin(angle) * dist + seedB * 2.0;
+
+        if (activeWeather === "thunderstorm") {
+          const fallY = 7.5 - (((t * 14.5 + i * 0.73) % 1) * 7.4);
+          wp.position.set(px, fallY, pz);
+          wp.scaling.set(0.7, 1.35, 0.7);
+          wp.rotation.set(0, 0, 0.12);
+          wp.material = stormBoltMat;
+        } else if (activeWeather === "blizzard") {
+          const fallY = 6.5 - (((t * 4.2 + i * 0.61) % 1) * 6.3);
+          wp.position.set(px + Math.sin(t * 2.5 + i) * 0.8, fallY, pz);
+          wp.scaling.set(1.8, 0.28, 1.8);
+          wp.rotation.set(t * 2.0, t * 1.6, 0);
+          wp.material = stagCoatMat;
+        } else if (activeWeather === "starfall") {
+          const fallY = 7.8 - (((t * 6.8 + i * 0.83) % 1) * 7.5);
+          wp.position.set(px, fallY, pz);
+          wp.scaling.set(1.3, 0.85, 1.3);
+          wp.rotation.set(0, t * 3.2, 0.35);
+          wp.material = goldKeyMat;
+        } else if (activeWeather === "blood_moon") {
+          const riseY = 0.25 + (((t * 3.4 + i * 0.57) % 1) * 6.2);
+          wp.position.set(px, riseY, pz);
+          wp.scaling.set(1.5, 0.45, 1.5);
+          wp.rotation.set(t * 1.8, t * 2.4, 0);
+          wp.material = bloodMoonMat;
         }
       }
 
@@ -10750,12 +11016,14 @@ export default function BabylonCanvas() {
         smithArmNode.rotation.x = Math.sin(t * 6.5) * 0.55;
       }
 
-      // Sync 3D Abyssal Rift Obelisk, Spirit Companion Sanctuary, Royal Stables, Colosseum War-Gate & Alchemy Cauldron (Map 1 Overworld)
+      // Sync 3D Abyssal Rift Obelisk, Spirit Companion Sanctuary, Royal Stables, Colosseum War-Gate, Alchemy Cauldron, Weather Obelisk & Hero's Homestead (Map 1 Overworld)
       riftEntranceNode.setEnabled(inOverworld);
       companionAltarNode.setEnabled(inOverworld);
       mountStablesNode.setEnabled(inOverworld);
       colosseumGateNode.setEnabled(inOverworld);
       alchemyCauldronNode.setEnabled(inOverworld);
+      weatherObeliskNode.setEnabled(inOverworld);
+      homesteadManorNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -10828,6 +11096,48 @@ export default function BabylonCanvas() {
         cauldronCrystal.rotation.y = -t * 3.1;
         cauldronCrystal.position.y = 1.95 + Math.sin(t * 4.4) * 0.14;
         alchemyGroundHalo.rotation.y = t * 1.6;
+
+        const weatherGroundY = sampleTerrainHeight(
+          activeCells,
+          WEATHER_OBELISK_POS.x,
+          WEATHER_OBELISK_POS.z
+        );
+        weatherObeliskNode.position.set(
+          WEATHER_OBELISK_POS.x,
+          weatherGroundY,
+          WEATHER_OBELISK_POS.z
+        );
+        weatherAstrolabeOuter.rotation.y = t * 2.2;
+        weatherAstrolabeInner.rotation.y = -t * 2.9;
+        weatherSunMoonCore.position.y = 2.75 + Math.sin(t * 3.8) * 0.14;
+        weatherSunMoonCore.material =
+          activeWeather === "blood_moon"
+            ? bloodMoonMat
+            : activeWeather === "thunderstorm" || activeWeather === "blizzard"
+            ? stormBoltMat
+            : goldKeyMat;
+        weatherGroundHalo.rotation.y = -t * 1.7;
+
+        const homesteadGroundY = sampleTerrainHeight(
+          activeCells,
+          HOMESTEAD_POS.x,
+          HOMESTEAD_POS.z
+        );
+        homesteadManorNode.position.set(
+          HOMESTEAD_POS.x,
+          homesteadGroundY,
+          HOMESTEAD_POS.z
+        );
+        homesteadTrophyCrest.rotation.y = t * 2.5;
+        homesteadTrophyCrest.position.y = 2.95 + Math.sin(t * 3.6) * 0.12;
+        const fishPhase = (t * 2.4) % (Math.PI * 2);
+        homesteadLeapingFish.position.set(
+          1.25 + Math.cos(fishPhase) * 0.45,
+          0.24 + Math.max(0, Math.sin(fishPhase * 2)) * 0.55,
+          0.35 + Math.sin(fishPhase) * 0.45
+        );
+        homesteadLeapingFish.rotation.y = -fishPhase;
+        homesteadGroundHalo.rotation.y = t * 1.4;
       }
 
       // Sync 3D Active Spirit Companion Orbiting / Following the Hero (`snap.hero.activeCompanion`)

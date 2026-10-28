@@ -8,7 +8,9 @@ import {
   CompanionId,
   EditorPlaceCategory,
   ElixirId,
+  FishId,
   HerbId,
+  HomesteadWingId,
   MountId,
   OffhandId,
   PrimaryHandId,
@@ -16,6 +18,7 @@ import {
   TerrainBrushMode,
   TunicId,
   useGameStore,
+  WeatherId,
 } from "@/store/gameStore";
 import {
   BuriedRewardKind,
@@ -258,6 +261,8 @@ export default function GameOverlay() {
   const stablesOpen = useGameStore((s) => s.stablesOpen);
   const colosseumOpen = useGameStore((s) => s.colosseumOpen);
   const alchemyOpen = useGameStore((s) => s.alchemyOpen);
+  const weatherOpen = useGameStore((s) => s.weatherOpen);
+  const homesteadOpen = useGameStore((s) => s.homesteadOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -287,6 +292,14 @@ export default function GameOverlay() {
   const setStablesOpen = useGameStore((s) => s.setStablesOpen);
   const setColosseumOpen = useGameStore((s) => s.setColosseumOpen);
   const setAlchemyOpen = useGameStore((s) => s.setAlchemyOpen);
+  const setWeatherOpen = useGameStore((s) => s.setWeatherOpen);
+  const setHomesteadOpen = useGameStore((s) => s.setHomesteadOpen);
+  const upgradeHomesteadWing = useGameStore((s) => s.upgradeHomesteadWing);
+  const restAtHomestead = useGameStore((s) => s.restAtHomestead);
+  const castFishingLine = useGameStore((s) => s.castFishingLine);
+  const grantHomesteadPlaytestBundle = useGameStore((s) => s.grantHomesteadPlaytestBundle);
+  const setWorldWeather = useGameStore((s) => s.setWorldWeather);
+  const triggerBloodMoonInvasion = useGameStore((s) => s.triggerBloodMoonInvasion);
   const brewAndDrinkElixir = useGameStore((s) => s.brewAndDrinkElixir);
   const grantAlchemyPlaytestBundle = useGameStore((s) => s.grantAlchemyPlaytestBundle);
   const startColosseumTrial = useGameStore((s) => s.startColosseumTrial);
@@ -364,6 +377,8 @@ export default function GameOverlay() {
         if (stablesOpen) setStablesOpen(false);
         if (colosseumOpen) setColosseumOpen(false);
         if (alchemyOpen) setAlchemyOpen(false);
+        if (weatherOpen) setWeatherOpen(false);
+        if (homesteadOpen) setHomesteadOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -379,6 +394,8 @@ export default function GameOverlay() {
     stablesOpen,
     colosseumOpen,
     alchemyOpen,
+    weatherOpen,
+    homesteadOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -389,6 +406,8 @@ export default function GameOverlay() {
     setStablesOpen,
     setColosseumOpen,
     setAlchemyOpen,
+    setWeatherOpen,
+    setHomesteadOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -1438,6 +1457,58 @@ export default function GameOverlay() {
                     ? `${Math.ceil(hero.activeElixirTimer ?? 0)}s`
                     : "["}
                   )
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWeatherOpen(!weatherOpen)}
+                  className={`char-toggle-btn ${
+                    weatherOpen || (flags.activeWeather ?? "clear") !== "clear" ? "active" : ""
+                  }`}
+                  style={
+                    (flags.activeWeather ?? "clear") === "blood_moon"
+                      ? {
+                          borderColor: "rgba(255, 84, 112, 0.95)",
+                          background: "rgba(68, 12, 22, 0.94)",
+                          color: "#ff9eb0",
+                        }
+                      : (flags.activeWeather ?? "clear") !== "clear"
+                      ? {
+                          borderColor: "rgba(104, 214, 255, 0.9)",
+                          background: "rgba(14, 38, 62, 0.92)",
+                          color: "#9ee8ff",
+                        }
+                      : undefined
+                  }
+                  title="Open Sky-Seer Lyra's Celestial Weather & Crimson Blood-Moon Console (Shortcut: ])"
+                >
+                  {flags.activeWeather === "blood_moon"
+                    ? "🌑 Blood-Moon (])"
+                    : flags.activeWeather === "thunderstorm"
+                    ? "⛈️ Storm (])"
+                    : flags.activeWeather === "blizzard"
+                    ? "❄️ Blizzard (])"
+                    : flags.activeWeather === "starfall"
+                    ? "🌠 Starfall (])"
+                    : "☀️ Weather (])"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHomesteadOpen(!homesteadOpen)}
+                  className={`char-toggle-btn ${
+                    homesteadOpen || (hero.homesteadWings ?? []).length > 0 ? "active" : ""
+                  }`}
+                  style={
+                    (hero.homesteadWings ?? []).length > 0
+                      ? {
+                          borderColor: "rgba(255, 210, 104, 0.9)",
+                          background: "rgba(58, 38, 12, 0.92)",
+                          color: "#ffe694",
+                        }
+                      : undefined
+                  }
+                  title="Open Hero's Homestead Manor, Boss Trophy Hall & 3D Fishing Pond (Shortcut: \)"
+                >
+                  🏡 Homestead ({(hero.homesteadWings ?? []).length}/3 • \)
                 </button>
                 <button
                   type="button"
@@ -5699,6 +5770,810 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Cauldron ([)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          SKY-SEER LYRA'S CELESTIAL WEATHER & CRIMSON BLOOD-MOON CONSOLE MODAL []]
+         ========================================================= */}
+      {phase === "playing" && !editorMode && weatherOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card" style={{ maxWidth: "1020px", width: "95vw" }}>
+            <div className="shop-header">
+              <div>
+                <div
+                  className="shop-pill"
+                  style={{
+                    background: "rgba(104, 214, 255, 0.16)",
+                    borderColor: "rgba(104, 214, 255, 0.55)",
+                    color: "#9ee8ff",
+                  }}
+                >
+                  CELESTIAL SUNDIAL OBELISK • DYNAMIC 3D WORLD WEATHER &amp; CRIMSON BLOOD-MOON INVASIONS
+                </div>
+                <h2 className="shop-title">SKY-SEER LYRA&apos;S CELESTIAL ASTROLABE</h2>
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <div
+                  className="shop-wallet"
+                  style={{
+                    borderColor: "rgba(255, 92, 118, 0.55)",
+                    background: "rgba(58, 12, 24, 0.65)",
+                  }}
+                >
+                  <span className="shop-wallet-label">BLOOD-MOONS SUMMONED:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ff9eb0" }}>
+                    {flags.bloodMoonInvasionsCleared ?? 0} 🌑
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">MONSTER CORES:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ffd875" }}>
+                    {hero.monsterCores ?? 0} ✦
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">RUPEES:</span>
+                  <span className="shop-wallet-val">{hero.rupees}</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+                padding: "10px 14px",
+                marginBottom: "14px",
+                borderRadius: "10px",
+                background: "rgba(18, 28, 48, 0.76)",
+                border: "1px solid rgba(104, 214, 255, 0.35)",
+              }}
+            >
+              <p className="shop-greeting" style={{ margin: 0, flex: "1 1 520px" }}>
+                &ldquo;Turn the Celestial Sundial to attune the heavens! Each <strong>3D Weather State</strong>{" "}
+                transforms the sky, ambient lighting, and particle precipitation around you while
+                granting powerful <strong>Elemental Combat Synergies</strong> — or unleash a{" "}
+                <strong>Crimson Blood-Moon Invasion</strong> to resurrect fallen foes &amp; summon
+                Crowned Champions for <strong>2× Rupee Spoils &amp; +1 Extra Monster Core per Kill</strong>!&rdquo;
+              </p>
+              <button
+                type="button"
+                onClick={triggerBloodMoonInvasion}
+                className="char-equip-btn"
+                style={{
+                  background: "linear-gradient(180deg, #ff385c 0%, #990d28 100%)",
+                  borderColor: "rgba(255, 168, 184, 0.9)",
+                  color: "#ffffff",
+                  fontWeight: 800,
+                  whiteSpace: "nowrap",
+                }}
+                title="Unleash the Crimson Blood-Moon Eclipse, resurrect fallen zone monsters, spawn 3 Elite Blood-Moon Champions nearby, and claim +4 Monster Cores & +150 Rupees!"
+              >
+                🌑 Unleash Blood-Moon Invasion (+4✦ &amp; +150 Rupees)
+              </button>
+            </div>
+
+            {(() => {
+              const curWeather: WeatherId = flags.activeWeather ?? "clear";
+              const weatherCatalog: Array<{
+                id: WeatherId;
+                name: string;
+                subtitle: string;
+                icon: string;
+                synergy: string;
+                desc: string;
+                accent: string;
+              }> = [
+                {
+                  id: "clear",
+                  name: "Sunlit Zenith (Clear Skies)",
+                  subtitle: "NATURAL ILLUMINATION • BALANCED SKIES",
+                  icon: "☀️",
+                  synergy: "Standard Biome Atmosphere & Illumination",
+                  desc: "Dispels all storm clouds, blizzards, and eclipses, restoring golden daylight and calm skies across the realm.",
+                  accent: "#ffd24c",
+                },
+                {
+                  id: "thunderstorm",
+                  name: "Tempest Thunderstorm",
+                  subtitle: "3D RAINFALL & AUTOMATIC SKY-BOLT LIGHTNING",
+                  icon: "⛈️",
+                  synergy: "Auto Sky-Bolt (2 DMG + 1.25s Stun every 3.8s) & Storm Synergy",
+                  desc: "Summons dark tempest clouds and 3D rain streaks. Every 3.8 seconds, a Sky-Bolt automatically strikes the nearest enemy within 11.5m for 2 DMG + 1.25s Stun!",
+                  accent: "#52d6ff",
+                },
+                {
+                  id: "blizzard",
+                  name: "Rimefrost Blizzard",
+                  subtitle: "3D SNOW SQUALL & GLACIAL FORTIFICATION",
+                  icon: "❄️",
+                  synergy: "-25% All Damage Taken & +1 Bow Arrow Frost Damage",
+                  desc: "Blankets the air in swirling 3D snow crystals, sheathing you in glacial rime that reduces incoming damage by 25% and adds +1 Frost DMG to every Bow shot!",
+                  accent: "#9ee8ff",
+                },
+                {
+                  id: "starfall",
+                  name: "Astral Starfall Shower",
+                  subtitle: "3D SHOOTING STARS & COSMIC MANA SURGE",
+                  icon: "🌠",
+                  synergy: "+8 MP/s Mana Surge, +50% Rupees & Starlight Heal (+1 HP/+12 MP every 6s)",
+                  desc: "Bathes the sky in twilight starlight and falling golden meteors, surging MP recovery by +8 MP/s, boosting Rupee value +50%, and healing +1 HP & +12 MP every 6s!",
+                  accent: "#d99eff",
+                },
+                {
+                  id: "blood_moon",
+                  name: "Crimson Blood-Moon Eclipse",
+                  subtitle: "3D SCARLET EMBERS • DOUBLE SPOILS & BLOOD-FRENZY",
+                  icon: "🌑",
+                  synergy: "+1 All Weapon DMG, +1 Extra Core per Kill & +100% Double Rupees!",
+                  desc: "Turns the heavens crimson-scarlet with rising blood embers! Grants +1 bonus damage on all weapon attacks, +1 extra Monster Core (✦) on every kill, and 2× Rupee value!",
+                  accent: "#ff5c78",
+                },
+              ];
+
+              return (
+                <div
+                  className="shop-items-grid"
+                  style={{ gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: "12px" }}
+                >
+                  {weatherCatalog.map((w) => {
+                    const isActive = curWeather === w.id;
+                    return (
+                      <div
+                        key={w.id}
+                        className={`shop-item-card ${isActive ? "shop-item-owned" : ""}`}
+                        style={{
+                          borderColor: isActive ? w.accent : "rgba(140, 165, 210, 0.3)",
+                          padding: "12px",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: "0.65rem",
+                                fontWeight: 800,
+                                letterSpacing: "0.06em",
+                                color: w.accent,
+                              }}
+                            >
+                              {w.subtitle}
+                            </span>
+                            {isActive && (
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  fontWeight: 800,
+                                  color: "#4eff91",
+                                }}
+                              >
+                                ● ACTIVE SKY
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="shop-item-top" style={{ marginBottom: "6px" }}>
+                            <span
+                              className="shop-item-name"
+                              style={{ color: "#ffffff", fontSize: "0.94rem" }}
+                            >
+                              {w.icon} {w.name}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: "0.74rem",
+                              fontWeight: 800,
+                              color: "#ffe694",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            ✦ Synergy: {w.synergy}
+                          </div>
+
+                          <p
+                            className="shop-item-desc"
+                            style={{ fontSize: "0.72rem", marginBottom: "12px" }}
+                          >
+                            {w.desc}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setWorldWeather(w.id)}
+                          className="shop-buy-btn"
+                          style={{
+                            fontSize: "0.8rem",
+                            padding: "8px 12px",
+                            background: isActive
+                              ? "rgba(78, 255, 145, 0.22)"
+                              : undefined,
+                            borderColor: isActive ? "#4eff91" : undefined,
+                            color: isActive ? "#b8ffd4" : undefined,
+                          }}
+                        >
+                          {isActive
+                            ? `✓ ${w.name} Active`
+                            : `Invoke ${w.icon} ${w.name}`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>]</strong> or <strong>Esc</strong> anytime to close Sky-Seer
+                Lyra&apos;s Celestial Weather &amp; Blood-Moon Console.
+              </span>
+              <button
+                type="button"
+                onClick={() => setWeatherOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Astrolabe (])
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          HERO'S HOMESTEAD MANOR, BOSS TROPHY HALL & 3D FISHING POND MODAL [\]
+         ========================================================= */}
+      {phase === "playing" && !editorMode && homesteadOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card" style={{ maxWidth: "1060px", width: "95vw" }}>
+            <div className="shop-header">
+              <div>
+                <div
+                  className="shop-pill"
+                  style={{
+                    background: "rgba(255, 206, 88, 0.16)",
+                    borderColor: "rgba(255, 206, 88, 0.55)",
+                    color: "#ffe694",
+                  }}
+                >
+                  CROSSROADS MANOR ESTATE • UPGRADEABLE WINGS, BOSS TROPHY VAULT &amp; ANGLER&apos;S POND
+                </div>
+                <h2 className="shop-title">HERO&apos;S HOMESTEAD &amp; TROPHY HALL</h2>
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <div
+                  className="shop-wallet"
+                  style={{
+                    borderColor: "rgba(255, 206, 88, 0.55)",
+                    background: "rgba(52, 36, 12, 0.65)",
+                  }}
+                >
+                  <span className="shop-wallet-label">MANOR WINGS:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ffe694" }}>
+                    {(hero.homesteadWings ?? []).length}/3 🏡
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">MONSTER CORES:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ffd875" }}>
+                    {hero.monsterCores ?? 0} ✦
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">RUPEES:</span>
+                  <span className="shop-wallet-val">{hero.rupees}</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+                padding: "10px 14px",
+                marginBottom: "14px",
+                borderRadius: "10px",
+                background: "rgba(42, 28, 14, 0.76)",
+                border: "1px solid rgba(255, 206, 88, 0.35)",
+              }}
+            >
+              <p className="shop-greeting" style={{ margin: 0, flex: "1 1 480px" }}>
+                &ldquo;Welcome home, Champion! Expand your <strong>3 Manor Wings</strong> for permanent
+                Heart Containers, automated Greenhouse Herb cultivation, and Boss Trophy Vault combat
+                bonuses — or cast your line into the <strong>3D Angler&apos;s Pond</strong> for rare fish,
+                Rupees, Monster Cores, and Golden Sturgeon Heart Jackpots!&rdquo;
+              </p>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={restAtHomestead}
+                  className="char-equip-btn"
+                  style={{
+                    background: "linear-gradient(180deg, #3bd671 0%, #177a3c 100%)",
+                    borderColor: "rgba(150, 255, 190, 0.85)",
+                    color: "#ffffff",
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Rest by the Homestead Hearth to restore 100% Life Hearts & 100% Magic Power!"
+                >
+                  🔥 Rest at Hearth (Full HP &amp; MP)
+                </button>
+                <button
+                  type="button"
+                  onClick={grantHomesteadPlaytestBundle}
+                  className="char-equip-btn"
+                  style={{
+                    background: "linear-gradient(180deg, #f5b935 0%, #9c6208 100%)",
+                    borderColor: "rgba(255, 232, 162, 0.85)",
+                    color: "#1b1102",
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Playtest Shortcut: Construct all 3 Manor Wings + +2 Heart Containers + Trophy Fishes + +12 Cores & +600 Rupees"
+                >
+                  ★ Playtest: Unlock All 3 Manor Wings &amp; Pond
+                </button>
+              </div>
+            </div>
+
+            {(() => {
+              const wings = hero.homesteadWings ?? [];
+              const cores = hero.monsterCores ?? 0;
+              const fish = hero.fishCaught ?? {
+                brook_trout: 0,
+                reef_snapper: 0,
+                magma_koi: 0,
+                golden_sturgeon: 0,
+              };
+
+              const wingCatalog: Array<{
+                id: HomesteadWingId;
+                name: string;
+                subtitle: string;
+                icon: string;
+                costCores: number;
+                costRupees: number;
+                perkSummary: string;
+                desc: string;
+                accent: string;
+              }> = [
+                {
+                  id: "hearth_bed",
+                  name: "I. Sovereign Hearth & Featherbed",
+                  subtitle: "MANOR REST SANCTUARY • PERMANENT VITALITY",
+                  icon: "🛏️",
+                  costCores: 2,
+                  costRupees: 150,
+                  perkSummary: "+1 Full Heart Container (+2 Max HP) & Full Hearth Rest",
+                  desc: "Furnishes your manor with an oak featherbed and roaring stone hearth, immediately granting +1 Permanent Heart Container and 100% HP/MP restoration!",
+                  accent: "#ff7e6b",
+                },
+                {
+                  id: "herb_greenhouse",
+                  name: "II. Glass Botanical Greenhouse",
+                  subtitle: "PASSIVE ALCHEMICAL HERB CULTIVATION",
+                  icon: "🌿",
+                  costCores: 3,
+                  costRupees: 220,
+                  perkSummary: "Auto-Grows +1 Random Biome Herb Every 25s (+2× All Herbs Now!)",
+                  desc: "Constructs a sunlit glass conservatory beside your manor that automatically cultivates +1 Sunleaf, Frostbloom, Emberroot, or Starlotus every 25 seconds!",
+                  accent: "#52f296",
+                },
+                {
+                  id: "trophy_vault",
+                  name: "III. Grand Boss Trophy Gallery",
+                  subtitle: "HALL OF CONQUERED TITANS • COMBAT PRESTIGE",
+                  icon: "🏆",
+                  costCores: 4,
+                  costRupees: 320,
+                  perkSummary: "+1 All Sword & Bow Damage + +25% Rupee Spoils!",
+                  desc: "Raises gilded marble plinths honoring every Sanctum Boss you have vanquished, empowering your Sword and Bow with +1 Damage and +25% Rupee drops!",
+                  accent: "#ffd24c",
+                },
+              ];
+
+              const fishSpecies: Array<{
+                id: FishId;
+                name: string;
+                icon: string;
+                reward: string;
+                color: string;
+              }> = [
+                {
+                  id: "brook_trout",
+                  name: "Silver Brook Trout",
+                  icon: "🐟",
+                  reward: "+30 Rupees & +2 HP",
+                  color: "#7ee8ff",
+                },
+                {
+                  id: "reef_snapper",
+                  name: "Coral Reef Snapper",
+                  icon: "🐠",
+                  reward: "+55 Rupees, +1 Herb & +25 MP",
+                  color: "#ff9e68",
+                },
+                {
+                  id: "magma_koi",
+                  name: "Caldera Magma-Koi",
+                  icon: "🐡",
+                  reward: "+85 Rupees & +1 Monster Core (✦)",
+                  color: "#ff5c78",
+                },
+                {
+                  id: "golden_sturgeon",
+                  name: "Sovereign Golden Sturgeon",
+                  icon: "👑🐟",
+                  reward: "+150 Rupees, +2 Cores & 1st-Catch Heart Container!",
+                  color: "#ffd24c",
+                },
+              ];
+
+              const bossTrophies = [
+                {
+                  name: "Ignis, Sanctum Colossus",
+                  zone: "Sanctum Dungeon",
+                  cleared: Boolean(flags.bossDefeated),
+                },
+                {
+                  name: "Cryos, Glacial Sentinel",
+                  zone: "Crystalline Caverns",
+                  cleared: Boolean(flags.cavernBossDefeated),
+                },
+                {
+                  name: "Vaelkor, Shadow Sovereign",
+                  zone: "Obsidian Citadel",
+                  cleared: Boolean(flags.citadelBossDefeated),
+                },
+                {
+                  name: "Khopesh, Solar Pharaoh",
+                  zone: "Sunscorched Oasis",
+                  cleared: Boolean(flags.desertBossDefeated),
+                },
+                {
+                  name: "Pyrax, Caldera Wyrm-Lord",
+                  zone: "Skyward Caldera",
+                  cleared: Boolean(flags.calderaBossDefeated),
+                },
+                {
+                  name: "Nereus, Coral Leviathan",
+                  zone: "Sunken Coral Atoll",
+                  cleared: Boolean(flags.atollBossDefeated),
+                },
+                {
+                  name: "Myceloth, Spore Behemoth",
+                  zone: "Twilight Spore-Hollow",
+                  cleared: Boolean(flags.hollowBossDefeated),
+                },
+                {
+                  name: "Astraea, Starlight Archon",
+                  zone: "Celestial Sky-Temple",
+                  cleared: Boolean(flags.skyBossDefeated),
+                },
+              ];
+              const clearedTrophiesCount = bossTrophies.filter((b) => b.cleared).length;
+
+              return (
+                <>
+                  {/* 3 MANOR WINGS */}
+                  <div
+                    className="shop-items-grid"
+                    style={{ gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "14px" }}
+                  >
+                    {wingCatalog.map((wg) => {
+                      const isBuilt = wings.includes(wg.id);
+                      const canAfford =
+                        !isBuilt && cores >= wg.costCores && hero.rupees >= wg.costRupees;
+
+                      return (
+                        <div
+                          key={wg.id}
+                          className={`shop-item-card ${isBuilt ? "shop-item-owned" : ""}`}
+                          style={{
+                            borderColor: isBuilt ? wg.accent : "rgba(140, 165, 210, 0.3)",
+                            padding: "12px",
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: "0.65rem",
+                                  fontWeight: 800,
+                                  letterSpacing: "0.06em",
+                                  color: wg.accent,
+                                }}
+                              >
+                                {wg.subtitle}
+                              </span>
+                              {isBuilt && (
+                                <span
+                                  style={{
+                                    fontSize: "0.68rem",
+                                    fontWeight: 800,
+                                    color: "#4eff91",
+                                  }}
+                                >
+                                  ✓ CONSTRUCTED
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="shop-item-top" style={{ marginBottom: "6px" }}>
+                              <span
+                                className="shop-item-name"
+                                style={{ color: "#ffffff", fontSize: "0.92rem" }}
+                              >
+                                {wg.icon} {wg.name}
+                              </span>
+                            </div>
+
+                            <div
+                              style={{
+                                fontSize: "0.73rem",
+                                fontWeight: 800,
+                                color: "#ffe694",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              ✦ Bonus: {wg.perkSummary}
+                            </div>
+
+                            <p
+                              className="shop-item-desc"
+                              style={{ fontSize: "0.72rem", marginBottom: "10px" }}
+                            >
+                              {wg.desc}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={isBuilt || !canAfford}
+                            onClick={() => upgradeHomesteadWing(wg.id)}
+                            className="shop-buy-btn"
+                            style={{ fontSize: "0.78rem", padding: "8px 10px" }}
+                          >
+                            {isBuilt
+                              ? "✓ Wing Built & Active"
+                              : `Construct (${wg.costCores}✦ Cores + ${wg.costRupees} Rupees)`}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* 3D ANGLER'S FISHING POND & BOSS TROPHY HALL SPLIT */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.15fr 1fr",
+                      gap: "12px",
+                    }}
+                  >
+                    {/* FISHING POND */}
+                    <div
+                      style={{
+                        padding: "12px",
+                        borderRadius: "10px",
+                        background: "rgba(10, 28, 38, 0.82)",
+                        border: "1px solid rgba(82, 224, 255, 0.4)",
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "0.84rem",
+                              fontWeight: 900,
+                              color: "#7ee8ff",
+                            }}
+                          >
+                            🎣 ANGLER&apos;S TURQUOISE FISHING POND
+                          </span>
+                          <button
+                            type="button"
+                            onClick={castFishingLine}
+                            className="char-equip-btn"
+                            style={{
+                              background: "linear-gradient(180deg, #28b8e8 0%, #0d6994 100%)",
+                              borderColor: "#9ef2ff",
+                              color: "#ffffff",
+                              fontWeight: 800,
+                              padding: "6px 14px",
+                            }}
+                          >
+                            🎣 Cast Fishing Line (Free!)
+                          </button>
+                        </div>
+
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(2, 1fr)",
+                            gap: "8px",
+                          }}
+                        >
+                          {fishSpecies.map((fs) => (
+                            <div
+                              key={fs.id}
+                              style={{
+                                padding: "7px 10px",
+                                borderRadius: "8px",
+                                background: "rgba(12, 18, 28, 0.85)",
+                                border: `1px solid ${fs.color}44`,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: "0.76rem",
+                                    fontWeight: 800,
+                                    color: fs.color,
+                                  }}
+                                >
+                                  {fs.icon} {fs.name}
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    fontWeight: 900,
+                                    color: "#ffffff",
+                                  }}
+                                >
+                                  ×{fish[fs.id] ?? 0}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: "0.66rem", color: "#b6cae2" }}>
+                                {fs.reward}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* BOSS TROPHY GALLERY */}
+                    <div
+                      style={{
+                        padding: "12px",
+                        borderRadius: "10px",
+                        background: "rgba(28, 20, 12, 0.82)",
+                        border: "1px solid rgba(255, 210, 88, 0.4)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "0.84rem",
+                            fontWeight: 900,
+                            color: "#ffd875",
+                          }}
+                        >
+                          🏆 SANCTUM BOSS TROPHY GALLERY
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "0.76rem",
+                            fontWeight: 800,
+                            color: "#ffe694",
+                          }}
+                        >
+                          {clearedTrophiesCount}/8 Vanquished
+                        </span>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(2, 1fr)",
+                          gap: "6px",
+                        }}
+                      >
+                        {bossTrophies.map((bt) => (
+                          <div
+                            key={bt.name}
+                            style={{
+                              padding: "5px 8px",
+                              borderRadius: "6px",
+                              background: bt.cleared
+                                ? "rgba(62, 46, 12, 0.78)"
+                                : "rgba(16, 18, 26, 0.65)",
+                              border: `1px solid ${
+                                bt.cleared
+                                  ? "rgba(255, 212, 76, 0.65)"
+                                  : "rgba(140, 160, 190, 0.2)"
+                              }`,
+                              fontSize: "0.7rem",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontWeight: 700,
+                                color: bt.cleared ? "#ffe694" : "#8696b0",
+                              }}
+                            >
+                              {bt.cleared ? "🏆" : "🔒"} {bt.name}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>\</strong> or <strong>Esc</strong> anytime to close your Homestead
+                Manor, Boss Trophy Hall &amp; Angler&apos;s Pond.
+              </span>
+              <button
+                type="button"
+                onClick={() => setHomesteadOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Homestead (\)
               </button>
             </div>
           </div>

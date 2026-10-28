@@ -298,6 +298,18 @@ export const ALCHEMY_CAULDRON_POS = {
   z: -22.5,
 };
 
+// Map 1 Sky-Seer Lyra's Celestial Weather & Blood-Moon Sundial Obelisk (Control dynamic biome weather & Blood-Moon Invasions!)
+export const WEATHER_OBELISK_POS = {
+  x: 16.2,
+  z: -22.5,
+};
+
+// Map 1 Hero's Homestead Manor, Boss Trophy Hall & 3D Fishing Pond (Upgrade manor wings, mount Boss Trophies & cast Fishing Line!)
+export const HOMESTEAD_POS = {
+  x: -21.5,
+  z: -31.8,
+};
+
 // Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,
