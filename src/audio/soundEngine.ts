@@ -1474,6 +1474,47 @@ class SoundEngine {
       osc.stop(t + 0.17);
     });
   }
+
+  public playLyreNote(freq: number, delaySec = 0): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const t = ctx.currentTime + delaySec;
+
+    // Warm wind-flute + crystal harp harmonic chime
+    const osc = ctx.createOscillator();
+    const overtone = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const overtoneGain = ctx.createGain();
+
+    osc.type = "triangle";
+    overtone.type = "sine";
+    osc.frequency.setValueAtTime(freq, t);
+    overtone.frequency.setValueAtTime(freq * 2, t);
+
+    gain.gain.setValueAtTime(0.001, t);
+    gain.gain.linearRampToValueAtTime(0.22, t + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.48);
+
+    overtoneGain.gain.setValueAtTime(0.001, t);
+    overtoneGain.gain.linearRampToValueAtTime(0.09, t + 0.02);
+    overtoneGain.gain.exponentialRampToValueAtTime(0.001, t + 0.36);
+
+    osc.connect(gain);
+    overtone.connect(overtoneGain);
+    gain.connect(ctx.destination);
+    overtoneGain.connect(ctx.destination);
+
+    osc.start(t);
+    overtone.start(t);
+    osc.stop(t + 0.5);
+    overtone.stop(t + 0.38);
+  }
+
+  public playLyreMelody(frequencies: number[]): void {
+    frequencies.forEach((freq, idx) => {
+      this.playLyreNote(freq, idx * 0.16);
+    });
+  }
 }
 
 export const soundEngine = new SoundEngine();

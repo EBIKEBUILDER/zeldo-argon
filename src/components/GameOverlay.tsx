@@ -11,10 +11,12 @@ import {
   FishId,
   HerbId,
   HomesteadWingId,
+  LyreNoteId,
   MountId,
   OffhandId,
   PrimaryHandId,
   RelicId,
+  SongId,
   TerrainBrushMode,
   TunicId,
   useGameStore,
@@ -263,6 +265,7 @@ export default function GameOverlay() {
   const alchemyOpen = useGameStore((s) => s.alchemyOpen);
   const weatherOpen = useGameStore((s) => s.weatherOpen);
   const homesteadOpen = useGameStore((s) => s.homesteadOpen);
+  const lyreOpen = useGameStore((s) => s.lyreOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -294,6 +297,10 @@ export default function GameOverlay() {
   const setAlchemyOpen = useGameStore((s) => s.setAlchemyOpen);
   const setWeatherOpen = useGameStore((s) => s.setWeatherOpen);
   const setHomesteadOpen = useGameStore((s) => s.setHomesteadOpen);
+  const setLyreOpen = useGameStore((s) => s.setLyreOpen);
+  const unlockOrPerformSong = useGameStore((s) => s.unlockOrPerformSong);
+  const playLyreScaleNote = useGameStore((s) => s.playLyreScaleNote);
+  const grantLyrePlaytestBundle = useGameStore((s) => s.grantLyrePlaytestBundle);
   const upgradeHomesteadWing = useGameStore((s) => s.upgradeHomesteadWing);
   const restAtHomestead = useGameStore((s) => s.restAtHomestead);
   const castFishingLine = useGameStore((s) => s.castFishingLine);
@@ -351,6 +358,7 @@ export default function GameOverlay() {
   const [unlockAllWarpsPlaytest, setUnlockAllWarpsPlaytest] = useState(false);
   const [riftTargetDepth, setRiftTargetDepth] = useState<number>(1);
   const [riftCustomSeedText, setRiftCustomSeedText] = useState<string>("");
+  const [lyreNoteSequence, setLyreNoteSequence] = useState<LyreNoteId[]>([]);
 
   React.useEffect(() => {
     if (riftOpen) {
@@ -379,6 +387,7 @@ export default function GameOverlay() {
         if (alchemyOpen) setAlchemyOpen(false);
         if (weatherOpen) setWeatherOpen(false);
         if (homesteadOpen) setHomesteadOpen(false);
+        if (lyreOpen) setLyreOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -396,6 +405,7 @@ export default function GameOverlay() {
     alchemyOpen,
     weatherOpen,
     homesteadOpen,
+    lyreOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -408,6 +418,7 @@ export default function GameOverlay() {
     setAlchemyOpen,
     setWeatherOpen,
     setHomesteadOpen,
+    setLyreOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -1509,6 +1520,29 @@ export default function GameOverlay() {
                   title="Open Hero's Homestead Manor, Boss Trophy Hall & 3D Fishing Pond (Shortcut: \)"
                 >
                   🏡 Homestead ({(hero.homesteadWings ?? []).length}/3 • \)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLyreOpen(!lyreOpen)}
+                  className={`char-toggle-btn ${
+                    lyreOpen || (hero.songAuraTimer ?? 0) > 0 ? "active" : ""
+                  }`}
+                  style={
+                    (hero.songAuraTimer ?? 0) > 0
+                      ? {
+                          borderColor: "rgba(126, 232, 255, 0.92)",
+                          background: "rgba(14, 42, 66, 0.92)",
+                          color: "#9ef2ff",
+                        }
+                      : undefined
+                  }
+                  title="Open Bardsong Master Orpheus's Runic Lyre & 4 Sacred Melodies (Shortcut: ;)"
+                >
+                  🎵 Lyre (
+                  {(hero.songAuraTimer ?? 0) > 0
+                    ? `${Math.ceil(hero.songAuraTimer ?? 0)}s`
+                    : ";"}
+                  )
                 </button>
                 <button
                   type="button"
@@ -6574,6 +6608,382 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Homestead (\)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          BARDSONG MASTER ORPHEUS'S RUNIC LYRE OF THE WINDS & 4 SACRED MELODIES MODAL [;]
+         ========================================================= */}
+      {phase === "playing" && !editorMode && lyreOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card" style={{ maxWidth: "1040px", width: "95vw" }}>
+            <div className="shop-header">
+              <div>
+                <div
+                  className="shop-pill"
+                  style={{
+                    background: "rgba(126, 232, 255, 0.16)",
+                    borderColor: "rgba(126, 232, 255, 0.55)",
+                    color: "#9ef2ff",
+                  }}
+                >
+                  BARDSONG RESONANCE PAVILION • RUNIC LYRE OF THE WINDS &amp; 4 SACRED MELODIES
+                </div>
+                <h2 className="shop-title">THE RUNIC LYRE OF THE WINDS</h2>
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <div
+                  className="shop-wallet"
+                  style={{
+                    borderColor: "rgba(126, 232, 255, 0.55)",
+                    background: "rgba(14, 38, 62, 0.65)",
+                  }}
+                >
+                  <span className="shop-wallet-label">SONGS LEARNED:</span>
+                  <span className="shop-wallet-val" style={{ color: "#9ef2ff" }}>
+                    {(hero.unlockedSongs ?? ["sun_hymn"]).length}/4 🎵
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">MONSTER CORES:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ffd875" }}>
+                    {hero.monsterCores ?? 0} ✦
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">RUPEES:</span>
+                  <span className="shop-wallet-val">{hero.rupees}</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+                padding: "10px 14px",
+                marginBottom: "12px",
+                borderRadius: "10px",
+                background: "rgba(14, 28, 48, 0.78)",
+                border: "1px solid rgba(126, 232, 255, 0.35)",
+              }}
+            >
+              <p className="shop-greeting" style={{ margin: 0, flex: "1 1 520px" }}>
+                &ldquo;Pluck the crystal strings of the <strong>Runic Lyre of the Winds</strong>!
+                Tap the <strong>4-Note Runic Scale Pad (▲ ◄ ► ▼)</strong> below to play live crystal-harp
+                harmonies and weave 3-note cadences, or click any unlocked ballad to call down{" "}
+                <strong>Solar Healing, Cyclone Rupee Magnetism, 6s Time-Stop, or Bountiful Regrowth</strong>!&rdquo;
+              </p>
+              <button
+                type="button"
+                onClick={grantLyrePlaytestBundle}
+                className="char-equip-btn"
+                style={{
+                  background: "linear-gradient(180deg, #38b8ff 0%, #10609e 100%)",
+                  borderColor: "rgba(168, 236, 255, 0.9)",
+                  color: "#ffffff",
+                  fontWeight: 800,
+                  whiteSpace: "nowrap",
+                }}
+                title="Playtest Shortcut: Unlock all 4 Sacred Lyre Melodies + +10 Monster Cores + +500 Rupees"
+              >
+                ★ Playtest: Unlock All 4 Sacred Songs
+              </button>
+            </div>
+
+            {(() => {
+              const unlocked = hero.unlockedSongs ?? ["sun_hymn"];
+              const cores = hero.monsterCores ?? 0;
+
+              const songCatalog: Array<{
+                id: SongId;
+                name: string;
+                subtitle: string;
+                icon: string;
+                cadence: [LyreNoteId, LyreNoteId, LyreNoteId];
+                cadenceBadge: string;
+                costCores: number;
+                costRupees: number;
+                effectSummary: string;
+                desc: string;
+                accent: string;
+              }> = [
+                {
+                  id: "sun_hymn",
+                  name: "I. Hymn of the Sun-Crown",
+                  subtitle: "SOLAR BENEDICTION • RADIANT HEAL & SEAR",
+                  icon: "☀️🎵",
+                  cadence: ["N", "E", "N"],
+                  cadenceBadge: "▲ North • ► East • ▲ North",
+                  costCores: 0,
+                  costRupees: 0,
+                  effectSummary: "Instant +4 Hearts, +50 MP & 3 DMG + 2.8s Solar Stun to Nearby Foes!",
+                  desc: "Calls down a golden sunbeam that restores +4 Full Hearts & +50 MP, dispels frost, and sears nearby monsters within 12.5m for 3 DMG + 2.8s Stun!",
+                  accent: "#ffd24c",
+                },
+                {
+                  id: "gale_requiem",
+                  name: "II. Tempest Gale Requiem",
+                  subtitle: "CYCLONE STRIDE • 18m MAP-WIDE RUPEE VACUUM",
+                  icon: "🌪️🎵",
+                  cadence: ["W", "E", "N"],
+                  cadenceBadge: "◄ West • ► East • ▲ North",
+                  costCores: 2,
+                  costRupees: 140,
+                  effectSummary: "+30% Gale Speed, 18.0m Rupee Magnet & Wind-Gust Knockback (45s)!",
+                  desc: "Conjures a 45-second cyclone aura that boosts movement speed by +30%, vacuums Rupees & Hearts from 18.0m away, and blasts nearby foes backward!",
+                  accent: "#52f296",
+                },
+                {
+                  id: "time_ballad",
+                  name: "III. Ballad of the Time-Ward",
+                  subtitle: "CHRONO-CHIME • 6.0s ZONE TIME-STOP & AEGIS",
+                  icon: "⏳🎵",
+                  cadence: ["E", "S", "W"],
+                  cadenceBadge: "► East • ▼ South • ◄ West",
+                  costCores: 3,
+                  costRupees: 200,
+                  effectSummary: "Freezes All Zone Monsters for 6.0s, Resets Cooldowns & -30% DMG Taken (45s)!",
+                  desc: "Strikes the Chrono-Chime to freeze all monsters in the zone for 6.0 seconds, reset all weapon cooldowns, and grant -30% incoming damage for 45s!",
+                  accent: "#7ee8ff",
+                },
+                {
+                  id: "harvest_serenade",
+                  name: "IV. Serenade of the Golden Harvest",
+                  subtitle: "GAIA RESONANCE • INSTANT REGROWTH & SPOILS",
+                  icon: "🌾🎵",
+                  cadence: ["S", "W", "E"],
+                  cadenceBadge: "▼ South • ◄ West • ► East",
+                  costCores: 4,
+                  costRupees: 260,
+                  effectSummary: "Regrows All Zone Bushes & Pots, +30 Rupees, +1 All Herbs & +50% Rupee Value!",
+                  desc: "Awakens the earth to regrow all chopped bushes & broken clay pots in the zone, spawn +30 Rupees, harvest +1 of every Herb, and boost Rupee value +50%!",
+                  accent: "#d99eff",
+                },
+              ];
+
+              const noteLabels: Record<LyreNoteId, { symbol: string; label: string; color: string }> = {
+                N: { symbol: "▲", label: "▲ Sky (E5)", color: "#ffd24c" },
+                W: { symbol: "◄", label: "◄ Gale (C5)", color: "#52f296" },
+                E: { symbol: "►", label: "► Dawn (D5)", color: "#7ee8ff" },
+                S: { symbol: "▼", label: "▼ Earth (A4)", color: "#d99eff" },
+              };
+
+              const handleTapLyreNote = (note: LyreNoteId) => {
+                playLyreScaleNote(note);
+                const nextSeq = [...lyreNoteSequence, note].slice(-3);
+                setLyreNoteSequence(nextSeq);
+                if (nextSeq.length === 3) {
+                  const matched = songCatalog.find(
+                    (s) =>
+                      unlocked.includes(s.id) &&
+                      s.cadence[0] === nextSeq[0] &&
+                      s.cadence[1] === nextSeq[1] &&
+                      s.cadence[2] === nextSeq[2]
+                  );
+                  if (matched) {
+                    setTimeout(() => {
+                      unlockOrPerformSong(matched.id);
+                      setLyreNoteSequence([]);
+                    }, 180);
+                  }
+                }
+              };
+
+              return (
+                <>
+                  {/* INTERACTIVE 4-NOTE RUNIC SCALE PAD */}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: "10px",
+                      padding: "10px 14px",
+                      marginBottom: "14px",
+                      borderRadius: "10px",
+                      background: "rgba(10, 18, 32, 0.88)",
+                      border: "1px solid rgba(255, 210, 76, 0.35)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <span
+                        style={{
+                          fontSize: "0.78rem",
+                          fontWeight: 900,
+                          color: "#ffe694",
+                          marginRight: "4px",
+                        }}
+                      >
+                        🎼 LIVE LYRE SCALE PAD:
+                      </span>
+                      {(["N", "W", "E", "S"] as LyreNoteId[]).map((nt) => (
+                        <button
+                          key={nt}
+                          type="button"
+                          onClick={() => handleTapLyreNote(nt)}
+                          className="char-equip-btn"
+                          style={{
+                            borderColor: noteLabels[nt].color,
+                            color: noteLabels[nt].color,
+                            background: "rgba(18, 28, 46, 0.9)",
+                            fontWeight: 800,
+                            padding: "5px 12px",
+                          }}
+                        >
+                          {noteLabels[nt].label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontSize: "0.74rem", color: "#9eb4d0", fontWeight: 700 }}>
+                        Last 3 Notes:
+                      </span>
+                      <span
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: "6px",
+                          background: "rgba(255, 255, 255, 0.06)",
+                          border: "1px solid rgba(255, 255, 255, 0.14)",
+                          fontWeight: 900,
+                          color: "#ffffff",
+                          minWidth: "90px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {lyreNoteSequence.length > 0
+                          ? lyreNoteSequence.map((n) => noteLabels[n].symbol).join(" • ")
+                          : "— • — • —"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 4 SACRED MELODIES GRID */}
+                  <div
+                    className="shop-items-grid"
+                    style={{ gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}
+                  >
+                    {songCatalog.map((sg) => {
+                      const isUnlocked = unlocked.includes(sg.id);
+                      const isActive =
+                        hero.activeSongAura === sg.id && (hero.songAuraTimer ?? 0) > 0;
+                      const canAfford =
+                        !isUnlocked && cores >= sg.costCores && hero.rupees >= sg.costRupees;
+
+                      return (
+                        <div
+                          key={sg.id}
+                          className={`shop-item-card ${isUnlocked ? "shop-item-owned" : ""}`}
+                          style={{
+                            borderColor: isActive
+                              ? "#4eff91"
+                              : isUnlocked
+                              ? sg.accent
+                              : "rgba(140, 165, 210, 0.3)",
+                            padding: "12px",
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: "0.65rem",
+                                  fontWeight: 800,
+                                  letterSpacing: "0.06em",
+                                  color: sg.accent,
+                                }}
+                              >
+                                {sg.subtitle}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  fontWeight: 800,
+                                  color: isActive ? "#4eff91" : "#ffe694",
+                                }}
+                              >
+                                {isActive
+                                  ? `● AURA ACTIVE (${Math.ceil(hero.songAuraTimer ?? 0)}s)`
+                                  : sg.cadenceBadge}
+                              </span>
+                            </div>
+
+                            <div className="shop-item-top" style={{ marginBottom: "6px" }}>
+                              <span
+                                className="shop-item-name"
+                                style={{ color: "#ffffff", fontSize: "0.94rem" }}
+                              >
+                                {sg.icon} {sg.name}
+                              </span>
+                            </div>
+
+                            <div
+                              style={{
+                                fontSize: "0.74rem",
+                                fontWeight: 800,
+                                color: "#ffe694",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              ✦ Resonance: {sg.effectSummary}
+                            </div>
+
+                            <p
+                              className="shop-item-desc"
+                              style={{ fontSize: "0.72rem", marginBottom: "10px" }}
+                            >
+                              {sg.desc}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={!isUnlocked && !canAfford}
+                            onClick={() => unlockOrPerformSong(sg.id)}
+                            className="shop-buy-btn"
+                            style={{ fontSize: "0.8rem", padding: "8px 12px" }}
+                          >
+                            {isUnlocked
+                              ? `🎵 Perform ${sg.name} (${sg.cadenceBadge})`
+                              : `Learn Melody (${sg.costCores}✦ Cores + ${sg.costRupees} Rupees)`}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>;</strong> or <strong>Esc</strong> anytime to close the Runic Lyre of
+                the Winds.
+              </span>
+              <button
+                type="button"
+                onClick={() => setLyreOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Lyre (;)
               </button>
             </div>
           </div>

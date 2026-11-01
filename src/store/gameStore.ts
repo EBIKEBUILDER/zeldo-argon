@@ -56,6 +56,7 @@ import {
   INITIAL_PORTALS,
   INITIAL_WORLD_RUPEES,
   LOCKED_GATE_POS,
+  LYRE_SHRINE_POS,
   MapPortal,
   MapPropInstance,
   MOUNT_STABLES_POS,
@@ -176,6 +177,14 @@ export type FishId =
   | "reef_snapper"
   | "magma_koi"
   | "golden_sturgeon";
+
+export type SongId =
+  | "sun_hymn"
+  | "gale_requiem"
+  | "time_ballad"
+  | "harvest_serenade";
+
+export type LyreNoteId = "N" | "W" | "E" | "S";
 
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
@@ -305,6 +314,9 @@ export interface HeroState {
   homesteadWings?: HomesteadWingId[];
   fishCaught?: Record<FishId, number>;
   greenhouseTimer?: number;
+  unlockedSongs?: SongId[];
+  activeSongAura?: SongId | "none";
+  songAuraTimer?: number;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -748,6 +760,7 @@ export interface SerializableGameState {
   alchemyOpen: boolean;
   weatherOpen: boolean;
   homesteadOpen: boolean;
+  lyreOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -786,6 +799,10 @@ export interface GameActions {
   setAlchemyOpen: (open: boolean) => void;
   setWeatherOpen: (open: boolean) => void;
   setHomesteadOpen: (open: boolean) => void;
+  setLyreOpen: (open: boolean) => void;
+  unlockOrPerformSong: (song: SongId) => void;
+  playLyreScaleNote: (note: LyreNoteId) => void;
+  grantLyrePlaytestBundle: () => void;
   setWorldWeather: (weather: WeatherId) => void;
   triggerBloodMoonInvasion: () => void;
   upgradeHomesteadWing: (wing: HomesteadWingId) => void;
@@ -1151,6 +1168,9 @@ function createInitialState(
         golden_sturgeon: 0,
       },
       greenhouseTimer: 25.0,
+      unlockedSongs: ["sun_hymn"],
+      activeSongAura: "none",
+      songAuraTimer: 0,
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1369,6 +1389,7 @@ function createInitialState(
     alchemyOpen: false,
     weatherOpen: false,
     homesteadOpen: false,
+    lyreOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -1950,6 +1971,293 @@ export const useGameStore = create<GameStore>((set, get) => ({
       colosseumOpen: open ? false : state.colosseumOpen,
       alchemyOpen: open ? false : state.alchemyOpen,
       weatherOpen: open ? false : state.weatherOpen,
+      lyreOpen: open ? false : state.lyreOpen,
+    }));
+  },
+
+  setLyreOpen: (open: boolean) => {
+    set((state) => ({
+      lyreOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
+      weatherOpen: open ? false : state.weatherOpen,
+      homesteadOpen: open ? false : state.homesteadOpen,
+    }));
+  },
+
+  playLyreScaleNote: (note: LyreNoteId) => {
+    const NOTE_FREQS: Record<LyreNoteId, number> = {
+      N: 659.25, // E5 (Sky)
+      W: 523.25, // C5 (West Wind)
+      E: 587.33, // D5 (Dawn)
+      S: 440.0, // A4 (Earth)
+    };
+    soundEngine.unlock();
+    soundEngine.playLyreNote(NOTE_FREQS[note]);
+  },
+
+  unlockOrPerformSong: (song: SongId) => {
+    const state = get();
+    const unlocked = [...(state.hero.unlockedSongs ?? ["sun_hymn"])];
+    const SONG_META: Record<
+      SongId,
+      {
+        name: string;
+        cores: number;
+        rupees: number;
+        melodyFreqs: number[];
+        bannerTitle: string;
+        bannerSub: string;
+      }
+    > = {
+      sun_hymn: {
+        name: "Hymn of the Sun-Crown",
+        cores: 0,
+        rupees: 0,
+        melodyFreqs: [659.25, 587.33, 659.25, 880.0],
+        bannerTitle: "🎵 Performed: Hymn of the Sun-Crown! (+4 Hearts, +50 MP & Solar Sear!)",
+        bannerSub:
+          "Radiant sunlight healed +4 Hearts & +50 MP, seared nearby monsters for 3 DMG + Stun, and granted 45s Sun-Crown Aura!",
+      },
+      gale_requiem: {
+        name: "Tempest Gale Requiem",
+        cores: 2,
+        rupees: 140,
+        melodyFreqs: [523.25, 587.33, 659.25, 783.99],
+        bannerTitle: "🎵 Performed: Tempest Gale Requiem! (+30% Speed & 18m Rupee Cyclone!)",
+        bannerSub:
+          "Summoned a 45s Cyclone Aura: +30% Gale Stride Speed, map-wide 18m Rupee/Heart Magnetism & wind-blast knockback!",
+      },
+      time_ballad: {
+        name: "Ballad of the Time-Ward",
+        cores: 3,
+        rupees: 200,
+        melodyFreqs: [587.33, 440.0, 523.25, 659.25],
+        bannerTitle: "🎵 Performed: Ballad of the Time-Ward! (6.0s Zone Time-Stop & -30% DMG!)",
+        bannerSub:
+          "Chrono-Chime froze all monsters in the zone for 6.0s, reset weapon cooldowns, and granted 45s Time-Ward (-30% DMG Taken)!",
+      },
+      harvest_serenade: {
+        name: "Serenade of the Golden Harvest",
+        cores: 4,
+        rupees: 260,
+        melodyFreqs: [440.0, 523.25, 587.33, 698.46],
+        bannerTitle: "🎵 Performed: Serenade of the Golden Harvest! (Bushes/Pots Regrown + Spoils!)",
+        bannerSub:
+          "Instantly regrew all zone bushes & pots, spawned +30 Rupees, harvested +1 of every Biome Herb & granted +50% Rupee Spoils (45s)!",
+      },
+    };
+
+    const meta = SONG_META[song];
+    if (!unlocked.includes(song)) {
+      const cores = state.hero.monsterCores ?? 0;
+      if (cores < meta.cores || state.hero.rupees < meta.rupees) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: "Not Enough Cores or Rupees to Learn Melody!",
+            subtext: `Learning ${meta.name} requires ${meta.cores} Monster Cores and ${meta.rupees} Rupees.`,
+            timer: 3.4,
+          },
+        });
+        return;
+      }
+      unlocked.push(song);
+      soundEngine.unlock();
+      soundEngine.playLyreMelody(meta.melodyFreqs);
+      soundEngine.playVictoryFanfare();
+      set({
+        hero: {
+          ...state.hero,
+          monsterCores: cores - meta.cores,
+          rupees: state.hero.rupees - meta.rupees,
+          unlockedSongs: unlocked,
+          activeSongAura: song,
+          songAuraTimer: 45.0,
+        },
+        banner: {
+          id: Date.now(),
+          text: `🎵 Learned & Performed: ${meta.name}!`,
+          subtext: meta.bannerSub,
+          timer: 4.8,
+        },
+      });
+      return;
+    }
+
+    // Perform already unlocked song!
+    soundEngine.unlock();
+    soundEngine.playLyreMelody(meta.melodyFreqs);
+
+    const nextHero: HeroState = {
+      ...state.hero,
+      unlockedSongs: unlocked,
+      activeSongAura: song,
+      songAuraTimer: 45.0,
+    };
+    const nextEnemies = state.enemies.map((e) => ({ ...e }));
+    const nextRupees = [...state.rupees];
+    let nextCutBushIds = state.cutBushIds;
+    let nextLootedBushIds = state.lootedBushIds;
+    let nextMapProps = state.mapProps;
+
+    if (song === "sun_hymn") {
+      nextHero.hp = Math.min(nextHero.maxHp, nextHero.hp + 8);
+      nextHero.mp = Math.min(nextHero.maxMp, (nextHero.mp ?? 100) + 50);
+      nextHero.chillTimer = 0;
+      for (const e of nextEnemies) {
+        if (e.zone !== state.zone || e.state === "dead") continue;
+        if (Math.hypot(e.x - nextHero.x, e.z - nextHero.z) <= 12.5) {
+          e.provoked = true;
+          e.hitFlashTimer = 0.35;
+          if (e.kind !== "boss") {
+            e.hp = Math.max(1, e.hp - 3);
+            e.stunTimer = Math.max(e.stunTimer, 2.8);
+            if (e.kind !== "turret") {
+              e.state = "stunned";
+              e.stateTimer = Math.max(e.stateTimer, 2.8);
+            }
+          }
+        }
+      }
+    } else if (song === "gale_requiem") {
+      for (const e of nextEnemies) {
+        if (e.zone !== state.zone || e.state === "dead" || e.kind === "boss") continue;
+        const dx = e.x - nextHero.x;
+        const dz = e.z - nextHero.z;
+        const d = Math.hypot(dx, dz);
+        if (d <= 9.5 && d > 0.05) {
+          e.knockbackVx = (dx / d) * 14.0;
+          e.knockbackVz = (dz / d) * 14.0;
+          e.stunTimer = Math.max(e.stunTimer, 1.5);
+          if (e.kind !== "turret") {
+            e.state = "stunned";
+            e.stateTimer = Math.max(e.stateTimer, 1.5);
+          }
+        }
+      }
+    } else if (song === "time_ballad") {
+      nextHero.attackCooldown = 0;
+      nextHero.bowCooldown = 0;
+      nextHero.boomerangCooldown = 0;
+      nextHero.fireRodCooldown = 0;
+      nextHero.hammerCooldown = 0;
+      nextHero.dashCooldown = 0;
+      for (const e of nextEnemies) {
+        if (e.zone !== state.zone || e.state === "dead") continue;
+        e.hitFlashTimer = 0.35;
+        e.stunTimer = Math.max(e.stunTimer, e.kind === "boss" ? 2.5 : 6.0);
+        if (e.kind !== "turret" && e.kind !== "boss") {
+          e.state = "stunned";
+          e.stateTimer = Math.max(e.stateTimer, 6.0);
+        }
+      }
+    } else if (song === "harvest_serenade") {
+      nextCutBushIds = [];
+      nextLootedBushIds = [];
+      nextMapProps = state.mapProps.map((p) =>
+        p.zone === state.zone && (p.prefab === "clay_pot" || p.prefab === "dirt_patch")
+          ? { ...p, smashed: false, dug: false, hasCollider: p.prefab === "clay_pot" }
+          : p
+      );
+      const prevHerbs = nextHero.herbs ?? {
+        sun_lotus: 0,
+        frost_cap: 0,
+        ember_root: 0,
+        starlight_dew: 0,
+      };
+      nextHero.herbs = {
+        sun_lotus: (prevHerbs.sun_lotus ?? 0) + 1,
+        frost_cap: (prevHerbs.frost_cap ?? 0) + 1,
+        ember_root: (prevHerbs.ember_root ?? 0) + 1,
+        starlight_dew: (prevHerbs.starlight_dew ?? 0) + 1,
+      };
+      nextRupees.push(
+        {
+          id: `harvest-song-r1-${Date.now()}`,
+          zone: state.zone,
+          x: nextHero.x - 1.2,
+          z: nextHero.z + 1.2,
+          tier: "red",
+          value: 20,
+          collected: false,
+          spawnBounceTimer: 0.45,
+        },
+        {
+          id: `harvest-song-r2-${Date.now()}`,
+          zone: state.zone,
+          x: nextHero.x + 1.2,
+          z: nextHero.z + 1.2,
+          tier: "blue",
+          value: 5,
+          collected: false,
+          spawnBounceTimer: 0.45,
+        },
+        {
+          id: `harvest-song-r3-${Date.now()}`,
+          zone: state.zone,
+          x: nextHero.x,
+          z: nextHero.z + 1.6,
+          tier: "blue",
+          value: 5,
+          collected: false,
+          spawnBounceTimer: 0.45,
+        }
+      );
+    }
+
+    set({
+      hero: nextHero,
+      enemies: nextEnemies,
+      rupees: nextRupees,
+      cutBushIds: nextCutBushIds,
+      lootedBushIds: nextLootedBushIds,
+      mapProps: nextMapProps,
+      banner: {
+        id: Date.now(),
+        text: meta.bannerTitle,
+        subtext: meta.bannerSub,
+        timer: 4.8,
+      },
+    });
+  },
+
+  grantLyrePlaytestBundle: () => {
+    soundEngine.unlock();
+    soundEngine.playLyreMelody([523.25, 659.25, 783.99, 1046.5]);
+    soundEngine.playVictoryFanfare();
+    set((state) => ({
+      hero: {
+        ...state.hero,
+        hp: state.hero.maxHp,
+        mp: state.hero.maxMp,
+        monsterCores: (state.hero.monsterCores ?? 0) + 10,
+        rupees: state.hero.rupees + 500,
+        unlockedSongs: [
+          "sun_hymn",
+          "gale_requiem",
+          "time_ballad",
+          "harvest_serenade",
+        ],
+        activeSongAura: "gale_requiem",
+        songAuraTimer: 60.0,
+      },
+      banner: {
+        id: Date.now(),
+        text: "🎵 All 4 Sacred Lyre Melodies Unlocked! (+10 Cores & +500 Rupees)",
+        subtext:
+          "Hymn of the Sun-Crown, Tempest Gale Requiem, Ballad of the Time-Ward & Serenade of the Golden Harvest are ready to perform!",
+        timer: 4.8,
+      },
     }));
   },
 
@@ -5330,6 +5638,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const hasHomesteadWing = (w: HomesteadWingId): boolean =>
       Boolean(hero.homesteadWings && hero.homesteadWings.includes(w));
 
+    // Update Active Runic Lyre Song Aura Timer (`songAuraTimer`)
+    if ((hero.songAuraTimer ?? 0) > 0) {
+      hero.songAuraTimer = Math.max(0, (hero.songAuraTimer ?? 0) - dt);
+      if (hero.songAuraTimer <= 0) {
+        hero.activeSongAura = "none";
+      }
+    } else {
+      hero.activeSongAura = "none";
+    }
+    const activeSongAura: SongId | "none" = hero.activeSongAura ?? "none";
+
     // Passive Greenhouse Herb Cultivation (`herb_greenhouse` wing grows +1 random Biome Herb every 25s!)
     if (hasHomesteadWing("herb_greenhouse")) {
       hero.greenhouseTimer = (hero.greenhouseTimer ?? 25.0) - dt;
@@ -5374,7 +5693,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const relicMult = hasRelic("aegis_ankh") ? baseMult * 0.75 : baseMult;
       const steedMult = hero.mountedSteed === "war_drake" ? relicMult * 0.7 : relicMult;
       const elixirMult = activeElixir === "aegis_tonic" ? steedMult * 0.6 : steedMult;
-      return activeWeather === "blizzard" ? elixirMult * 0.75 : elixirMult;
+      const songMult = activeSongAura === "time_ballad" ? elixirMult * 0.7 : elixirMult;
+      return activeWeather === "blizzard" ? songMult * 0.75 : songMult;
     };
 
     // Helper: check if hero died and auto-revive with Bottled Fairy OR Immortal Phoenix Ankh (`aegis_ankh`)!
@@ -7083,6 +7403,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         : 1.0;
     const dashSpeedMult = isDashing ? 2.25 : 1.0;
     const elixirSpeedMult = activeElixir === "gale_nectar" ? 1.3 : 1.0;
+    const songSpeedMult = activeSongAura === "gale_requiem" ? 1.3 : 1.0;
     const bootsMultiplier =
       (hero.equippedBoots === "swift_boots"
         ? 1.25
@@ -7094,6 +7415,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       companionSpeedMult *
       mountSpeedMult *
       elixirSpeedMult *
+      songSpeedMult *
       dashSpeedMult;
 
     const initialGatePassable =
@@ -14099,13 +14421,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     // 12. Rupee & Recovery Heart Magnet & Pickup (waits until initial pop-up bounce settles so player sees drops!)
-    const magnetRange = hero.activeCompanion === "gold_sprite" ? 8.5 : 2.6;
-    const magnetSpeed = hero.activeCompanion === "gold_sprite" ? 12.5 : 7.5;
+    const magnetRange =
+      activeSongAura === "gale_requiem"
+        ? 18.0
+        : hero.activeCompanion === "gold_sprite"
+        ? 8.5
+        : 2.6;
+    const magnetSpeed =
+      activeSongAura === "gale_requiem"
+        ? 19.0
+        : hero.activeCompanion === "gold_sprite"
+        ? 12.5
+        : 7.5;
     const rupeeValueMult =
       1 +
       (hero.activeCompanion === "gold_sprite" ? 0.5 : 0) +
       (hasRelic("greed_crown") ? 0.5 : 0) +
       (hasHomesteadWing("trophy_vault") ? 0.25 : 0) +
+      (activeSongAura === "harvest_serenade" ? 0.5 : 0) +
       (activeWeather === "starfall" ? 0.5 : 0) +
       (activeWeather === "blood_moon" ? 1.0 : 0);
 
@@ -14660,6 +14993,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Hero's Homestead Manor, Boss Trophy Hall & 3D Fishing Pond — Press [F] or [ \\ ] to Enter Manor & Cast Fishing Line!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(LYRE_SHRINE_POS.x - hero.x, LYRE_SHRINE_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Bardsong Resonance Pavilion & Runic Lyre Shrine — Press [F] or [ ; ] to Perform the 4 Sacred Melodies!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -14683,6 +15022,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let alchemyOpen = state.alchemyOpen;
     let weatherOpen = state.weatherOpen;
     let homesteadOpen = state.homesteadOpen;
+    let lyreOpen = state.lyreOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -14802,6 +15142,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       homesteadOpen = true;
+      lyreOpen = false;
+      weatherOpen = false;
+      alchemyOpen = false;
+      colosseumOpen = false;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(LYRE_SHRINE_POS.x - hero.x, LYRE_SHRINE_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      lyreOpen = true;
+      homesteadOpen = false;
       weatherOpen = false;
       alchemyOpen = false;
       colosseumOpen = false;
@@ -15055,6 +15413,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       alchemyOpen,
       weatherOpen,
       homesteadOpen,
+      lyreOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

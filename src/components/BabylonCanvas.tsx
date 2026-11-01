@@ -70,6 +70,7 @@ import {
   HOLLOW_VICTORY_CHEST_POS,
   HOMESTEAD_POS,
   LOCKED_GATE_POS,
+  LYRE_SHRINE_POS,
   MapPortal,
   MapPropInstance,
   MOUNT_STABLES_POS,
@@ -6356,6 +6357,109 @@ export default function BabylonCanvas() {
     homesteadGroundHalo.isPickable = false;
     homesteadGroundHalo.parent = homesteadManorNode;
 
+    // 1j. Overworld Bardsong Resonance Pavilion & Floating Runic Lyre Shrine (`LYRE_SHRINE_POS = -18.2, -13.5`)
+    const lyreShrineNode = new TransformNode("lyreShrineNode", scene);
+    lyreShrineNode.position.set(LYRE_SHRINE_POS.x, 0, LYRE_SHRINE_POS.z);
+
+    const lyreDais = MeshBuilder.CreateCylinder(
+      "lyreDais",
+      { diameterTop: 2.6, diameterBottom: 3.0, height: 0.26, tessellation: 18 },
+      scene
+    );
+    lyreDais.position.set(0, 0.13, 0);
+    lyreDais.material = dgPillarMat;
+    lyreDais.isPickable = false;
+    lyreDais.parent = lyreShrineNode;
+
+    const lyrePedestal = MeshBuilder.CreateCylinder(
+      "lyrePedestal",
+      { diameterTop: 0.68, diameterBottom: 0.88, height: 1.05, tessellation: 12 },
+      scene
+    );
+    lyrePedestal.position.set(0, 0.65, 0);
+    lyrePedestal.material = darkObsidianMat;
+    lyrePedestal.isPickable = false;
+    lyrePedestal.parent = lyreShrineNode;
+
+    const floatingLyreRoot = new TransformNode("floatingLyreRoot", scene);
+    floatingLyreRoot.position.set(0, 2.05, 0);
+    floatingLyreRoot.parent = lyreShrineNode;
+
+    const lyreFrameTorus = MeshBuilder.CreateTorus(
+      "lyreFrameTorus",
+      { diameter: 1.25, thickness: 0.12, tessellation: 24 },
+      scene
+    );
+    lyreFrameTorus.rotation.x = Math.PI / 2;
+    lyreFrameTorus.scaling.set(1.0, 1.0, 1.25);
+    lyreFrameTorus.material = goldKeyMat;
+    lyreFrameTorus.isPickable = false;
+    lyreFrameTorus.parent = floatingLyreRoot;
+
+    for (let sIdx = -1.5; sIdx <= 1.5; sIdx += 1) {
+      const lyreString = MeshBuilder.CreateCylinder(
+        `lyreString-${sIdx}`,
+        { diameter: 0.035, height: 1.15, tessellation: 6 },
+        scene
+      );
+      lyreString.position.set(sIdx * 0.18, 0, 0);
+      lyreString.material = stormBoltMat;
+      lyreString.isPickable = false;
+      lyreString.parent = floatingLyreRoot;
+    }
+
+    const lyreNoteRing = MeshBuilder.CreateTorus(
+      "lyreNoteRing",
+      { diameter: 2.1, thickness: 0.06, tessellation: 24 },
+      scene
+    );
+    lyreNoteRing.position.set(0, 2.05, 0);
+    lyreNoteRing.material = stormBoltMat;
+    lyreNoteRing.isPickable = false;
+    lyreNoteRing.parent = lyreShrineNode;
+
+    const lyreGroundHalo = MeshBuilder.CreateTorus(
+      "lyreGroundHalo",
+      { diameter: 3.3, thickness: 0.08, tessellation: 28 },
+      scene
+    );
+    lyreGroundHalo.position.set(0, 0.14, 0);
+    lyreGroundHalo.material = goldKeyMat;
+    lyreGroundHalo.isPickable = false;
+    lyreGroundHalo.parent = lyreShrineNode;
+
+    // 3D Hero Active Song Musical Staff & Orbiting Chime Notes (`heroSongAuraNode`)
+    const heroSongAuraNode = new TransformNode("heroSongAuraNode", scene);
+    heroSongAuraNode.parent = heroRoot;
+    heroSongAuraNode.setEnabled(false);
+
+    const heroSongStaffRing = MeshBuilder.CreateTorus(
+      "heroSongStaffRing",
+      { diameter: 2.15, thickness: 0.06, tessellation: 28 },
+      scene
+    );
+    heroSongStaffRing.position.set(0, 0.95, 0);
+    heroSongStaffRing.material = goldKeyMat;
+    heroSongStaffRing.isPickable = false;
+    heroSongStaffRing.parent = heroSongAuraNode;
+
+    for (let nIdx = 0; nIdx < 4; nIdx++) {
+      const ang = (nIdx / 4) * Math.PI * 2;
+      const noteChime = MeshBuilder.CreatePolyhedron(
+        `heroSongChime-${nIdx}`,
+        { type: 1, size: 0.16 },
+        scene
+      );
+      noteChime.position.set(
+        Math.cos(ang) * 1.08,
+        1.05 + (nIdx % 2) * 0.24,
+        Math.sin(ang) * 1.08
+      );
+      noteChime.material = nIdx % 2 === 0 ? goldKeyMat : stormBoltMat;
+      noteChime.isPickable = false;
+      noteChime.parent = heroSongAuraNode;
+    }
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -9951,6 +10055,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // ; (Semicolon) toggles Bardsong Master Orpheus's Runic Lyre & 4 Sacred Melodies Modal
+      if (code === "Semicolon" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setLyreOpen(!store.lyreOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -11016,7 +11127,7 @@ export default function BabylonCanvas() {
         smithArmNode.rotation.x = Math.sin(t * 6.5) * 0.55;
       }
 
-      // Sync 3D Abyssal Rift Obelisk, Spirit Companion Sanctuary, Royal Stables, Colosseum War-Gate, Alchemy Cauldron, Weather Obelisk & Hero's Homestead (Map 1 Overworld)
+      // Sync 3D Abyssal Rift Obelisk, Spirit Companion Sanctuary, Royal Stables, Colosseum War-Gate, Alchemy Cauldron, Weather Obelisk, Hero's Homestead & Runic Lyre Shrine (Map 1 Overworld)
       riftEntranceNode.setEnabled(inOverworld);
       companionAltarNode.setEnabled(inOverworld);
       mountStablesNode.setEnabled(inOverworld);
@@ -11024,6 +11135,7 @@ export default function BabylonCanvas() {
       alchemyCauldronNode.setEnabled(inOverworld);
       weatherObeliskNode.setEnabled(inOverworld);
       homesteadManorNode.setEnabled(inOverworld);
+      lyreShrineNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -11138,6 +11250,30 @@ export default function BabylonCanvas() {
         );
         homesteadLeapingFish.rotation.y = -fishPhase;
         homesteadGroundHalo.rotation.y = t * 1.4;
+
+        const lyreGroundY = sampleTerrainHeight(
+          activeCells,
+          LYRE_SHRINE_POS.x,
+          LYRE_SHRINE_POS.z
+        );
+        lyreShrineNode.position.set(
+          LYRE_SHRINE_POS.x,
+          lyreGroundY,
+          LYRE_SHRINE_POS.z
+        );
+        floatingLyreRoot.rotation.y = t * 2.1;
+        floatingLyreRoot.position.y = 2.05 + Math.sin(t * 3.8) * 0.14;
+        lyreNoteRing.rotation.y = -t * 2.7;
+        lyreNoteRing.rotation.z = Math.sin(t * 2.2) * 0.28;
+        lyreGroundHalo.rotation.y = t * 1.6;
+      }
+
+      // Sync 3D Hero Active Song Musical Staff & Chime Aura (`heroSongAuraNode`)
+      const hasSongAura = (snap.hero.songAuraTimer ?? 0) > 0 && !snap.editorMode;
+      heroSongAuraNode.setEnabled(hasSongAura);
+      if (hasSongAura) {
+        heroSongAuraNode.rotation.y = t * 3.2;
+        heroSongStaffRing.position.y = 0.95 + Math.sin(t * 4.5) * 0.12;
       }
 
       // Sync 3D Active Spirit Companion Orbiting / Following the Hero (`snap.hero.activeCompanion`)

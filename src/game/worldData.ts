@@ -310,6 +310,12 @@ export const HOMESTEAD_POS = {
   z: -31.8,
 };
 
+// Map 1 Bardsong Resonance Pavilion & Floating Runic Lyre Shrine (Perform 4 Sacred Melodies on the Runic Lyre of the Winds!)
+export const LYRE_SHRINE_POS = {
+  x: -18.2,
+  z: -13.5,
+};
+
 // Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,
