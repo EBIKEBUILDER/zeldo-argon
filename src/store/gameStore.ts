@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   ALCHEMY_CAULDRON_POS,
+  ARTIFICER_BENCH_POS,
   ATOLL_PEARL_CHEST_POS,
   ATOLL_VICTORY_CHEST_POS,
   BIG_KEY_CHEST_POS,
@@ -194,6 +195,13 @@ export type MaskId =
   | "sylvan_mask"
   | "sovereign_mask";
 
+export type ConstructId =
+  | "none"
+  | "flame_turret"
+  | "tesla_pylon"
+  | "clockwork_golem"
+  | "aether_beacon";
+
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
   propId?: string;
@@ -328,6 +336,14 @@ export interface HeroState {
   equippedMask?: MaskId;
   unlockedMasks?: MaskId[];
   maskPulseTimer?: number;
+  unlockedConstructs?: Exclude<ConstructId, "none">[];
+  selectedConstruct?: Exclude<ConstructId, "none">;
+  activeConstruct?: ConstructId;
+  constructTimer?: number;
+  constructPulseTimer?: number;
+  constructX?: number;
+  constructZ?: number;
+  constructFacing?: number;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -773,6 +789,7 @@ export interface SerializableGameState {
   homesteadOpen: boolean;
   lyreOpen: boolean;
   maskOpen: boolean;
+  artificerOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -813,6 +830,10 @@ export interface GameActions {
   setHomesteadOpen: (open: boolean) => void;
   setLyreOpen: (open: boolean) => void;
   setMaskOpen: (open: boolean) => void;
+  setArtificerOpen: (open: boolean) => void;
+  unlockOrDeployConstruct: (construct: Exclude<ConstructId, "none">) => void;
+  quickDeployConstruct: () => void;
+  grantArtificerPlaytestBundle: () => void;
   unlockOrEquipMask: (mask: MaskId) => void;
   grantMaskPlaytestBundle: () => void;
   unlockOrPerformSong: (song: SongId) => void;
@@ -1189,6 +1210,14 @@ function createInitialState(
       equippedMask: "none",
       unlockedMasks: ["none", "stoneborn_mask"],
       maskPulseTimer: 2.6,
+      unlockedConstructs: ["flame_turret"],
+      selectedConstruct: "flame_turret",
+      activeConstruct: "none",
+      constructTimer: 0,
+      constructPulseTimer: 0,
+      constructX: 0,
+      constructZ: 0,
+      constructFacing: 0,
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1409,6 +1438,7 @@ function createInitialState(
     homesteadOpen: false,
     lyreOpen: false,
     maskOpen: false,
+    artificerOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -2029,7 +2059,170 @@ export const useGameStore = create<GameStore>((set, get) => ({
       weatherOpen: open ? false : state.weatherOpen,
       homesteadOpen: open ? false : state.homesteadOpen,
       lyreOpen: open ? false : state.lyreOpen,
+      artificerOpen: open ? false : state.artificerOpen,
     }));
+  },
+
+  setArtificerOpen: (open: boolean) => {
+    set((state) => ({
+      artificerOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
+      weatherOpen: open ? false : state.weatherOpen,
+      homesteadOpen: open ? false : state.homesteadOpen,
+      lyreOpen: open ? false : state.lyreOpen,
+      maskOpen: open ? false : state.maskOpen,
+    }));
+  },
+
+  unlockOrDeployConstruct: (construct: Exclude<ConstructId, "none">) => {
+    const state = get();
+    const unlocked = [...(state.hero.unlockedConstructs ?? ["flame_turret"])];
+    const CONSTRUCT_META: Record<
+      Exclude<ConstructId, "none">,
+      {
+        name: string;
+        cores: number;
+        rupees: number;
+        desc: string;
+      }
+    > = {
+      flame_turret: {
+        name: "Ignis Flame-Spitter Turret",
+        cores: 0,
+        rupees: 0,
+        desc: "Deployed for 45s! Swivels toward nearby foes & unlit braziers within 11.5m and fires 2 DMG Fireballs every 1.25s!",
+      },
+      tesla_pylon: {
+        name: "Aether-Coil Shock Pylon",
+        cores: 2,
+        rupees: 160,
+        desc: "Deployed for 45s! Zaps up to 4 foes within 8.0m with 2 DMG + 1.6s Shock Stun every 1.55s & recharges +6 MP!",
+      },
+      clockwork_golem: {
+        name: "Titan-Gear Clockwork Golem",
+        cores: 3,
+        rupees: 240,
+        desc: "Deployed for 45s! Autonomous bronze juggernaut marches after foes (3 DMG Slam + 1.4s Stun) & grants -25% Hero Damage Taken!",
+      },
+      aether_beacon: {
+        name: "Sovereign Sanctuary & Loot-Magnet Beacon",
+        cores: 4,
+        rupees: 320,
+        desc: "Deployed for 45s! Grants +1 Sword & Bow DMG, heals +1 HP & +8 MP every 1.5s, and vacuums Rupees & Hearts across 22.0m!",
+      },
+    };
+
+    const meta = CONSTRUCT_META[construct];
+    const isUnlocked = unlocked.includes(construct);
+    let nextCores = state.hero.monsterCores ?? 0;
+    let nextRupees = state.hero.rupees;
+
+    if (!isUnlocked) {
+      if (nextCores < meta.cores || nextRupees < meta.rupees) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: "Not Enough Cores or Rupees to Craft Echo Blueprint!",
+            subtext: `Crafting ${meta.name} requires ${meta.cores} Monster Cores and ${meta.rupees} Rupees.`,
+            timer: 3.5,
+          },
+        });
+        return;
+      }
+      nextCores -= meta.cores;
+      nextRupees -= meta.rupees;
+      unlocked.push(construct);
+      soundEngine.unlock();
+      soundEngine.playVictoryFanfare();
+    } else {
+      soundEngine.unlock();
+      soundEngine.playCrystalSwitch(true);
+      soundEngine.playSecretSolve();
+    }
+
+    const deployX = state.hero.x + Math.sin(state.hero.facing) * 1.85;
+    const deployZ = state.hero.z + Math.cos(state.hero.facing) * 1.85;
+
+    set({
+      hero: {
+        ...state.hero,
+        monsterCores: nextCores,
+        rupees: nextRupees,
+        unlockedConstructs: unlocked,
+        selectedConstruct: construct,
+        activeConstruct: construct,
+        constructTimer: 45.0,
+        constructPulseTimer: 0.45,
+        constructX: deployX,
+        constructZ: deployZ,
+        constructFacing: state.hero.facing,
+      },
+      banner: {
+        id: Date.now(),
+        text: isUnlocked
+          ? `⚙️ Deployed Magitech Construct: ${meta.name}!`
+          : `⚙️ Crafted & Deployed Blueprint: ${meta.name}!`,
+        subtext: meta.desc,
+        timer: 4.6,
+      },
+    });
+  },
+
+  quickDeployConstruct: () => {
+    const state = get();
+    const target = state.hero.selectedConstruct ?? "flame_turret";
+    get().unlockOrDeployConstruct(target);
+  },
+
+  grantArtificerPlaytestBundle: () => {
+    soundEngine.unlock();
+    soundEngine.playVictoryFanfare();
+    soundEngine.playFairyRevive();
+    set((state) => {
+      const deployX = state.hero.x + Math.sin(state.hero.facing) * 1.85;
+      const deployZ = state.hero.z + Math.cos(state.hero.facing) * 1.85;
+      return {
+        hero: {
+          ...state.hero,
+          maxHp: Math.min(40, state.hero.maxHp + 2),
+          hp: Math.min(40, state.hero.maxHp + 2),
+          maxMp: (state.hero.maxMp || 100) + 25,
+          mp: (state.hero.maxMp || 100) + 25,
+          monsterCores: (state.hero.monsterCores ?? 0) + 12,
+          rupees: state.hero.rupees + 600,
+          unlockedConstructs: [
+            "flame_turret",
+            "tesla_pylon",
+            "clockwork_golem",
+            "aether_beacon",
+          ],
+          selectedConstruct: "clockwork_golem",
+          activeConstruct: "clockwork_golem",
+          constructTimer: 45.0,
+          constructPulseTimer: 0.35,
+          constructX: deployX,
+          constructZ: deployZ,
+          constructFacing: state.hero.facing,
+        },
+        banner: {
+          id: Date.now(),
+          text: "⚙️ All 4 Magitech Automaton Blueprints Unlocked! (+1 Heart, +25 MP, +12 Cores & +600 Rupees)",
+          subtext:
+            "Titan-Gear Clockwork Golem deployed! Click any blueprint in the Artificer Foundry [.] to deploy it onto the battlefield!",
+          timer: 4.8,
+        },
+      };
+    });
   },
 
   unlockOrEquipMask: (mask: MaskId) => {
@@ -5847,6 +6040,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const activeSongAura: SongId | "none" = hero.activeSongAura ?? "none";
     const equippedMask: MaskId = hero.equippedMask ?? "none";
 
+    // Update Active Deployed Magitech Construct Timer (`constructTimer`)
+    if ((hero.constructTimer ?? 0) > 0) {
+      hero.constructTimer = Math.max(0, (hero.constructTimer ?? 0) - dt);
+      if (hero.constructTimer <= 0) {
+        hero.activeConstruct = "none";
+      }
+    } else {
+      hero.activeConstruct = "none";
+    }
+    const activeConstruct: ConstructId = hero.activeConstruct ?? "none";
+
     // Passive Greenhouse Herb Cultivation (`herb_greenhouse` wing grows +1 random Biome Herb every 25s!)
     if (hasHomesteadWing("herb_greenhouse")) {
       hero.greenhouseTimer = (hero.greenhouseTimer ?? 25.0) - dt;
@@ -5894,7 +6098,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const elixirMult = activeElixir === "aegis_tonic" ? steedMult * 0.6 : steedMult;
       const songMult = activeSongAura === "time_ballad" ? elixirMult * 0.7 : elixirMult;
       const maskMult = equippedMask === "stoneborn_mask" ? songMult * 0.5 : songMult;
-      return activeWeather === "blizzard" ? maskMult * 0.75 : maskMult;
+      const golemMult = activeConstruct === "clockwork_golem" ? maskMult * 0.75 : maskMult;
+      return activeWeather === "blizzard" ? golemMult * 0.75 : golemMult;
     };
 
     // Helper: check if hero died and auto-revive with Bottled Fairy OR Immortal Phoenix Ankh (`aegis_ankh`)!
@@ -7517,7 +7722,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           (bRune === 2 ? 3 : 2) +
           (activeWeather === "blizzard" ? 1 : 0) +
           (hasHomesteadWing("trophy_vault") ? 1 : 0) +
-          (equippedMask === "tidefin_mask" ? 1 : 0);
+          (equippedMask === "tidefin_mask" ? 1 : 0) +
+          (activeConstruct === "aether_beacon" ? 1 : 0);
         spreadAngles.forEach((offsetAngle, idx) => {
           const shotAngle = hero.facing + offsetAngle;
           arrows.push({
@@ -8081,6 +8287,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.heldObject = null;
           hero.pushTimer = 0;
           hero.pushTargetPropId = null;
+          hero.activeConstruct = "none";
+          hero.constructTimer = 0;
           boomerang = null;
           hookshot = null;
           thrownObjects = [];
@@ -12487,6 +12695,225 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // 9b-5. Artificer's Deployed 3D Magitech Construct AI (`hero.activeConstruct`)
+    if (activeConstruct !== "none" && (hero.constructTimer ?? 0) > 0 && phase === "playing") {
+      let cx = hero.constructX ?? hero.x;
+      let cz = hero.constructZ ?? hero.z;
+      let cFacing = hero.constructFacing ?? hero.facing;
+
+      // If `clockwork_golem` is deployed, it marches autonomously toward the nearest enemy (or follows near the Hero)!
+      if (activeConstruct === "clockwork_golem") {
+        let marchTarget: EnemyState | null = null;
+        let bestMarchDist = 14.0;
+        for (const e of enemies) {
+          if (
+            e.zone !== zone ||
+            e.state === "dead" ||
+            (e.kind === "burrower" && e.burrowed) ||
+            isBossRoomSealed(e)
+          ) {
+            continue;
+          }
+          const d = Math.hypot(e.x - cx, e.z - cz);
+          if (d < bestMarchDist) {
+            bestMarchDist = d;
+            marchTarget = e;
+          }
+        }
+        const goalX = marchTarget ? marchTarget.x : hero.x + Math.sin(hero.facing + 0.8) * 2.0;
+        const goalZ = marchTarget ? marchTarget.z : hero.z + Math.cos(hero.facing + 0.8) * 2.0;
+        const dx = goalX - cx;
+        const dz = goalZ - cz;
+        const distGoal = Math.hypot(dx, dz);
+        const minStopDist = marchTarget ? 1.15 : 0.45;
+        if (distGoal > minStopDist) {
+          cFacing = Math.atan2(dx, dz);
+          const step = Math.min(distGoal - minStopDist, 5.4 * dt);
+          cx += (dx / distGoal) * step;
+          cz += (dz / distGoal) * step;
+        }
+      }
+
+      hero.constructPulseTimer = (hero.constructPulseTimer ?? 1.0) - dt;
+      if (hero.constructPulseTimer <= 0) {
+        if (activeConstruct === "flame_turret") {
+          hero.constructPulseTimer = 1.25;
+          let turretTarget: EnemyState | null = null;
+          let bestDist = 11.5;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - cx, e.z - cz);
+            if (d <= bestDist) {
+              bestDist = d;
+              turretTarget = e;
+            }
+          }
+          if (turretTarget) {
+            const shotAngle = Math.atan2(turretTarget.x - cx, turretTarget.z - cz);
+            cFacing = shotAngle;
+            soundEngine.playFireballShoot(false);
+            fireballs.push({
+              id: `turret-fb-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+              zone,
+              x: cx + Math.sin(shotAngle) * 0.75,
+              z: cz + Math.cos(shotAngle) * 0.75,
+              angle: shotAngle,
+              speed: 15.0,
+              damage: 2,
+              radius: 0.48,
+              isCharged: false,
+              lifeTimer: 1.35,
+            });
+          } else {
+            const unlitTorch = mapProps.find(
+              (p) =>
+                p.zone === zone &&
+                p.prefab === "wall_torch" &&
+                p.lit === false &&
+                Math.hypot(p.x - cx, p.z - cz) <= 9.0
+            );
+            if (unlitTorch) {
+              const shotAngle = Math.atan2(unlitTorch.x - cx, unlitTorch.z - cz);
+              cFacing = shotAngle;
+              soundEngine.playFireballShoot(false);
+              fireballs.push({
+                id: `turret-torch-fb-${stats.elapsedSeconds.toFixed(3)}`,
+                zone,
+                x: cx + Math.sin(shotAngle) * 0.75,
+                z: cz + Math.cos(shotAngle) * 0.75,
+                angle: shotAngle,
+                speed: 15.0,
+                damage: 1,
+                radius: 0.46,
+                isCharged: false,
+                lifeTimer: 1.2,
+              });
+            }
+          }
+        } else if (activeConstruct === "tesla_pylon") {
+          hero.constructPulseTimer = 1.55;
+          let zappedCount = 0;
+          for (const e of enemies) {
+            if (zappedCount >= 4) break;
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - cx, e.z - cz);
+            if (d <= 8.0) {
+              zappedCount++;
+              e.provoked = true;
+              if (e.kind !== "boss") {
+                e.hp -= 2;
+                e.hitFlashTimer = 0.28;
+                e.stunTimer = Math.max(e.stunTimer, 1.6);
+                if (e.kind !== "turret") {
+                  e.state = "stunned";
+                  e.stateTimer = Math.max(e.stateTimer, 1.6);
+                }
+                if (e.hp <= 0) {
+                  handleEnemyDeath(e);
+                }
+              } else if (flags.bossState === "STUNNED") {
+                e.hp -= 2;
+                e.hitFlashTimer = 0.28;
+                if (e.hp <= 0) {
+                  handleEnemyDeath(e);
+                }
+              }
+              lightningArcs.push({
+                id: `tesla-pylon-${e.id}-${stats.elapsedSeconds.toFixed(3)}`,
+                zone,
+                x1: cx,
+                z1: cz,
+                x2: e.x,
+                z2: e.z,
+                timer: 0.3,
+                maxTimer: 0.3,
+              });
+            }
+          }
+          if (zappedCount > 0) {
+            soundEngine.playElectricShock();
+          }
+          hero.mp = Math.min(hero.maxMp, (hero.mp ?? 0) + 6);
+        } else if (activeConstruct === "clockwork_golem") {
+          hero.constructPulseTimer = 1.1;
+          let slammedAny = false;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - cx, e.z - cz);
+            if (d <= 2.45) {
+              slammedAny = true;
+              e.provoked = true;
+              if (e.kind !== "boss") {
+                e.shieldArmor = "none";
+                e.hp -= 3;
+                e.hitFlashTimer = 0.3;
+                e.stunTimer = Math.max(e.stunTimer, 1.4);
+                if (e.kind !== "turret") {
+                  e.state = "stunned";
+                  e.stateTimer = Math.max(e.stateTimer, 1.4);
+                  const pushAngle = Math.atan2(e.x - cx, e.z - cz);
+                  e.knockbackVx = Math.sin(pushAngle) * 11.5;
+                  e.knockbackVz = Math.cos(pushAngle) * 11.5;
+                }
+                if (e.hp <= 0) {
+                  handleEnemyDeath(e);
+                }
+              } else if (flags.bossState === "STUNNED") {
+                e.hp -= 3;
+                e.hitFlashTimer = 0.3;
+                if (e.hp <= 0) {
+                  handleEnemyDeath(e);
+                }
+              }
+            }
+          }
+          if (slammedAny) {
+            soundEngine.playPegPound();
+            hammerShockwaves.push({
+              id: `golem-sw-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: cx,
+              z: cz,
+              timer: 0.32,
+              maxTimer: 0.32,
+              maxRadius: 2.5,
+            });
+          }
+        } else if (activeConstruct === "aether_beacon") {
+          hero.constructPulseTimer = 1.5;
+          if (hero.hp < hero.maxHp) {
+            hero.hp = Math.min(hero.maxHp, hero.hp + 1);
+          }
+          hero.mp = Math.min(hero.maxMp, (hero.mp ?? 0) + 8);
+        }
+      }
+
+      hero.constructX = cx;
+      hero.constructZ = cz;
+      hero.constructFacing = cFacing;
+    }
+
     // 9c. Update Thrown Clay Pots & Light Rocks in Flight (`thrownObjects`)
     const remainingThrown: ThrownObjectState[] = [];
     for (const obj of thrownObjects) {
@@ -12994,7 +13421,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
               const relicSwordBonus =
                 (hasRelic("berserker_torc") ? 1 : 0) +
                 (activeElixir === "titans_draught" ? 1 : 0) +
-                (equippedMask === "sovereign_mask" ? 1 : 0);
+                (equippedMask === "sovereign_mask" ? 1 : 0) +
+                (activeConstruct === "aether_beacon" ? 1 : 0);
               const critBonus = rollComboCritBonus();
               const strikeDamage =
                 ((hero.swordDamage || 1) + relicSwordBonus) * (isSpin ? 2 : 1) + critBonus;
@@ -14768,13 +15196,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // 12. Rupee & Recovery Heart Magnet & Pickup (waits until initial pop-up bounce settles so player sees drops!)
     const magnetRange =
-      activeSongAura === "gale_requiem"
+      activeConstruct === "aether_beacon"
+        ? 22.0
+        : activeSongAura === "gale_requiem"
         ? 18.0
         : hero.activeCompanion === "gold_sprite"
         ? 8.5
         : 2.6;
     const magnetSpeed =
-      activeSongAura === "gale_requiem"
+      activeConstruct === "aether_beacon" || activeSongAura === "gale_requiem"
         ? 19.0
         : hero.activeCompanion === "gold_sprite"
         ? 12.5
@@ -15351,6 +15781,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Ancient Mask Carver's Totem Shrine — Press [F] or [ ' ] to Carve & Don the 4 Transformation Visages!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(ARTIFICER_BENCH_POS.x - hero.x, ARTIFICER_BENCH_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Artificer's Magitech Foundry & Automaton Workbench — Press [F] or [ . ] to Craft & Deploy 3D Magitech Constructs!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -15376,6 +15812,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let homesteadOpen = state.homesteadOpen;
     let lyreOpen = state.lyreOpen;
     let maskOpen = state.maskOpen;
+    let artificerOpen = state.artificerOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -15531,6 +15968,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       maskOpen = true;
+      artificerOpen = false;
+      lyreOpen = false;
+      homesteadOpen = false;
+      weatherOpen = false;
+      alchemyOpen = false;
+      colosseumOpen = false;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(ARTIFICER_BENCH_POS.x - hero.x, ARTIFICER_BENCH_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      artificerOpen = true;
+      maskOpen = false;
       lyreOpen = false;
       homesteadOpen = false;
       weatherOpen = false;
@@ -15788,6 +16245,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       homesteadOpen,
       lyreOpen,
       maskOpen,
+      artificerOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

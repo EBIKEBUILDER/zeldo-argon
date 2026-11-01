@@ -6,6 +6,7 @@ import {
   BottleContentId,
   ColosseumTierId,
   CompanionId,
+  ConstructId,
   EditorPlaceCategory,
   ElixirId,
   FishId,
@@ -268,6 +269,7 @@ export default function GameOverlay() {
   const homesteadOpen = useGameStore((s) => s.homesteadOpen);
   const lyreOpen = useGameStore((s) => s.lyreOpen);
   const maskOpen = useGameStore((s) => s.maskOpen);
+  const artificerOpen = useGameStore((s) => s.artificerOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -301,6 +303,10 @@ export default function GameOverlay() {
   const setHomesteadOpen = useGameStore((s) => s.setHomesteadOpen);
   const setLyreOpen = useGameStore((s) => s.setLyreOpen);
   const setMaskOpen = useGameStore((s) => s.setMaskOpen);
+  const setArtificerOpen = useGameStore((s) => s.setArtificerOpen);
+  const unlockOrDeployConstruct = useGameStore((s) => s.unlockOrDeployConstruct);
+  const quickDeployConstruct = useGameStore((s) => s.quickDeployConstruct);
+  const grantArtificerPlaytestBundle = useGameStore((s) => s.grantArtificerPlaytestBundle);
   const unlockOrEquipMask = useGameStore((s) => s.unlockOrEquipMask);
   const grantMaskPlaytestBundle = useGameStore((s) => s.grantMaskPlaytestBundle);
   const unlockOrPerformSong = useGameStore((s) => s.unlockOrPerformSong);
@@ -394,6 +400,7 @@ export default function GameOverlay() {
         if (homesteadOpen) setHomesteadOpen(false);
         if (lyreOpen) setLyreOpen(false);
         if (maskOpen) setMaskOpen(false);
+        if (artificerOpen) setArtificerOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -413,6 +420,7 @@ export default function GameOverlay() {
     homesteadOpen,
     lyreOpen,
     maskOpen,
+    artificerOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -427,6 +435,7 @@ export default function GameOverlay() {
     setHomesteadOpen,
     setLyreOpen,
     setMaskOpen,
+    setArtificerOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -1569,7 +1578,30 @@ export default function GameOverlay() {
                   }
                   title="Open Ancient Transformation Masks & Aspect Visages Shrine (Shortcut: ')"
                 >
-                  🎭 Masks ({(hero.unlockedMasks ?? []).length}/4 • &apos;)
+                  🎭 Masks ({(hero.unlockedMasks ?? []).filter((m) => m !== "none").length}/4 • &apos;)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setArtificerOpen(!artificerOpen)}
+                  className={`char-toggle-btn ${
+                    artificerOpen || (hero.constructTimer ?? 0) > 0 ? "active" : ""
+                  }`}
+                  style={
+                    (hero.constructTimer ?? 0) > 0
+                      ? {
+                          borderColor: "rgba(92, 238, 255, 0.92)",
+                          background: "rgba(12, 42, 58, 0.92)",
+                          color: "#9ef6ff",
+                        }
+                      : undefined
+                  }
+                  title="Open Artificer's Magitech Foundry & Deployable 3D Automaton Blueprints (Shortcut: .)"
+                >
+                  ⚙️ Automaton (
+                  {(hero.constructTimer ?? 0) > 0
+                    ? `${Math.ceil(hero.constructTimer ?? 0)}s`
+                    : "."}
+                  )
                 </button>
                 <button
                   type="button"
@@ -7333,6 +7365,330 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Masks (&apos;)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          ARTIFICER'S MAGITECH FOUNDRY & AUTOMATON BLUEPRINTS MODAL [.]
+         ========================================================= */}
+      {phase === "playing" && !editorMode && artificerOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card" style={{ maxWidth: "1060px", width: "95vw" }}>
+            <div className="shop-header">
+              <div>
+                <div
+                  className="shop-pill"
+                  style={{
+                    background: "rgba(82, 236, 255, 0.16)",
+                    borderColor: "rgba(82, 236, 255, 0.55)",
+                    color: "#96f4ff",
+                  }}
+                >
+                  ARTIFICER&apos;S MAGITECH FOUNDRY • 4 DEPLOYABLE 3D AUTOMATON CONSTRUCTS &amp; ECHO BLUEPRINTS
+                </div>
+                <h2 className="shop-title">ARTIFICER&apos;S MAGITECH AUTOMATON &amp; ECHO BLUEPRINTS</h2>
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <div
+                  className="shop-wallet"
+                  style={{
+                    borderColor: "rgba(82, 236, 255, 0.55)",
+                    background: "rgba(12, 38, 52, 0.65)",
+                  }}
+                >
+                  <span className="shop-wallet-label">BLUEPRINTS:</span>
+                  <span className="shop-wallet-val" style={{ color: "#96f4ff" }}>
+                    {(hero.unlockedConstructs ?? ["flame_turret"]).length}/4 ⚙️
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">MONSTER CORES:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ffd875" }}>
+                    {hero.monsterCores ?? 0} ✦
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">RUPEES:</span>
+                  <span className="shop-wallet-val">{hero.rupees}</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+                padding: "10px 14px",
+                marginBottom: "14px",
+                borderRadius: "10px",
+                background: "rgba(12, 32, 46, 0.78)",
+                border: "1px solid rgba(82, 236, 255, 0.35)",
+              }}
+            >
+              <p className="shop-greeting" style={{ margin: 0, flex: "1 1 480px" }}>
+                &ldquo;Draft &amp; deploy <strong>4 Autonomous 3D Magitech Constructs</strong> onto any
+                battlefield for <strong>45 seconds</strong>! Deploy a rotating{" "}
+                <strong>Ignis Flame-Spitter Turret</strong>, a chain-zapping{" "}
+                <strong>Aether-Coil Shock Pylon</strong>, a marching{" "}
+                <strong>Titan-Gear Clockwork Golem</strong>, or a{" "}
+                <strong>Sovereign Sanctuary &amp; 22m Loot-Magnet Beacon</strong>!&rdquo;
+              </p>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={quickDeployConstruct}
+                  className="char-equip-btn"
+                  style={{
+                    background: "linear-gradient(180deg, #2ee6b8 0%, #0d7a62 100%)",
+                    borderColor: "rgba(150, 255, 228, 0.9)",
+                    color: "#04211a",
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Immediately deploy your selected Magitech Construct right in front of you for 45 seconds!"
+                >
+                  ⚡ Quick-Deploy Selected Construct (45s)
+                </button>
+                <button
+                  type="button"
+                  onClick={grantArtificerPlaytestBundle}
+                  className="char-equip-btn"
+                  style={{
+                    background: "linear-gradient(180deg, #38c8ff 0%, #0e6094 100%)",
+                    borderColor: "rgba(162, 236, 255, 0.9)",
+                    color: "#ffffff",
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Playtest Shortcut: Unlock all 4 Magitech Automaton Blueprints + +1 Heart Container + +25 Max MP + +12 Cores + +600 Rupees"
+                >
+                  ★ Playtest: Unlock All 4 Magitech Blueprints
+                </button>
+              </div>
+            </div>
+
+            {(() => {
+              const unlocked = hero.unlockedConstructs ?? ["flame_turret"];
+              const active = hero.activeConstruct ?? "none";
+              const timer = hero.constructTimer ?? 0;
+              const cores = hero.monsterCores ?? 0;
+
+              const constructCatalog: Array<{
+                id: Exclude<ConstructId, "none">;
+                name: string;
+                subtitle: string;
+                icon: string;
+                costCores: number;
+                costRupees: number;
+                traitOne: string;
+                traitTwo: string;
+                desc: string;
+                accent: string;
+              }> = [
+                {
+                  id: "flame_turret",
+                  name: "I. Ignis Flame-Spitter Turret",
+                  subtitle: "ROTATING PYRO-CANNON • AUTO-FIREBALLS & TORCH IGNITION",
+                  icon: "🔥⚙️",
+                  costCores: 0,
+                  costRupees: 0,
+                  traitOne: "Fires 2 DMG Seeking Fireballs Every 1.25s Within 11.5m (45s Duration)",
+                  traitTwo: "Automatically Targets & Lights Unlit Dungeon Braziers Within 9.0m!",
+                  desc: "Deploys a rotating bronze-and-obsidian dragon cannon that locks onto nearby monsters, melts Glacial Ice Armor, and even ignites unlit puzzle torches for you!",
+                  accent: "#ff7847",
+                },
+                {
+                  id: "tesla_pylon",
+                  name: "II. Aether-Coil Shock Pylon",
+                  subtitle: "ARC-TESLA OBELISK • 4-TARGET CHAIN LIGHTNING & MANA",
+                  icon: "⚡⚙️",
+                  costCores: 2,
+                  costRupees: 160,
+                  traitOne: "Zaps Up to 4 Monsters Within 8.0m for 2 DMG + 1.6s Shock Stun Every 1.55s",
+                  traitTwo: "Pulses +6 MP Back to Your Magic Meter on Every Arc Discharge!",
+                  desc: "Raises a crackling cyan-violet Tesla coil that locks down packs of monsters with chain-lightning stun arcs while continuously recharging your Magic Power!",
+                  accent: "#4ce6ff",
+                },
+                {
+                  id: "clockwork_golem",
+                  name: "III. Titan-Gear Clockwork Golem",
+                  subtitle: "MOBILE BRONZE JUGGERNAUT • SEISMIC SLAM & AEGIS WARD",
+                  icon: "🤖⚙️",
+                  costCores: 3,
+                  costRupees: 240,
+                  traitOne: "Autonomously Marches After Foes & Slams for 3 DMG + 1.4s Stun Every 1.1s",
+                  traitTwo: "Projects a Clockwork Aegis Field Granting -25% Hero Damage Taken!",
+                  desc: "Summons a heavy brass-and-iron automaton that actively chases down enemies across the arena, shatters shields with seismic slams, and reduces your incoming damage by 25%!",
+                  accent: "#ffb838",
+                },
+                {
+                  id: "aether_beacon",
+                  name: "IV. Sovereign Sanctuary & Loot-Magnet Beacon",
+                  subtitle: "HARMONIC RESONATOR • +1 WEAPON DMG, HEAL & 22m VACUUM",
+                  icon: "✨⚙️",
+                  costCores: 4,
+                  costRupees: 320,
+                  traitOne: "Grants +1 Sword & Bow DMG + Vacuums All Rupees & Hearts Across 22.0m",
+                  traitTwo: "Pulses +1 HP & +8 MP Restoration Every 1.5 Seconds!",
+                  desc: "Anchors a radiant golden-emerald Aether Beacon that supercharges your Sword and Bow with +1 Damage, mends your HP/MP every 1.5s, and pulls all loot across the map to your feet!",
+                  accent: "#52f296",
+                },
+              ];
+
+              return (
+                <div
+                  className="shop-items-grid"
+                  style={{ gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}
+                >
+                  {constructCatalog.map((ct) => {
+                    const isUnlocked = unlocked.includes(ct.id);
+                    const isDeployed = active === ct.id && timer > 0;
+                    const canAfford =
+                      !isUnlocked && cores >= ct.costCores && hero.rupees >= ct.costRupees;
+
+                    return (
+                      <div
+                        key={ct.id}
+                        className={`shop-item-card ${isUnlocked ? "shop-item-owned" : ""}`}
+                        style={{
+                          borderColor: isDeployed
+                            ? "#4eff91"
+                            : isUnlocked
+                            ? ct.accent
+                            : "rgba(140, 165, 210, 0.3)",
+                          padding: "12px",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: "0.65rem",
+                                fontWeight: 800,
+                                letterSpacing: "0.06em",
+                                color: ct.accent,
+                              }}
+                            >
+                              {ct.subtitle}
+                            </span>
+                            {isDeployed ? (
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  fontWeight: 900,
+                                  color: "#4eff91",
+                                }}
+                              >
+                                ● DEPLOYED ({Math.ceil(timer)}s)
+                              </span>
+                            ) : isUnlocked ? (
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  fontWeight: 800,
+                                  color: "#96f4ff",
+                                }}
+                              >
+                                ✓ BLUEPRINT READY
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <div className="shop-item-top" style={{ marginBottom: "8px" }}>
+                            <span
+                              className="shop-item-name"
+                              style={{ color: "#ffffff", fontSize: "0.94rem" }}
+                            >
+                              {ct.icon} {ct.name}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                              marginBottom: "10px",
+                              padding: "7px 10px",
+                              borderRadius: "8px",
+                              background: "rgba(10, 16, 28, 0.7)",
+                              border: "1px solid rgba(255, 255, 255, 0.08)",
+                              fontSize: "0.72rem",
+                            }}
+                          >
+                            <div style={{ color: "#8effb8", fontWeight: 800 }}>
+                              ⚡ {ct.traitOne}
+                            </div>
+                            <div style={{ color: "#ffd978", fontWeight: 700 }}>
+                              ✦ {ct.traitTwo}
+                            </div>
+                          </div>
+
+                          <p
+                            className="shop-item-desc"
+                            style={{ fontSize: "0.72rem", marginBottom: "12px" }}
+                          >
+                            {ct.desc}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={!isUnlocked && !canAfford}
+                          onClick={() => unlockOrDeployConstruct(ct.id)}
+                          className="shop-buy-btn"
+                          style={{
+                            fontSize: "0.8rem",
+                            padding: "8px 12px",
+                            background: isDeployed
+                              ? "rgba(46, 214, 118, 0.28)"
+                              : isUnlocked
+                              ? "linear-gradient(180deg, #38c8ff 0%, #0e6094 100%)"
+                              : undefined,
+                            color: isUnlocked ? "#ffffff" : undefined,
+                            fontWeight: 800,
+                          }}
+                        >
+                          {isDeployed
+                            ? `⚙️ Redeploy ${ct.name} Here (Reset 45s)`
+                            : isUnlocked
+                            ? `⚙️ Deploy ${ct.name} (45s)`
+                            : `Craft Blueprint (${ct.costCores}✦ Cores + ${ct.costRupees} Rupees)`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>.</strong> (Period) or <strong>Esc</strong> anytime to close the
+                Artificer&apos;s Magitech Foundry.
+              </span>
+              <button
+                type="button"
+                onClick={() => setArtificerOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Foundry (.)
               </button>
             </div>
           </div>

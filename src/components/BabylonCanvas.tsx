@@ -30,6 +30,7 @@ import {
 } from "@/game/questSystem";
 import {
   ALCHEMY_CAULDRON_POS,
+  ARTIFICER_BENCH_POS,
   ATOLL_PEARL_CHEST_POS,
   ATOLL_VICTORY_CHEST_POS,
   BIG_KEY_CHEST_POS,
@@ -6591,6 +6592,143 @@ export default function BabylonCanvas() {
     heroMaskAuraRing.isPickable = false;
     heroMaskAuraRing.parent = heroMaskNode;
 
+    // 1d-9. 3D Artificer's Magitech Foundry & Automaton Workbench (`ARTIFICER_BENCH_POS` in Map 1 Overworld)
+    const artificerBenchNode = new TransformNode("artificerBenchNode", scene);
+    artificerBenchNode.position.set(ARTIFICER_BENCH_POS.x, 0, ARTIFICER_BENCH_POS.z);
+
+    const artificerBrassMat = makeMat(
+      "artificerBrassMat",
+      new Color3(0.88, 0.64, 0.24),
+      new Color3(0.32, 0.2, 0.05),
+      new Color3(1.0, 0.9, 0.65)
+    );
+    const artificerAetherMat = makeMat(
+      "artificerAetherMat",
+      new Color3(0.28, 0.92, 1.0),
+      new Color3(0.18, 0.68, 0.92),
+      new Color3(1.0, 1.0, 1.0)
+    );
+
+    const artificerDais = MeshBuilder.CreateCylinder(
+      "artificerDais",
+      { diameterTop: 2.9, diameterBottom: 3.3, height: 0.34, tessellation: 8 },
+      scene
+    );
+    artificerDais.position.set(0, 0.17, 0);
+    artificerDais.material = darkObsidianMat;
+    artificerDais.isPickable = false;
+    artificerDais.parent = artificerBenchNode;
+
+    const artificerPedestal = MeshBuilder.CreateCylinder(
+      "artificerPedestal",
+      { diameterTop: 1.25, diameterBottom: 1.55, height: 1.2, tessellation: 8 },
+      scene
+    );
+    artificerPedestal.position.set(0, 0.92, 0);
+    artificerPedestal.material = artificerBrassMat;
+    artificerPedestal.isPickable = false;
+    artificerPedestal.parent = artificerBenchNode;
+
+    const artificerGearOuter = MeshBuilder.CreateTorus(
+      "artificerGearOuter",
+      { diameter: 2.15, thickness: 0.14, tessellation: 16 },
+      scene
+    );
+    artificerGearOuter.position.set(0, 1.62, 0);
+    artificerGearOuter.material = artificerBrassMat;
+    artificerGearOuter.isPickable = false;
+    artificerGearOuter.parent = artificerBenchNode;
+
+    const artificerGearInner = MeshBuilder.CreateTorus(
+      "artificerGearInner",
+      { diameter: 1.35, thickness: 0.11, tessellation: 12 },
+      scene
+    );
+    artificerGearInner.position.set(0, 2.05, 0);
+    artificerGearInner.rotation.x = Math.PI * 0.32;
+    artificerGearInner.material = artificerAetherMat;
+    artificerGearInner.isPickable = false;
+    artificerGearInner.parent = artificerBenchNode;
+
+    const artificerDynamoCore = MeshBuilder.CreatePolyhedron(
+      "artificerDynamoCore",
+      { type: 1, size: 0.42 },
+      scene
+    );
+    artificerDynamoCore.position.set(0, 2.15, 0);
+    artificerDynamoCore.material = artificerAetherMat;
+    artificerDynamoCore.isPickable = false;
+    artificerDynamoCore.parent = artificerBenchNode;
+
+    const artificerGroundHalo = MeshBuilder.CreateTorus(
+      "artificerGroundHalo",
+      { diameter: 3.45, thickness: 0.085, tessellation: 28 },
+      scene
+    );
+    artificerGroundHalo.position.set(0, 0.14, 0);
+    artificerGroundHalo.material = artificerAetherMat;
+    artificerGroundHalo.isPickable = false;
+    artificerGroundHalo.parent = artificerBenchNode;
+
+    // 3D Deployed Battlefield Magitech Construct (`deployedConstructNode`)
+    const deployedConstructNode = new TransformNode("deployedConstructNode", scene);
+    deployedConstructNode.setEnabled(false);
+
+    const constructBase = MeshBuilder.CreateCylinder(
+      "constructBase",
+      { diameterTop: 1.15, diameterBottom: 1.45, height: 0.38, tessellation: 8 },
+      scene
+    );
+    constructBase.position.set(0, 0.19, 0);
+    constructBase.material = artificerBrassMat;
+    constructBase.isPickable = false;
+    constructBase.parent = deployedConstructNode;
+
+    const constructCorePillar = MeshBuilder.CreateCylinder(
+      "constructCorePillar",
+      { diameterTop: 0.68, diameterBottom: 0.85, height: 1.35, tessellation: 10 },
+      scene
+    );
+    constructCorePillar.position.set(0, 0.95, 0);
+    constructCorePillar.material = darkObsidianMat;
+    constructCorePillar.isPickable = false;
+    constructCorePillar.parent = deployedConstructNode;
+
+    const constructHeadNode = new TransformNode("constructHeadNode", scene);
+    constructHeadNode.position.set(0, 1.65, 0);
+    constructHeadNode.parent = deployedConstructNode;
+
+    const constructTurretBarrel = MeshBuilder.CreateCylinder(
+      "constructTurretBarrel",
+      { diameterTop: 0.32, diameterBottom: 0.44, height: 1.05, tessellation: 10 },
+      scene
+    );
+    constructTurretBarrel.rotation.x = Math.PI * 0.5;
+    constructTurretBarrel.position.set(0, 0.12, 0.42);
+    constructTurretBarrel.material = artificerBrassMat;
+    constructTurretBarrel.isPickable = false;
+    constructTurretBarrel.parent = constructHeadNode;
+
+    const constructApexCrystal = MeshBuilder.CreatePolyhedron(
+      "constructApexCrystal",
+      { type: 1, size: 0.38 },
+      scene
+    );
+    constructApexCrystal.position.set(0, 0.32, 0);
+    constructApexCrystal.material = artificerAetherMat;
+    constructApexCrystal.isPickable = false;
+    constructApexCrystal.parent = constructHeadNode;
+
+    const constructOrbitGear = MeshBuilder.CreateTorus(
+      "constructOrbitGear",
+      { diameter: 1.75, thickness: 0.08, tessellation: 20 },
+      scene
+    );
+    constructOrbitGear.position.set(0, 0.14, 0);
+    constructOrbitGear.material = artificerAetherMat;
+    constructOrbitGear.isPickable = false;
+    constructOrbitGear.parent = deployedConstructNode;
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -10200,6 +10338,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // . (Period) toggles Artificer's Magitech Foundry & Automaton Blueprints Modal
+      if (code === "Period" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setArtificerOpen(!store.artificerOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -11275,6 +11420,7 @@ export default function BabylonCanvas() {
       homesteadManorNode.setEnabled(inOverworld);
       lyreShrineNode.setEnabled(inOverworld);
       maskShrineNode.setEnabled(inOverworld);
+      artificerBenchNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -11421,6 +11567,53 @@ export default function BabylonCanvas() {
         maskShrineCrown.rotation.y = -t * 2.6;
         maskShrineCrown.position.y = 2.85 + Math.sin(t * 4.1) * 0.14;
         maskShrineHalo.rotation.y = -t * 1.5;
+
+        const artificerGroundY = sampleTerrainHeight(
+          activeCells,
+          ARTIFICER_BENCH_POS.x,
+          ARTIFICER_BENCH_POS.z
+        );
+        artificerBenchNode.position.set(
+          ARTIFICER_BENCH_POS.x,
+          artificerGroundY,
+          ARTIFICER_BENCH_POS.z
+        );
+        artificerGearOuter.rotation.y = t * 2.1;
+        artificerGearInner.rotation.y = -t * 3.0;
+        artificerDynamoCore.rotation.y = t * 2.7;
+        artificerDynamoCore.position.y = 2.15 + Math.sin(t * 4.0) * 0.14;
+        artificerGroundHalo.rotation.y = t * 1.5;
+      }
+
+      // Sync 3D Deployed Battlefield Magitech Construct (`deployedConstructNode`)
+      const activeConstruct = snap.hero.activeConstruct ?? "none";
+      const showConstruct =
+        activeConstruct !== "none" &&
+        (snap.hero.constructTimer ?? 0) > 0 &&
+        !snap.editorMode;
+      deployedConstructNode.setEnabled(showConstruct);
+      if (showConstruct) {
+        const cx = snap.hero.constructX ?? snap.hero.x;
+        const cz = snap.hero.constructZ ?? snap.hero.z;
+        const cGroundY = sampleTerrainHeight(activeCells, cx, cz);
+        deployedConstructNode.position.set(cx, cGroundY, cz);
+        constructHeadNode.rotation.y = snap.hero.constructFacing ?? t * 2.2;
+        constructTurretBarrel.setEnabled(
+          activeConstruct === "flame_turret" || activeConstruct === "clockwork_golem"
+        );
+        const cMat =
+          activeConstruct === "flame_turret"
+            ? maskStonebornMat
+            : activeConstruct === "tesla_pylon"
+            ? stormBoltMat
+            : activeConstruct === "clockwork_golem"
+            ? artificerBrassMat
+            : goldKeyMat;
+        constructApexCrystal.material = cMat;
+        constructOrbitGear.material = cMat;
+        constructApexCrystal.rotation.y = -t * 3.4;
+        constructApexCrystal.position.y = 0.34 + Math.sin(t * 5.0) * 0.1;
+        constructOrbitGear.rotation.y = t * 2.8;
       }
 
       // Sync 3D Hero Active Song Musical Staff & Chime Aura (`heroSongAuraNode`)

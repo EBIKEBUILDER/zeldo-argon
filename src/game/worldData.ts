@@ -322,6 +322,12 @@ export const MASK_SHRINE_POS = {
   z: -13.5,
 };
 
+// Map 1 Artificer's Magitech Foundry & Automaton Workbench (Craft & deploy 4 Autonomous 3D Magitech Constructs!)
+export const ARTIFICER_BENCH_POS = {
+  x: 21.5,
+  z: -31.8,
+};
+
 // Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,
