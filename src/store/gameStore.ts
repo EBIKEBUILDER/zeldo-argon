@@ -59,6 +59,7 @@ import {
   LYRE_SHRINE_POS,
   MapPortal,
   MapPropInstance,
+  MASK_SHRINE_POS,
   MOUNT_STABLES_POS,
   PotRewardKind,
   PropPrefabId,
@@ -185,6 +186,13 @@ export type SongId =
   | "harvest_serenade";
 
 export type LyreNoteId = "N" | "W" | "E" | "S";
+
+export type MaskId =
+  | "none"
+  | "stoneborn_mask"
+  | "tidefin_mask"
+  | "sylvan_mask"
+  | "sovereign_mask";
 
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
@@ -317,6 +325,9 @@ export interface HeroState {
   unlockedSongs?: SongId[];
   activeSongAura?: SongId | "none";
   songAuraTimer?: number;
+  equippedMask?: MaskId;
+  unlockedMasks?: MaskId[];
+  maskPulseTimer?: number;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -761,6 +772,7 @@ export interface SerializableGameState {
   weatherOpen: boolean;
   homesteadOpen: boolean;
   lyreOpen: boolean;
+  maskOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -800,6 +812,9 @@ export interface GameActions {
   setWeatherOpen: (open: boolean) => void;
   setHomesteadOpen: (open: boolean) => void;
   setLyreOpen: (open: boolean) => void;
+  setMaskOpen: (open: boolean) => void;
+  unlockOrEquipMask: (mask: MaskId) => void;
+  grantMaskPlaytestBundle: () => void;
   unlockOrPerformSong: (song: SongId) => void;
   playLyreScaleNote: (note: LyreNoteId) => void;
   grantLyrePlaytestBundle: () => void;
@@ -1171,6 +1186,9 @@ function createInitialState(
       unlockedSongs: ["sun_hymn"],
       activeSongAura: "none",
       songAuraTimer: 0,
+      equippedMask: "none",
+      unlockedMasks: ["none", "stoneborn_mask"],
+      maskPulseTimer: 2.6,
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1390,6 +1408,7 @@ function createInitialState(
     weatherOpen: false,
     homesteadOpen: false,
     lyreOpen: false,
+    maskOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -1990,6 +2009,184 @@ export const useGameStore = create<GameStore>((set, get) => ({
       alchemyOpen: open ? false : state.alchemyOpen,
       weatherOpen: open ? false : state.weatherOpen,
       homesteadOpen: open ? false : state.homesteadOpen,
+      maskOpen: open ? false : state.maskOpen,
+    }));
+  },
+
+  setMaskOpen: (open: boolean) => {
+    set((state) => ({
+      maskOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
+      weatherOpen: open ? false : state.weatherOpen,
+      homesteadOpen: open ? false : state.homesteadOpen,
+      lyreOpen: open ? false : state.lyreOpen,
+    }));
+  },
+
+  unlockOrEquipMask: (mask: MaskId) => {
+    const state = get();
+    const unlocked = [...(state.hero.unlockedMasks ?? ["none", "stoneborn_mask"])];
+    if (mask === "none") {
+      soundEngine.unlock();
+      soundEngine.playCrystalSwitch(false);
+      set({
+        hero: {
+          ...state.hero,
+          equippedMask: "none",
+        },
+        banner: {
+          id: Date.now(),
+          text: "🎭 Removed Transformation Mask (True Hero Form)",
+          subtext: "Press ['] anytime to don one of your 4 Ancient Transformation Visages!",
+          timer: 3.0,
+        },
+      });
+      return;
+    }
+
+    const MASK_META: Record<
+      Exclude<MaskId, "none">,
+      {
+        name: string;
+        cores: number;
+        rupees: number;
+        desc: string;
+      }
+    > = {
+      stoneborn_mask: {
+        name: "Stoneborn Titan Visage",
+        cores: 0,
+        rupees: 0,
+        desc: "-50% All Damage Taken, 100% Knockback Immunity & Seismic Boulder Roll while Dashing [X] (3 DMG + 1.8s Stun + Shatters Cracked Boulders)!",
+      },
+      tidefin_mask: {
+        name: "Tide-Fin Leviathan Visage",
+        cores: 2,
+        rupees: 150,
+        desc: "Walk/Skate across all Deep Water & Rivers, +35% Speed, +4 MP/s Tidal Mana & +1 Frost DMG on Bow Arrows!",
+      },
+      sylvan_mask: {
+        name: "Sylvan Spore-Caller Visage",
+        cores: 3,
+        rupees: 200,
+        desc: "+25% Speed, -40% Dash Cooldown & Automatic Spore-Burst Nova every 2.6s (2 DMG Seeking Spore-Orb + Heals +1 HP)!",
+      },
+      sovereign_mask: {
+        name: "Fierce Sovereign Visage",
+        cores: 5,
+        rupees: 320,
+        desc: "+1 Permanent Sword DMG & every Sword Swing [Space] fires a Piercing Golden Crescent Sword-Beam (3 DMG) across the arena!",
+      },
+    };
+
+    const meta = MASK_META[mask];
+    const isAlreadyUnlocked = unlocked.includes(mask);
+    if (!isAlreadyUnlocked) {
+      const cores = state.hero.monsterCores ?? 0;
+      if (cores < meta.cores || state.hero.rupees < meta.rupees) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: "Not Enough Cores or Rupees to Carve Mask!",
+            subtext: `Carving ${meta.name} requires ${meta.cores} Monster Cores and ${meta.rupees} Rupees.`,
+            timer: 3.5,
+          },
+        });
+        return;
+      }
+      unlocked.push(mask);
+      soundEngine.unlock();
+      soundEngine.playVictoryFanfare();
+      soundEngine.playFairyRevive();
+      set({
+        hero: {
+          ...state.hero,
+          monsterCores: cores - meta.cores,
+          rupees: state.hero.rupees - meta.rupees,
+          unlockedMasks: unlocked,
+          equippedMask: mask,
+          maskPulseTimer: 1.2,
+        },
+        banner: {
+          id: Date.now(),
+          text: `🎭 Carved & Donned: ${meta.name}!`,
+          subtext: meta.desc,
+          timer: 4.8,
+        },
+      });
+      return;
+    }
+
+    const nextEquipped = state.hero.equippedMask === mask ? "none" : mask;
+    soundEngine.unlock();
+    if (nextEquipped === "none") {
+      soundEngine.playCrystalSwitch(false);
+    } else {
+      soundEngine.playFairyRevive();
+    }
+    set({
+      hero: {
+        ...state.hero,
+        unlockedMasks: unlocked,
+        equippedMask: nextEquipped,
+        maskPulseTimer: 1.2,
+      },
+      banner: {
+        id: Date.now(),
+        text:
+          nextEquipped === "none"
+            ? `🎭 Unequipped ${meta.name}`
+            : `🎭 Donned: ${meta.name}!`,
+        subtext:
+          nextEquipped === "none"
+            ? "Returned to True Hero Form."
+            : meta.desc,
+        timer: 4.4,
+      },
+    });
+  },
+
+  grantMaskPlaytestBundle: () => {
+    soundEngine.unlock();
+    soundEngine.playVictoryFanfare();
+    soundEngine.playFairyRevive();
+    set((state) => ({
+      hero: {
+        ...state.hero,
+        hp: state.hero.maxHp,
+        mp: state.hero.maxMp,
+        monsterCores: (state.hero.monsterCores ?? 0) + 12,
+        rupees: state.hero.rupees + 600,
+        unlockedMasks: [
+          "none",
+          "stoneborn_mask",
+          "tidefin_mask",
+          "sylvan_mask",
+          "sovereign_mask",
+        ],
+        equippedMask:
+          state.hero.equippedMask && state.hero.equippedMask !== "none"
+            ? state.hero.equippedMask
+            : "sovereign_mask",
+        maskPulseTimer: 1.0,
+      },
+      banner: {
+        id: Date.now(),
+        text: "🎭 All 4 Ancient Transformation Masks Unlocked! (+12 Cores & +600 Rupees)",
+        subtext:
+          "Stoneborn Titan, Tide-Fin Leviathan, Sylvan Spore-Caller & Fierce Sovereign Visages are ready to don!",
+        timer: 4.8,
+      },
     }));
   },
 
@@ -5648,6 +5845,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.activeSongAura = "none";
     }
     const activeSongAura: SongId | "none" = hero.activeSongAura ?? "none";
+    const equippedMask: MaskId = hero.equippedMask ?? "none";
 
     // Passive Greenhouse Herb Cultivation (`herb_greenhouse` wing grows +1 random Biome Herb every 25s!)
     if (hasHomesteadWing("herb_greenhouse")) {
@@ -5672,17 +5870,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // Passive Magic Power regeneration (2.5 MP/s base, 5.0 MP/s with Archmage's Ley-Crystal, +15.0 MP/s with Archmage Ley-Font Elixir, +8.0 MP/s during Starfall!)
+    // Passive Magic Power regeneration (2.5 MP/s base, 5.0 MP/s with Archmage's Ley-Crystal, +15.0 MP/s with Archmage Ley-Font Elixir, +8.0 MP/s during Starfall, +4.0 MP/s with Tide-Fin Mask!)
     const mpRegenRate =
       (hasRelic("arcane_conduit") ? 5.0 : 2.5) +
       (activeElixir === "archmage_elixir" ? 15.0 : 0) +
-      (activeWeather === "starfall" ? 8.0 : 0);
+      (activeWeather === "starfall" ? 8.0 : 0) +
+      (equippedMask === "tidefin_mask" ? 4.0 : 0);
     hero.maxMp = hero.maxMp || 100;
     hero.mp = Math.min(hero.maxMp, (hero.mp ?? 100) + dt * mpRegenRate);
     hero.maxBombs = hero.maxBombs ?? 0;
     hero.bombs = hero.bombs ?? 0;
 
-    // Tunic, Relic, Steed, Elixir & Blizzard damage multiplier:
+    // Tunic, Relic, Steed, Elixir, Song, Mask & Blizzard damage multiplier:
     const getTunicDamageMultiplier = (): number => {
       const baseMult =
         hero.equippedTunic === "red_mail"
@@ -5694,7 +5893,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const steedMult = hero.mountedSteed === "war_drake" ? relicMult * 0.7 : relicMult;
       const elixirMult = activeElixir === "aegis_tonic" ? steedMult * 0.6 : steedMult;
       const songMult = activeSongAura === "time_ballad" ? elixirMult * 0.7 : elixirMult;
-      return activeWeather === "blizzard" ? songMult * 0.75 : songMult;
+      const maskMult = equippedMask === "stoneborn_mask" ? songMult * 0.5 : songMult;
+      return activeWeather === "blizzard" ? maskMult * 0.75 : maskMult;
     };
 
     // Helper: check if hero died and auto-revive with Bottled Fairy OR Immortal Phoenix Ankh (`aegis_ankh`)!
@@ -5764,7 +5964,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const companionBlockBonus = hero.activeCompanion === "frost_owl" ? 1 : 0;
       const shieldPower = Math.max(1, (hero.shieldBlock ?? 1) + companionBlockBonus);
       let finalDamage = rawAmount;
-      const kbScale = hero.equippedBoots === "titan_greaves" ? 0.5 : 1.0;
+      const kbScale =
+        equippedMask === "stoneborn_mask"
+          ? 0
+          : hero.equippedBoots === "titan_greaves"
+          ? 0.5
+          : 1.0;
       let blocked = false;
 
       const incomingAngle =
@@ -7311,13 +7516,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const arrowDmg =
           (bRune === 2 ? 3 : 2) +
           (activeWeather === "blizzard" ? 1 : 0) +
-          (hasHomesteadWing("trophy_vault") ? 1 : 0);
+          (hasHomesteadWing("trophy_vault") ? 1 : 0) +
+          (equippedMask === "tidefin_mask" ? 1 : 0);
         spreadAngles.forEach((offsetAngle, idx) => {
           const shotAngle = hero.facing + offsetAngle;
           arrows.push({
             id: `hero-arrow-${idx}-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
             zone,
             fromHero: true,
+            isFrost: equippedMask === "tidefin_mask",
             x: hero.x + Math.sin(shotAngle) * 0.95,
             z: hero.z + Math.cos(shotAngle) * 0.95,
             angle: shotAngle,
@@ -7344,6 +7551,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.weaponLockTimer = 0.35;
       hero.swingId += 1;
       soundEngine.playSwordSwing();
+      // Fierce Sovereign Visage (`sovereign_mask`): Every Sword Swing launches a piercing Golden Crescent Sword-Beam!
+      if (equippedMask === "sovereign_mask") {
+        arrows.push({
+          id: `sovereign-beam-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+          zone,
+          fromHero: true,
+          x: hero.x + Math.sin(hero.facing) * 1.15,
+          z: hero.z + Math.cos(hero.facing) * 1.15,
+          angle: hero.facing,
+          speed: 22.0,
+          damage: 3,
+          lifeTimer: 1.35,
+          isPiercing: true,
+          hitEnemyIds: [],
+        });
+      }
     }
 
     const isUsingAnyWeapon =
@@ -7374,7 +7597,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !state.sanctuaryOpen
     ) {
       hero.dashTimer = 0.22;
-      const baseDashCd = hasRelic("wind_feather") ? 0.58 : 0.9;
+      const baseDashCd =
+        (hasRelic("wind_feather") ? 0.58 : 0.9) *
+        (equippedMask === "sylvan_mask" ? 0.6 : 1.0);
       hero.dashCooldown = activeElixir === "gale_nectar" ? baseDashCd * 0.5 : baseDashCd;
       hero.invulnerableTimer = Math.max(hero.invulnerableTimer, 0.28);
       hero.isBlocking = false;
@@ -7384,7 +7609,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       soundEngine.playSwordSwing();
     }
 
-    // 2. Hero Movement + Boots / Relic / Companion / Dash Speed Multiplier + Knockback + Hookshot Grapple Pull + Pushable Block Puzzles
+    // 2. Hero Movement + Boots / Relic / Companion / Mask / Dash Speed Multiplier + Knockback + Hookshot Grapple Pull + Pushable Block Puzzles
+    if (equippedMask === "stoneborn_mask") {
+      hero.knockbackLockTimer = 0;
+      hero.knockbackVx = 0;
+      hero.knockbackVz = 0;
+    }
     const isKnockbackLocked = hero.knockbackLockTimer > 0;
     const isDashing = (hero.dashTimer ?? 0) > 0;
     let mx = isKnockbackLocked ? 0 : isDashing ? Math.sin(hero.facing) : input.moveX;
@@ -7404,6 +7634,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const dashSpeedMult = isDashing ? 2.25 : 1.0;
     const elixirSpeedMult = activeElixir === "gale_nectar" ? 1.3 : 1.0;
     const songSpeedMult = activeSongAura === "gale_requiem" ? 1.3 : 1.0;
+    const maskSpeedMult =
+      equippedMask === "tidefin_mask"
+        ? 1.35
+        : equippedMask === "sylvan_mask"
+        ? 1.25
+        : 1.0;
     const bootsMultiplier =
       (hero.equippedBoots === "swift_boots"
         ? 1.25
@@ -7416,6 +7652,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       mountSpeedMult *
       elixirSpeedMult *
       songSpeedMult *
+      maskSpeedMult *
       dashSpeedMult;
 
     const initialGatePassable =
@@ -7516,7 +7753,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? Math.max(13.55, nextHeroZ)
           : nextHeroZ;
       const mountIgnoresWater =
-        hero.mountedSteed === "frost_stag" || hero.mountedSteed === "war_drake";
+        hero.mountedSteed === "frost_stag" ||
+        hero.mountedSteed === "war_drake" ||
+        equippedMask === "tidefin_mask";
       const resolvedHero = resolveWorldCollisions(
         nextHeroX,
         clampedNextHeroZ,
@@ -12142,6 +12381,112 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // 9b-4. Ancient Transformation Mask Active Combat Synergies (`stoneborn_mask` Seismic Boulder Roll & `sylvan_mask` Spore-Burst Nova)
+    if (equippedMask === "stoneborn_mask" && isDashing) {
+      // Seismic Boulder Roll: Crushes monsters within 2.35m for 3 DMG + 1.8s Stun & shatters Cracked Boulders / pounds Rusted Pegs!
+      const nextRollCds: Record<string, number> = {};
+      for (const [eid, cd] of Object.entries(hero.mountTrampleCooldowns ?? {})) {
+        if (cd - dt > 0) nextRollCds[eid] = cd - dt;
+      }
+      hero.mountTrampleCooldowns = nextRollCds;
+      for (const enemy of enemies) {
+        if (
+          enemy.zone !== zone ||
+          enemy.state === "dead" ||
+          enemy.kind === "boss" ||
+          (enemy.kind === "burrower" && enemy.burrowed) ||
+          (hero.mountTrampleCooldowns[enemy.id] ?? 0) > 0 ||
+          isBossRoomSealed(enemy)
+        ) {
+          continue;
+        }
+        if (Math.hypot(enemy.x - hero.x, enemy.z - hero.z) <= 2.35) {
+          hero.mountTrampleCooldowns[enemy.id] = 0.55;
+          enemy.provoked = true;
+          enemy.shieldArmor = "none";
+          enemy.hp -= 3;
+          enemy.hitFlashTimer = 0.3;
+          enemy.stunTimer = Math.max(enemy.stunTimer, 1.8);
+          if (enemy.kind !== "turret") {
+            enemy.state = "stunned";
+            enemy.stateTimer = Math.max(enemy.stateTimer, 1.8);
+            const pushAngle = Math.atan2(enemy.x - hero.x, enemy.z - hero.z);
+            enemy.knockbackVx = Math.sin(pushAngle) * 14.5;
+            enemy.knockbackVz = Math.cos(pushAngle) * 14.5;
+          }
+          soundEngine.playHammerSlam();
+          if (enemy.hp <= 0) {
+            handleEnemyDeath(enemy);
+          }
+        }
+      }
+      for (let pIdx = 0; pIdx < mapProps.length; pIdx++) {
+        const prop = mapProps[pIdx];
+        if (prop.zone !== zone) continue;
+        const dProp = Math.hypot(prop.x - hero.x, prop.z - hero.z);
+        if (prop.prefab === "cracked_rock" && !prop.smashed && dProp <= 2.45) {
+          ensureMutableMapProps();
+          mapProps[pIdx].smashed = true;
+          mapProps[pIdx].hasCollider = false;
+          dynamicObstacles = getActiveObstacles(mapProps);
+          soundEngine.playHammerSlam();
+          soundEngine.playSecretSolve();
+          pushBanner(
+            "🪨 Stoneborn Boulder Roll Shattered the Cracked Rock!",
+            "Your Titan Visage pulverized the fractured stone on impact!",
+            3.6
+          );
+        } else if (prop.prefab === "rusted_peg" && !prop.pounded && dProp <= 2.25) {
+          ensureMutableMapProps();
+          mapProps[pIdx].pounded = true;
+          mapProps[pIdx].hasCollider = false;
+          dynamicObstacles = getActiveObstacles(mapProps);
+          soundEngine.playPegPound();
+        }
+      }
+    } else if (equippedMask === "sylvan_mask") {
+      hero.maskPulseTimer = (hero.maskPulseTimer ?? 2.6) - dt;
+      if (hero.maskPulseTimer <= 0) {
+        hero.maskPulseTimer = 2.6;
+        let sporeTarget: EnemyState | null = null;
+        let bestDist = 9.5;
+        for (const e of enemies) {
+          if (
+            e.zone !== zone ||
+            e.state === "dead" ||
+            (e.kind === "burrower" && e.burrowed) ||
+            isBossRoomSealed(e)
+          ) {
+            continue;
+          }
+          const d = Math.hypot(e.x - hero.x, e.z - hero.z);
+          if (d <= bestDist) {
+            bestDist = d;
+            sporeTarget = e;
+          }
+        }
+        if (sporeTarget) {
+          const shotAngle = Math.atan2(sporeTarget.x - hero.x, sporeTarget.z - hero.z);
+          soundEngine.playFireballShoot(false);
+          fireballs.push({
+            id: `sylvan-spore-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+            zone,
+            x: hero.x + Math.sin(shotAngle) * 0.9,
+            z: hero.z + Math.cos(shotAngle) * 0.9,
+            angle: shotAngle,
+            speed: 13.5,
+            damage: 2,
+            radius: 0.48,
+            isCharged: false,
+            lifeTimer: 1.35,
+          });
+        }
+        if (hero.hp < hero.maxHp) {
+          hero.hp = Math.min(hero.maxHp, hero.hp + 1);
+        }
+      }
+    }
+
     // 9c. Update Thrown Clay Pots & Light Rocks in Flight (`thrownObjects`)
     const remainingThrown: ThrownObjectState[] = [];
     for (const obj of thrownObjects) {
@@ -12648,7 +12993,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
               enemy.provoked = true;
               const relicSwordBonus =
                 (hasRelic("berserker_torc") ? 1 : 0) +
-                (activeElixir === "titans_draught" ? 1 : 0);
+                (activeElixir === "titans_draught" ? 1 : 0) +
+                (equippedMask === "sovereign_mask" ? 1 : 0);
               const critBonus = rollComboCritBonus();
               const strikeDamage =
                 ((hero.swordDamage || 1) + relicSwordBonus) * (isSpin ? 2 : 1) + critBonus;
@@ -14999,6 +15345,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Bardsong Resonance Pavilion & Runic Lyre Shrine — Press [F] or [ ; ] to Perform the 4 Sacred Melodies!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(MASK_SHRINE_POS.x - hero.x, MASK_SHRINE_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Ancient Mask Carver's Totem Shrine — Press [F] or [ ' ] to Carve & Don the 4 Transformation Visages!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -15023,6 +15375,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let weatherOpen = state.weatherOpen;
     let homesteadOpen = state.homesteadOpen;
     let lyreOpen = state.lyreOpen;
+    let maskOpen = state.maskOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -15143,6 +15496,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     ) {
       homesteadOpen = true;
       lyreOpen = false;
+      maskOpen = false;
       weatherOpen = false;
       alchemyOpen = false;
       colosseumOpen = false;
@@ -15159,6 +15513,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       lyreOpen = true;
+      maskOpen = false;
+      homesteadOpen = false;
+      weatherOpen = false;
+      alchemyOpen = false;
+      colosseumOpen = false;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(MASK_SHRINE_POS.x - hero.x, MASK_SHRINE_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      maskOpen = true;
+      lyreOpen = false;
       homesteadOpen = false;
       weatherOpen = false;
       alchemyOpen = false;
@@ -15414,6 +15787,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       weatherOpen,
       homesteadOpen,
       lyreOpen,
+      maskOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

@@ -12,6 +12,7 @@ import {
   HerbId,
   HomesteadWingId,
   LyreNoteId,
+  MaskId,
   MountId,
   OffhandId,
   PrimaryHandId,
@@ -266,6 +267,7 @@ export default function GameOverlay() {
   const weatherOpen = useGameStore((s) => s.weatherOpen);
   const homesteadOpen = useGameStore((s) => s.homesteadOpen);
   const lyreOpen = useGameStore((s) => s.lyreOpen);
+  const maskOpen = useGameStore((s) => s.maskOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -298,6 +300,9 @@ export default function GameOverlay() {
   const setWeatherOpen = useGameStore((s) => s.setWeatherOpen);
   const setHomesteadOpen = useGameStore((s) => s.setHomesteadOpen);
   const setLyreOpen = useGameStore((s) => s.setLyreOpen);
+  const setMaskOpen = useGameStore((s) => s.setMaskOpen);
+  const unlockOrEquipMask = useGameStore((s) => s.unlockOrEquipMask);
+  const grantMaskPlaytestBundle = useGameStore((s) => s.grantMaskPlaytestBundle);
   const unlockOrPerformSong = useGameStore((s) => s.unlockOrPerformSong);
   const playLyreScaleNote = useGameStore((s) => s.playLyreScaleNote);
   const grantLyrePlaytestBundle = useGameStore((s) => s.grantLyrePlaytestBundle);
@@ -388,6 +393,7 @@ export default function GameOverlay() {
         if (weatherOpen) setWeatherOpen(false);
         if (homesteadOpen) setHomesteadOpen(false);
         if (lyreOpen) setLyreOpen(false);
+        if (maskOpen) setMaskOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -406,6 +412,7 @@ export default function GameOverlay() {
     weatherOpen,
     homesteadOpen,
     lyreOpen,
+    maskOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -419,6 +426,7 @@ export default function GameOverlay() {
     setWeatherOpen,
     setHomesteadOpen,
     setLyreOpen,
+    setMaskOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -1543,6 +1551,25 @@ export default function GameOverlay() {
                     ? `${Math.ceil(hero.songAuraTimer ?? 0)}s`
                     : ";"}
                   )
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMaskOpen(!maskOpen)}
+                  className={`char-toggle-btn ${
+                    maskOpen || (hero.equippedMask ?? "none") !== "none" ? "active" : ""
+                  }`}
+                  style={
+                    (hero.equippedMask ?? "none") !== "none"
+                      ? {
+                          borderColor: "rgba(255, 210, 76, 0.92)",
+                          background: "rgba(48, 32, 12, 0.92)",
+                          color: "#ffe694",
+                        }
+                      : undefined
+                  }
+                  title="Open Ancient Transformation Masks & Aspect Visages Shrine (Shortcut: ')"
+                >
+                  🎭 Masks ({(hero.unlockedMasks ?? []).length}/4 • &apos;)
                 </button>
                 <button
                   type="button"
@@ -6984,6 +7011,328 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Lyre (;)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          ANCIENT TRANSFORMATION MASKS & ASPECT VISAGES SHRINE MODAL [']
+         ========================================================= */}
+      {phase === "playing" && !editorMode && maskOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card" style={{ maxWidth: "1060px", width: "95vw" }}>
+            <div className="shop-header">
+              <div>
+                <div
+                  className="shop-pill"
+                  style={{
+                    background: "rgba(255, 196, 84, 0.16)",
+                    borderColor: "rgba(255, 196, 84, 0.55)",
+                    color: "#ffe494",
+                  }}
+                >
+                  MASK CARVER&apos;S TOTEM SHRINE • 4 ANCIENT TRANSFORMATION MASKS &amp; VISAGE ASPECTS
+                </div>
+                <h2 className="shop-title">ANCIENT TRANSFORMATION MASKS &amp; ASPECT VISAGES</h2>
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <div
+                  className="shop-wallet"
+                  style={{
+                    borderColor: "rgba(255, 196, 84, 0.55)",
+                    background: "rgba(48, 32, 12, 0.65)",
+                  }}
+                >
+                  <span className="shop-wallet-label">MASKS CARVED:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ffe494" }}>
+                    {(hero.unlockedMasks ?? []).length}/4 🎭
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">MONSTER CORES:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ffd875" }}>
+                    {hero.monsterCores ?? 0} ✦
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">RUPEES:</span>
+                  <span className="shop-wallet-val">{hero.rupees}</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+                padding: "10px 14px",
+                marginBottom: "14px",
+                borderRadius: "10px",
+                background: "rgba(38, 24, 14, 0.78)",
+                border: "1px solid rgba(255, 196, 84, 0.35)",
+              }}
+            >
+              <p className="shop-greeting" style={{ margin: 0, flex: "1 1 480px" }}>
+                &ldquo;Don one of the <strong>4 Ancient Transformation Masks</strong> carved at the
+                Village Totem Shrine! Wearing a mask reshapes your 3D visage and bestows iconic
+                aspect powers: <strong>Seismic Boulder-Roll Dash, Amphibian Water-Skating &amp; Frost Arrows,
+                Spore-Burst Seeking Novas, or Piercing Golden Sword-Beams</strong>!&rdquo;
+              </p>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {(hero.equippedMask ?? "none") !== "none" && (
+                  <button
+                    type="button"
+                    onClick={() => unlockOrEquipMask("none")}
+                    className="char-equip-btn"
+                    style={{
+                      background: "rgba(180, 195, 220, 0.16)",
+                      borderColor: "rgba(180, 195, 220, 0.55)",
+                      color: "#e2ecff",
+                      fontWeight: 800,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ✖ Remove Mask (True Hero Form)
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={grantMaskPlaytestBundle}
+                  className="char-equip-btn"
+                  style={{
+                    background: "linear-gradient(180deg, #ffb838 0%, #a85c08 100%)",
+                    borderColor: "rgba(255, 232, 162, 0.9)",
+                    color: "#1b1102",
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Playtest Shortcut: Unlock all 4 Ancient Transformation Masks + +1 Heart Container + +12 Monster Cores + +600 Rupees"
+                >
+                  ★ Playtest: Unlock All 4 Transformation Masks
+                </button>
+              </div>
+            </div>
+
+            {(() => {
+              const unlocked = hero.unlockedMasks ?? [];
+              const equipped = hero.equippedMask ?? "none";
+              const cores = hero.monsterCores ?? 0;
+
+              const maskCatalog: Array<{
+                id: Exclude<MaskId, "none">;
+                name: string;
+                subtitle: string;
+                icon: string;
+                costCores: number;
+                costRupees: number;
+                traitOne: string;
+                traitTwo: string;
+                desc: string;
+                accent: string;
+              }> = [
+                {
+                  id: "stoneborn_mask",
+                  name: "I. Stoneborn Crag-Visage",
+                  subtitle: "EARTHEN JUGGERNAUT • SEISMIC BOULDER-ROLL DASH",
+                  icon: "🪨🎭",
+                  costCores: 2,
+                  costRupees: 150,
+                  traitOne: "Seismic Boulder-Roll Dash: Crushes Foes (3 DMG + 1.8s Stun) & Shatters Rocks/Pegs",
+                  traitTwo: "-50% Incoming Damage & 100% Knockback Immunity",
+                  desc: "Encases your visage in volcanic obsidian and molten magma runes. Rolling/Dashing curls you into a crushing boulder that flattens monsters, shatters cracked rocks, and pounds rusted pegs!",
+                  accent: "#ff7847",
+                },
+                {
+                  id: "tidefin_mask",
+                  name: "II. Tidefin Abyssal Visage",
+                  subtitle: "CORAL LEVIATHAN • WATER-SKATING & CRYO-ARCHERY",
+                  icon: "🌊🎭",
+                  costCores: 3,
+                  costRupees: 210,
+                  traitOne: "Walk & Skate Across All Deep Water + +35% Swift Stride",
+                  traitTwo: "+4.0 MP/s Mana Regen & All Bow Shots Deal +1 Frost DMG (1.8s Freeze)",
+                  desc: "Bestows bioluminescent sapphire crest-fins that let you glide effortlessly across rivers, ponds, and atolls while infusing every arrow with glacial frost!",
+                  accent: "#4ce6ff",
+                },
+                {
+                  id: "sylvan_mask",
+                  name: "III. Sylvan Spore-Caller Visage",
+                  subtitle: "WOODLAND SPIRIT • AUTO-SEEKING SPORE-BURST NOVAS",
+                  icon: "🌿🎭",
+                  costCores: 3,
+                  costRupees: 240,
+                  traitOne: "Auto-Fires Seeking Spore-Burst Orb (2 DMG) + Heals +1 HP Every 2.6s",
+                  traitTwo: "+25% Woodland Agility & -40% Dash Cooldown",
+                  desc: "Carved from living elder-bark and glowing emerald antlers. Periodically releases homing forest spore-orbs that hunt down nearby foes while mending your wounds!",
+                  accent: "#4eff9e",
+                },
+                {
+                  id: "sovereign_mask",
+                  name: "IV. Fierce Sovereign Visage",
+                  subtitle: "CELESTIAL TITAN • PIERCING GOLDEN SWORD-BEAMS",
+                  icon: "👑🎭",
+                  costCores: 5,
+                  costRupees: 380,
+                  traitOne: "Every Sword Swing Fires a Piercing Golden Crescent Beam (3 DMG, 22m/s)",
+                  traitTwo: "+1 All Sword Melee Damage & +1 Full Heart Container on Unlock!",
+                  desc: "The ultimate mask of the Astral Sovereign. Enhances your blade with +1 Melee Damage and unleashes a blazing golden crescent wave on every single sword slash—at any health!",
+                  accent: "#ffd84d",
+                },
+              ];
+
+              return (
+                <div
+                  className="shop-items-grid"
+                  style={{ gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}
+                >
+                  {maskCatalog.map((mk) => {
+                    const isUnlocked = unlocked.includes(mk.id);
+                    const isEquipped = equipped === mk.id;
+                    const canAfford =
+                      !isUnlocked && cores >= mk.costCores && hero.rupees >= mk.costRupees;
+
+                    return (
+                      <div
+                        key={mk.id}
+                        className={`shop-item-card ${isUnlocked ? "shop-item-owned" : ""}`}
+                        style={{
+                          borderColor: isEquipped
+                            ? "#4eff91"
+                            : isUnlocked
+                            ? mk.accent
+                            : "rgba(140, 165, 210, 0.3)",
+                          padding: "12px",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: "0.65rem",
+                                fontWeight: 800,
+                                letterSpacing: "0.06em",
+                                color: mk.accent,
+                              }}
+                            >
+                              {mk.subtitle}
+                            </span>
+                            {isEquipped ? (
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  fontWeight: 900,
+                                  color: "#4eff91",
+                                }}
+                              >
+                                ● WORN VISAGE
+                              </span>
+                            ) : isUnlocked ? (
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  fontWeight: 800,
+                                  color: "#ffe694",
+                                }}
+                              >
+                                ✓ CARVED
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <div className="shop-item-top" style={{ marginBottom: "8px" }}>
+                            <span
+                              className="shop-item-name"
+                              style={{ color: "#ffffff", fontSize: "0.94rem" }}
+                            >
+                              {mk.icon} {mk.name}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                              marginBottom: "10px",
+                              padding: "7px 10px",
+                              borderRadius: "8px",
+                              background: "rgba(10, 16, 28, 0.7)",
+                              border: "1px solid rgba(255, 255, 255, 0.08)",
+                              fontSize: "0.72rem",
+                            }}
+                          >
+                            <div style={{ color: "#8effb8", fontWeight: 800 }}>
+                              ⚡ {mk.traitOne}
+                            </div>
+                            <div style={{ color: "#ffd978", fontWeight: 700 }}>
+                              ✦ {mk.traitTwo}
+                            </div>
+                          </div>
+
+                          <p
+                            className="shop-item-desc"
+                            style={{ fontSize: "0.72rem", marginBottom: "12px" }}
+                          >
+                            {mk.desc}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={!isUnlocked && !canAfford}
+                          onClick={() => unlockOrEquipMask(mk.id)}
+                          className="shop-buy-btn"
+                          style={{
+                            fontSize: "0.8rem",
+                            padding: "8px 12px",
+                            background: isEquipped
+                              ? "rgba(46, 214, 118, 0.28)"
+                              : isUnlocked
+                              ? "linear-gradient(180deg, #ffb838 0%, #b8680a 100%)"
+                              : undefined,
+                            color: !isEquipped && isUnlocked ? "#1b1102" : undefined,
+                            fontWeight: 800,
+                          }}
+                        >
+                          {isEquipped
+                            ? "✓ Currently Wearing Mask (Click to Remove)"
+                            : isUnlocked
+                            ? `🎭 Don ${mk.name}`
+                            : `Carve Mask (${mk.costCores}✦ Cores + ${mk.costRupees} Rupees)`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>&apos;</strong> (Quote) or <strong>Esc</strong> anytime to close the
+                Ancient Transformation Masks Shrine.
+              </span>
+              <button
+                type="button"
+                onClick={() => setMaskOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Masks (&apos;)
               </button>
             </div>
           </div>

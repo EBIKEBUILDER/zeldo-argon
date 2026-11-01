@@ -316,6 +316,12 @@ export const LYRE_SHRINE_POS = {
   z: -13.5,
 };
 
+// Map 1 Ancient Mask Carver's Totem Shrine (Don 4 Sacred Transformation Masks & Aspect Visages!)
+export const MASK_SHRINE_POS = {
+  x: 18.2,
+  z: -13.5,
+};
+
 // Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,

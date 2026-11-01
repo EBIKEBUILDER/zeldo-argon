@@ -71,6 +71,7 @@ import {
   HOMESTEAD_POS,
   LOCKED_GATE_POS,
   LYRE_SHRINE_POS,
+  MASK_SHRINE_POS,
   MapPortal,
   MapPropInstance,
   MOUNT_STABLES_POS,
@@ -6460,6 +6461,136 @@ export default function BabylonCanvas() {
       noteChime.parent = heroSongAuraNode;
     }
 
+    // 1k. Overworld Ancient Mask Carver's Totem Shrine (`MASK_SHRINE_POS = 18.2, -13.5`) & Hero Transformation Mask Visage (`heroMaskNode`)
+    const maskShrineNode = new TransformNode("maskShrineNode", scene);
+    maskShrineNode.position.set(MASK_SHRINE_POS.x, 0, MASK_SHRINE_POS.z);
+
+    const maskStonebornMat = makeMat(
+      "maskStonebornMat",
+      new Color3(0.92, 0.56, 0.18),
+      new Color3(0.45, 0.22, 0.05),
+      new Color3(0.95, 0.8, 0.45)
+    );
+    const maskSylvanMat = makeMat(
+      "maskSylvanMat",
+      new Color3(0.22, 0.92, 0.48),
+      new Color3(0.08, 0.48, 0.22),
+      new Color3(0.85, 1.0, 0.88)
+    );
+
+    const maskShrineDais = MeshBuilder.CreateCylinder(
+      "maskShrineDais",
+      { diameterTop: 2.7, diameterBottom: 3.1, height: 0.28, tessellation: 18 },
+      scene
+    );
+    maskShrineDais.position.set(0, 0.14, 0);
+    maskShrineDais.material = dgPillarMat;
+    maskShrineDais.isPickable = false;
+    maskShrineDais.parent = maskShrineNode;
+
+    const maskTotemPillar = MeshBuilder.CreateCylinder(
+      "maskTotemPillar",
+      { diameterTop: 0.72, diameterBottom: 0.95, height: 2.35, tessellation: 12 },
+      scene
+    );
+    maskTotemPillar.position.set(0, 1.3, 0);
+    maskTotemPillar.material = darkObsidianMat;
+    maskTotemPillar.isPickable = false;
+    maskTotemPillar.parent = maskShrineNode;
+
+    const maskOrbitRingRoot = new TransformNode("maskOrbitRingRoot", scene);
+    maskOrbitRingRoot.position.set(0, 1.85, 0);
+    maskOrbitRingRoot.parent = maskShrineNode;
+
+    const shrineMaskMats = [
+      maskStonebornMat,
+      stormBoltMat,
+      maskSylvanMat,
+      goldKeyMat,
+    ];
+    for (let mIdx = 0; mIdx < 4; mIdx++) {
+      const ang = (mIdx / 4) * Math.PI * 2;
+      const maskPlaque = MeshBuilder.CreatePolyhedron(
+        `shrineMaskVisage-${mIdx}`,
+        { type: 2, size: 0.34 },
+        scene
+      );
+      maskPlaque.position.set(Math.cos(ang) * 1.15, 0, Math.sin(ang) * 1.15);
+      maskPlaque.scaling.set(0.95, 1.25, 0.45);
+      maskPlaque.rotation.y = -ang + Math.PI / 2;
+      maskPlaque.material = shrineMaskMats[mIdx];
+      maskPlaque.isPickable = false;
+      maskPlaque.parent = maskOrbitRingRoot;
+    }
+
+    const maskShrineCrown = MeshBuilder.CreatePolyhedron(
+      "maskShrineCrown",
+      { type: 1, size: 0.38 },
+      scene
+    );
+    maskShrineCrown.position.set(0, 2.85, 0);
+    maskShrineCrown.material = goldKeyMat;
+    maskShrineCrown.isPickable = false;
+    maskShrineCrown.parent = maskShrineNode;
+
+    const maskShrineHalo = MeshBuilder.CreateTorus(
+      "maskShrineHalo",
+      { diameter: 3.35, thickness: 0.085, tessellation: 28 },
+      scene
+    );
+    maskShrineHalo.position.set(0, 0.14, 0);
+    maskShrineHalo.material = goldKeyMat;
+    maskShrineHalo.isPickable = false;
+    maskShrineHalo.parent = maskShrineNode;
+
+    // 3D Hero Worn Transformation Mask & Visage Aura (`heroMaskNode`)
+    const heroMaskNode = new TransformNode("heroMaskNode", scene);
+    heroMaskNode.parent = heroRoot;
+    heroMaskNode.setEnabled(false);
+
+    const heroMaskVisagePlate = MeshBuilder.CreatePolyhedron(
+      "heroMaskVisagePlate",
+      { type: 2, size: 0.32 },
+      scene
+    );
+    heroMaskVisagePlate.position.set(0, 1.56, 0.38);
+    heroMaskVisagePlate.scaling.set(1.15, 1.25, 0.42);
+    heroMaskVisagePlate.material = goldKeyMat;
+    heroMaskVisagePlate.isPickable = false;
+    heroMaskVisagePlate.parent = heroMaskNode;
+
+    const heroMaskHornL = MeshBuilder.CreateCylinder(
+      "heroMaskHornL",
+      { diameterTop: 0.02, diameterBottom: 0.14, height: 0.44, tessellation: 8 },
+      scene
+    );
+    heroMaskHornL.position.set(-0.28, 1.84, 0.34);
+    heroMaskHornL.rotation.z = 0.42;
+    heroMaskHornL.material = goldKeyMat;
+    heroMaskHornL.isPickable = false;
+    heroMaskHornL.parent = heroMaskNode;
+
+    const heroMaskHornR = MeshBuilder.CreateCylinder(
+      "heroMaskHornR",
+      { diameterTop: 0.02, diameterBottom: 0.14, height: 0.44, tessellation: 8 },
+      scene
+    );
+    heroMaskHornR.position.set(0.28, 1.84, 0.34);
+    heroMaskHornR.rotation.z = -0.42;
+    heroMaskHornR.material = goldKeyMat;
+    heroMaskHornR.isPickable = false;
+    heroMaskHornR.parent = heroMaskNode;
+
+    const heroMaskAuraRing = MeshBuilder.CreateTorus(
+      "heroMaskAuraRing",
+      { diameter: 1.95, thickness: 0.075, tessellation: 26 },
+      scene
+    );
+    heroMaskAuraRing.position.set(0, 0.12, 0);
+    heroMaskAuraRing.material = goldKeyMat;
+    heroMaskAuraRing.isPickable = false;
+    heroMaskAuraRing.parent = heroMaskNode;
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -10062,6 +10193,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // ' (Quote) toggles Ancient Transformation Masks & Aspect Visages Modal
+      if (code === "Quote" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setMaskOpen(!store.maskOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -11136,6 +11274,7 @@ export default function BabylonCanvas() {
       weatherObeliskNode.setEnabled(inOverworld);
       homesteadManorNode.setEnabled(inOverworld);
       lyreShrineNode.setEnabled(inOverworld);
+      maskShrineNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -11266,6 +11405,22 @@ export default function BabylonCanvas() {
         lyreNoteRing.rotation.y = -t * 2.7;
         lyreNoteRing.rotation.z = Math.sin(t * 2.2) * 0.28;
         lyreGroundHalo.rotation.y = t * 1.6;
+
+        const maskShrineGroundY = sampleTerrainHeight(
+          activeCells,
+          MASK_SHRINE_POS.x,
+          MASK_SHRINE_POS.z
+        );
+        maskShrineNode.position.set(
+          MASK_SHRINE_POS.x,
+          maskShrineGroundY,
+          MASK_SHRINE_POS.z
+        );
+        maskOrbitRingRoot.rotation.y = t * 1.85;
+        maskOrbitRingRoot.position.y = 1.85 + Math.sin(t * 3.2) * 0.12;
+        maskShrineCrown.rotation.y = -t * 2.6;
+        maskShrineCrown.position.y = 2.85 + Math.sin(t * 4.1) * 0.14;
+        maskShrineHalo.rotation.y = -t * 1.5;
       }
 
       // Sync 3D Hero Active Song Musical Staff & Chime Aura (`heroSongAuraNode`)
@@ -11274,6 +11429,28 @@ export default function BabylonCanvas() {
       if (hasSongAura) {
         heroSongAuraNode.rotation.y = t * 3.2;
         heroSongStaffRing.position.y = 0.95 + Math.sin(t * 4.5) * 0.12;
+      }
+
+      // Sync 3D Hero Worn Transformation Mask & Visage Aura (`heroMaskNode`)
+      const activeMask = snap.hero.equippedMask ?? "none";
+      const showHeroMask = activeMask !== "none" && !snap.editorMode;
+      heroMaskNode.setEnabled(showHeroMask);
+      if (showHeroMask) {
+        const maskMat =
+          activeMask === "stoneborn_mask"
+            ? maskStonebornMat
+            : activeMask === "tidefin_mask"
+            ? stormBoltMat
+            : activeMask === "sylvan_mask"
+            ? maskSylvanMat
+            : goldKeyMat;
+        heroMaskVisagePlate.material = maskMat;
+        heroMaskHornL.material = maskMat;
+        heroMaskHornR.material = maskMat;
+        heroMaskAuraRing.material = maskMat;
+        heroMaskAuraRing.rotation.y = t * 2.8;
+        const maskPulse = 0.94 + Math.sin(t * 5.2) * 0.08;
+        heroMaskAuraRing.scaling.set(maskPulse, 1, maskPulse);
       }
 
       // Sync 3D Active Spirit Companion Orbiting / Following the Hero (`snap.hero.activeCompanion`)
