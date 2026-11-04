@@ -73,6 +73,7 @@ import {
   LOCKED_GATE_POS,
   LYRE_SHRINE_POS,
   MASK_SHRINE_POS,
+  MIRROR_PORTAL_POS,
   MapPortal,
   MapPropInstance,
   MOUNT_STABLES_POS,
@@ -6845,6 +6846,105 @@ export default function BabylonCanvas() {
     gliderWindTrailRing.isPickable = false;
     gliderWindTrailRing.parent = heroGliderNode;
 
+    // 1d-11. 3D Hall of Mirrors Obsidian Archway & Shadow-Twin Portal (`MIRROR_PORTAL_POS` in Map 1 Overworld)
+    const mirrorPortalNode = new TransformNode("mirrorPortalNode", scene);
+    mirrorPortalNode.position.set(MIRROR_PORTAL_POS.x, 0, MIRROR_PORTAL_POS.z);
+
+    const mirrorVioletMat = makeMat(
+      "mirrorVioletMat",
+      new Color3(0.76, 0.36, 1.0),
+      new Color3(0.48, 0.18, 0.85),
+      new Color3(1.0, 0.9, 1.0),
+      0.86
+    );
+
+    const mirrorDais = MeshBuilder.CreateCylinder(
+      "mirrorDais",
+      { diameterTop: 3.1, diameterBottom: 3.55, height: 0.36, tessellation: 12 },
+      scene
+    );
+    mirrorDais.position.set(0, 0.18, 0);
+    mirrorDais.material = darkObsidianMat;
+    mirrorDais.isPickable = false;
+    mirrorDais.parent = mirrorPortalNode;
+
+    for (const px of [-1.05, 1.05]) {
+      const mirrorPillar = MeshBuilder.CreateBox(
+        `mirrorPillar-${px}`,
+        { width: 0.38, height: 2.65, depth: 0.42 },
+        scene
+      );
+      mirrorPillar.position.set(px, 1.5, 0);
+      mirrorPillar.material = darkObsidianMat;
+      mirrorPillar.isPickable = false;
+      mirrorPillar.parent = mirrorPortalNode;
+    }
+
+    const mirrorArchLintel = MeshBuilder.CreateBox(
+      "mirrorArchLintel",
+      { width: 2.65, height: 0.38, depth: 0.52 },
+      scene
+    );
+    mirrorArchLintel.position.set(0, 2.85, 0);
+    mirrorArchLintel.material = goldKeyMat;
+    mirrorArchLintel.isPickable = false;
+    mirrorArchLintel.parent = mirrorPortalNode;
+
+    const mirrorGlassPane = MeshBuilder.CreateBox(
+      "mirrorGlassPane",
+      { width: 1.75, height: 2.25, depth: 0.1 },
+      scene
+    );
+    mirrorGlassPane.position.set(0, 1.52, 0);
+    mirrorGlassPane.material = mirrorVioletMat;
+    mirrorGlassPane.isPickable = false;
+    mirrorGlassPane.parent = mirrorPortalNode;
+
+    const mirrorCrownCrest = MeshBuilder.CreatePolyhedron(
+      "mirrorCrownCrest",
+      { type: 1, size: 0.38 },
+      scene
+    );
+    mirrorCrownCrest.position.set(0, 3.45, 0);
+    mirrorCrownCrest.material = mirrorVioletMat;
+    mirrorCrownCrest.isPickable = false;
+    mirrorCrownCrest.parent = mirrorPortalNode;
+
+    const mirrorGroundHalo = MeshBuilder.CreateTorus(
+      "mirrorGroundHalo",
+      { diameter: 3.55, thickness: 0.085, tessellation: 28 },
+      scene
+    );
+    mirrorGroundHalo.position.set(0, 0.14, 0);
+    mirrorGroundHalo.material = mirrorVioletMat;
+    mirrorGroundHalo.isPickable = false;
+    mirrorGroundHalo.parent = mirrorPortalNode;
+
+    // 3D Hero Dark-Mirror Phantom Afterimage & Eclipse Halo (`heroMirrorAuraNode`)
+    const heroMirrorAuraNode = new TransformNode("heroMirrorAuraNode", scene);
+    heroMirrorAuraNode.parent = heroRoot;
+    heroMirrorAuraNode.setEnabled(false);
+
+    const heroMirrorEclipseRing = MeshBuilder.CreateTorus(
+      "heroMirrorEclipseRing",
+      { diameter: 1.85, thickness: 0.065, tessellation: 26 },
+      scene
+    );
+    heroMirrorEclipseRing.position.set(0, 0.16, 0);
+    heroMirrorEclipseRing.material = mirrorVioletMat;
+    heroMirrorEclipseRing.isPickable = false;
+    heroMirrorEclipseRing.parent = heroMirrorAuraNode;
+
+    const heroMirrorPhantom = MeshBuilder.CreateCylinder(
+      "heroMirrorPhantom",
+      { diameterTop: 0.52, diameterBottom: 0.72, height: 1.15, tessellation: 10 },
+      scene
+    );
+    heroMirrorPhantom.position.set(0, 0.75, -0.68);
+    heroMirrorPhantom.material = mirrorVioletMat;
+    heroMirrorPhantom.isPickable = false;
+    heroMirrorPhantom.parent = heroMirrorAuraNode;
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -10468,6 +10568,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // = (Equal) toggles Hall of Mirrors Shadow-Twin Duel & Master World Remix Modal
+      if (code === "Equal" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setMirrorOpen(!store.mirrorOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -11549,6 +11656,7 @@ export default function BabylonCanvas() {
       maskShrineNode.setEnabled(inOverworld);
       artificerBenchNode.setEnabled(inOverworld);
       skySailRoostNode.setEnabled(inOverworld);
+      mirrorPortalNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -11733,6 +11841,33 @@ export default function BabylonCanvas() {
         skySailPinionCrest.rotation.y = t * 2.5;
         skySailPinionCrest.position.y = 2.85 + Math.sin(t * 3.8) * 0.14;
         skySailGroundHalo.rotation.y = -t * 1.6;
+
+        const mirrorGroundY = sampleTerrainHeight(
+          activeCells,
+          MIRROR_PORTAL_POS.x,
+          MIRROR_PORTAL_POS.z
+        );
+        mirrorPortalNode.position.set(
+          MIRROR_PORTAL_POS.x,
+          mirrorGroundY,
+          MIRROR_PORTAL_POS.z
+        );
+        mirrorCrownCrest.rotation.y = -t * 2.8;
+        mirrorCrownCrest.position.y = 3.45 + Math.sin(t * 4.2) * 0.14;
+        mirrorGroundHalo.rotation.y = t * 1.8;
+        const mirrorGlassPulse = 0.94 + Math.sin(t * 5.0) * 0.06;
+        mirrorGlassPane.scaling.set(mirrorGlassPulse, 1, 1);
+      }
+
+      // Sync 3D Hero Dark-Mirror Phantom Afterimage & Eclipse Halo (`heroMirrorAuraNode`)
+      const showMirrorAura =
+        (Boolean(snap.hero.masterRemixActive) ||
+          (snap.hero.clearedMirrorTrials?.length ?? 0) > 0) &&
+        !snap.editorMode;
+      heroMirrorAuraNode.setEnabled(showMirrorAura);
+      if (showMirrorAura) {
+        heroMirrorEclipseRing.rotation.y = -t * 3.2;
+        heroMirrorPhantom.position.y = 0.75 + Math.sin(t * 5.5) * 0.08;
       }
 
       // Sync 3D Hero Overhead Celestial Sky-Sail Paraglider Rig (`heroGliderNode`)

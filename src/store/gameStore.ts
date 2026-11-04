@@ -61,6 +61,7 @@ import {
   MapPortal,
   MapPropInstance,
   MASK_SHRINE_POS,
+  MIRROR_PORTAL_POS,
   MOUNT_STABLES_POS,
   PotRewardKind,
   PropPrefabId,
@@ -209,6 +210,12 @@ export type GliderId =
   | "storm_pinion"
   | "astral_canopy";
 
+export type MirrorTrialId =
+  | "shadow_apprentice"
+  | "crimson_doppelganger"
+  | "void_archon_twin"
+  | "sovereign_nemesis";
+
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
   propId?: string;
@@ -356,6 +363,9 @@ export interface HeroState {
   gliderActive?: boolean;
   gliderTimer?: number;
   gliderPulseTimer?: number;
+  clearedMirrorTrials?: MirrorTrialId[];
+  activeMirrorTrial?: MirrorTrialId | "none";
+  masterRemixActive?: boolean;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -803,6 +813,7 @@ export interface SerializableGameState {
   maskOpen: boolean;
   artificerOpen: boolean;
   gliderOpen: boolean;
+  mirrorOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -845,6 +856,10 @@ export interface GameActions {
   setMaskOpen: (open: boolean) => void;
   setArtificerOpen: (open: boolean) => void;
   setGliderOpen: (open: boolean) => void;
+  setMirrorOpen: (open: boolean) => void;
+  summonShadowTwinDuel: (trial: MirrorTrialId) => void;
+  toggleMasterWorldRemix: () => void;
+  grantMirrorPlaytestBundle: () => void;
   unlockOrEquipGlider: (glider: GliderId) => void;
   toggleSkySailFlight: () => void;
   triggerAerialDiveSlam: () => void;
@@ -1241,6 +1256,9 @@ function createInitialState(
       gliderActive: false,
       gliderTimer: 0,
       gliderPulseTimer: 0,
+      clearedMirrorTrials: [],
+      activeMirrorTrial: "none",
+      masterRemixActive: false,
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1463,6 +1481,7 @@ function createInitialState(
     maskOpen: false,
     artificerOpen: false,
     gliderOpen: false,
+    mirrorOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -2126,7 +2145,244 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lyreOpen: open ? false : state.lyreOpen,
       maskOpen: open ? false : state.maskOpen,
       artificerOpen: open ? false : state.artificerOpen,
+      mirrorOpen: open ? false : state.mirrorOpen,
     }));
+  },
+
+  setMirrorOpen: (open: boolean) => {
+    set((state) => ({
+      mirrorOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
+      weatherOpen: open ? false : state.weatherOpen,
+      homesteadOpen: open ? false : state.homesteadOpen,
+      lyreOpen: open ? false : state.lyreOpen,
+      maskOpen: open ? false : state.maskOpen,
+      artificerOpen: open ? false : state.artificerOpen,
+      gliderOpen: open ? false : state.gliderOpen,
+    }));
+  },
+
+  summonShadowTwinDuel: (trial: MirrorTrialId) => {
+    const state = get();
+    const { hero, zone } = state;
+    const TRIAL_META: Record<
+      MirrorTrialId,
+      {
+        title: string;
+        hp: number;
+        speed: number;
+        damage: number;
+        shieldArmor: EnemyShieldArmor;
+        shockArmor: boolean;
+        subtitle: string;
+      }
+    > = {
+      shadow_apprentice: {
+        title: "I. Umbral Echo Apprentice",
+        hp: 14,
+        speed: 5.8,
+        damage: 1,
+        shieldArmor: "none",
+        shockArmor: false,
+        subtitle:
+          "Your Shadow-Twin Apprentice materialized 5.5m ahead! Defeat it for +120 Rupees, +3 Cores & permanent +15% Speed / -25% Dash CD!",
+      },
+      crimson_doppelganger: {
+        title: "II. Crimson Blade-Twin",
+        hp: 22,
+        speed: 6.2,
+        damage: 2,
+        shieldArmor: "wood",
+        shockArmor: false,
+        subtitle:
+          "Your Crimson Blade-Twin materialized! Strip its shield [H/R/T] & defeat it for +200 Rupees, +5 Cores & +1 Permanent Sword & Bow DMG!",
+      },
+      void_archon_twin: {
+        title: "III. Void-Crowned Archon Twin",
+        hp: 30,
+        speed: 6.5,
+        damage: 2,
+        shieldArmor: "ice",
+        shockArmor: true,
+        subtitle:
+          "Your Void-Crowned Archon Twin materialized! Melt its Ice Armor [R/T] & defeat it for +300 Rupees, +8 Cores, +1 Heart & -25% Damage Taken!",
+      },
+      sovereign_nemesis: {
+        title: "IV. Sovereign Nemesis — True Dark-Self",
+        hp: 38,
+        speed: 6.8,
+        damage: 2,
+        shieldArmor: "ice",
+        shockArmor: true,
+        subtitle:
+          "Your True Sovereign Nemesis awakened! Vanquish your Dark-Self for +500 Rupees, +12 Cores, +1 Heart, +25 MP & Dark-Echo Sword Beams!",
+      },
+    };
+
+    const meta = TRIAL_META[trial];
+    const spawnDist = 5.5;
+    const rawX = hero.x + Math.sin(hero.facing) * spawnDist;
+    const rawZ = hero.z + Math.cos(hero.facing) * spawnDist;
+    const spawnX = Math.max(-28, Math.min(28, rawX));
+    const spawnZ = Math.max(-28, Math.min(28, rawZ));
+
+    const filteredEnemies = state.enemies.filter(
+      (e) => !e.id.startsWith("shadow-twin-")
+    );
+    const twinEnemy: EnemyState = {
+      id: `shadow-twin-${trial}-${Date.now()}`,
+      kind: "knight",
+      zone,
+      x: spawnX,
+      z: spawnZ,
+      spawnX,
+      spawnZ,
+      facing: hero.facing + Math.PI,
+      hp: meta.hp,
+      maxHp: meta.hp,
+      weight: 3.5,
+      state: "aggro",
+      stateTimer: 0,
+      hitFlashTimer: 0.45,
+      knockbackImmunityTimer: 0,
+      stunTimer: 0,
+      lastHitSwingId: -1,
+      knockbackVx: 0,
+      knockbackVz: 0,
+      aggroRadius: 30.0,
+      speed: meta.speed,
+      damage: meta.damage,
+      rupeeDrop: "red",
+      shieldArmor: meta.shieldArmor,
+      initialShieldArmor: meta.shieldArmor,
+      shockArmor: meta.shockArmor,
+      initialShockArmor: meta.shockArmor,
+      isBounty: true,
+      initialIsBounty: true,
+      burrowed: false,
+      provoked: true,
+      chargeAngle: hero.facing + Math.PI,
+      chargePathLength: 12.0,
+      chargeDistanceTraveled: 0,
+      actionCounter: 0,
+      actionCooldown: 0.65,
+    };
+
+    soundEngine.playElectricShock();
+    soundEngine.playGateUnlock();
+    set((s) => ({
+      mirrorOpen: false,
+      hero: {
+        ...s.hero,
+        activeMirrorTrial: trial,
+      },
+      enemies: [...filteredEnemies, twinEnemy],
+      lightningArcs: [
+        ...(s.lightningArcs ?? []),
+        {
+          id: `mirror-summon-arc-${Date.now()}`,
+          zone,
+          x1: hero.x,
+          z1: hero.z,
+          x2: spawnX,
+          z2: spawnZ,
+          timer: 0.55,
+          maxTimer: 0.55,
+        },
+      ],
+      hammerShockwaves: [
+        ...(s.hammerShockwaves ?? []),
+        {
+          id: `mirror-summon-sw-${Date.now()}`,
+          zone,
+          x: spawnX,
+          z: spawnZ,
+          timer: 0.5,
+          maxTimer: 0.5,
+          maxRadius: 4.2,
+        },
+      ],
+      banner: {
+        id: Date.now(),
+        text: `🪞 SHADOW-TWIN DUEL BEGINS: ${meta.title.toUpperCase()}!`,
+        subtext: meta.subtitle,
+        timer: 5.5,
+      },
+    }));
+  },
+
+  toggleMasterWorldRemix: () => {
+    const state = get();
+    const nextRemix = !Boolean(state.hero.masterRemixActive);
+    soundEngine.playSecretSolve();
+    if (nextRemix) {
+      soundEngine.playElectricShock();
+    }
+    set((s) => ({
+      hero: {
+        ...s.hero,
+        masterRemixActive: nextRemix,
+      },
+      banner: {
+        id: Date.now(),
+        text: nextRemix
+          ? "👑 MASTER WORLD REMIX: SECOND-QUEST ENGAGED! (2× Rupees & +1 Core/Kill!)"
+          : "🪞 Master World Remix Disengaged — Returned to Standard Realm",
+        subtext: nextRemix
+          ? "Monsters across the realm surge with +40% Vitality & +15% Speed — but yield 2× Rupee Spoils & +1 Bonus Monster Core per kill!"
+          : "Realm monster vitality and reward multipliers restored to normal.",
+        timer: 4.8,
+      },
+    }));
+  },
+
+  grantMirrorPlaytestBundle: () => {
+    soundEngine.playVictoryFanfare();
+    set((state) => {
+      const prevCleared = state.hero.clearedMirrorTrials ?? [];
+      const newlyVoid = !prevCleared.includes("void_archon_twin");
+      const newlyNemesis = !prevCleared.includes("sovereign_nemesis");
+      const newlyCrimson = !prevCleared.includes("crimson_doppelganger");
+      const hpBonus = (newlyVoid ? 2 : 0) + (newlyNemesis ? 2 : 0);
+      const mpBonus = newlyNemesis ? 25 : 0;
+      const nextMaxHp = Math.min(40, state.hero.maxHp + hpBonus);
+      const nextMaxMp = (state.hero.maxMp || 100) + mpBonus;
+      return {
+        hero: {
+          ...state.hero,
+          maxHp: nextMaxHp,
+          hp: nextMaxHp,
+          maxMp: nextMaxMp,
+          mp: nextMaxMp,
+          swordDamage: (state.hero.swordDamage ?? 1) + (newlyCrimson ? 1 : 0),
+          monsterCores: (state.hero.monsterCores ?? 0) + 15,
+          rupees: state.hero.rupees + 800,
+          clearedMirrorTrials: [
+            "shadow_apprentice",
+            "crimson_doppelganger",
+            "void_archon_twin",
+            "sovereign_nemesis",
+          ],
+          masterRemixActive: true,
+        },
+        banner: {
+          id: Date.now(),
+          text: "🪞 All 4 Shadow-Twin Mirror Blessings & Master World Remix Unlocked!",
+          subtext:
+            "Earned +2 Heart Containers, +25 Max MP, +1 Sword/Bow DMG, Dark-Echo Sword Beams, -25% Damage Taken, +15 Cores & +800 Rupees!",
+          timer: 5.2,
+        },
+      };
+    });
   },
 
   unlockOrEquipGlider: (glider: GliderId) => {
@@ -6357,6 +6613,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     const equippedGlider: GliderId = hero.equippedGlider ?? "zephyr_sail";
     const isGliding = Boolean(hero.gliderActive);
+    const hasMirrorBlessing = (t: MirrorTrialId): boolean =>
+      Boolean(hero.clearedMirrorTrials && hero.clearedMirrorTrials.includes(t));
+    const masterRemixActive = Boolean(hero.masterRemixActive);
 
     // Passive Greenhouse Herb Cultivation (`herb_greenhouse` wing grows +1 random Biome Herb every 25s!)
     if (hasHomesteadWing("herb_greenhouse")) {
@@ -6409,7 +6668,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const golemMult = activeConstruct === "clockwork_golem" ? maskMult * 0.75 : maskMult;
       const gliderMult =
         isGliding && equippedGlider === "storm_pinion" ? golemMult * 0.6 : golemMult;
-      return activeWeather === "blizzard" ? gliderMult * 0.75 : gliderMult;
+      const mirrorMult = hasMirrorBlessing("void_archon_twin")
+        ? gliderMult * 0.75
+        : gliderMult;
+      return activeWeather === "blizzard" ? mirrorMult * 0.75 : mirrorMult;
     };
 
     // Helper: check if hero died and auto-revive with Bottled Fairy OR Immortal Phoenix Ankh (`aegis_ankh`)!
@@ -8116,8 +8378,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.weaponLockTimer = 0.35;
       hero.swingId += 1;
       soundEngine.playSwordSwing();
-      // Fierce Sovereign Visage (`sovereign_mask`): Every Sword Swing launches a piercing Golden Crescent Sword-Beam!
-      if (equippedMask === "sovereign_mask") {
+      // Fierce Sovereign Visage (`sovereign_mask`) or Sovereign Shadow-Echo (`sovereign_nemesis`): Every Sword Swing launches a piercing Crescent Sword-Beam!
+      if (equippedMask === "sovereign_mask" || hasMirrorBlessing("sovereign_nemesis")) {
         arrows.push({
           id: `sovereign-beam-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
           zone,
@@ -8126,7 +8388,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
           z: hero.z + Math.cos(hero.facing) * 1.15,
           angle: hero.facing,
           speed: 22.0,
-          damage: 3,
+          damage:
+            3 +
+            (equippedMask === "sovereign_mask" && hasMirrorBlessing("sovereign_nemesis")
+              ? 1
+              : 0),
           lifeTimer: 1.35,
           isPiercing: true,
           hitEnemyIds: [],
@@ -8164,7 +8430,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.dashTimer = 0.22;
       const baseDashCd =
         (hasRelic("wind_feather") ? 0.58 : 0.9) *
-        (equippedMask === "sylvan_mask" ? 0.6 : 1.0);
+        (equippedMask === "sylvan_mask" ? 0.6 : 1.0) *
+        (hasMirrorBlessing("shadow_apprentice") ? 0.75 : 1.0);
       hero.dashCooldown = activeElixir === "gale_nectar" ? baseDashCd * 0.5 : baseDashCd;
       hero.invulnerableTimer = Math.max(hero.invulnerableTimer, 0.28);
       hero.isBlocking = false;
@@ -8214,6 +8481,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ? 1.5
         : 1.45
       : 1.0;
+    const mirrorSpeedMult = hasMirrorBlessing("shadow_apprentice") ? 1.15 : 1.0;
     const bootsMultiplier =
       (hero.equippedBoots === "swift_boots"
         ? 1.25
@@ -8228,6 +8496,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       songSpeedMult *
       maskSpeedMult *
       gliderSpeedMult *
+      mirrorSpeedMult *
       dashSpeedMult;
 
     const initialGatePassable =
@@ -10351,6 +10620,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? 1
           : 0;
       const bloodMoonCoreBonus = activeWeather === "blood_moon" ? 1 : 0;
+      const remixCoreBonus = masterRemixActive ? 1 : 0;
       const coreGain =
         (enemy.kind === "boss"
           ? 5
@@ -10358,8 +10628,69 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? 2
           : 1) +
         greedCoreBonus +
-        bloodMoonCoreBonus;
+        bloodMoonCoreBonus +
+        remixCoreBonus;
       hero.monsterCores = (hero.monsterCores ?? 0) + coreGain;
+
+      // Shadow-Twin Mirror Duel Victory Check (`enemy.id.startsWith("shadow-twin-")`)
+      if (enemy.id.startsWith("shadow-twin-")) {
+        const trialId: MirrorTrialId = enemy.id.includes("sovereign_nemesis")
+          ? "sovereign_nemesis"
+          : enemy.id.includes("void_archon_twin")
+          ? "void_archon_twin"
+          : enemy.id.includes("crimson_doppelganger")
+          ? "crimson_doppelganger"
+          : "shadow_apprentice";
+        const prevCleared = hero.clearedMirrorTrials ?? [];
+        const isFirstClear = !prevCleared.includes(trialId);
+        if (isFirstClear) {
+          hero.clearedMirrorTrials = [...prevCleared, trialId];
+          if (trialId === "crimson_doppelganger") {
+            hero.swordDamage = (hero.swordDamage ?? 1) + 1;
+          } else if (trialId === "void_archon_twin") {
+            hero.maxHp = Math.min(40, hero.maxHp + 2);
+            hero.hp = hero.maxHp;
+          } else if (trialId === "sovereign_nemesis") {
+            hero.maxHp = Math.min(40, hero.maxHp + 2);
+            hero.hp = hero.maxHp;
+            hero.maxMp = (hero.maxMp || 100) + 25;
+            hero.mp = hero.maxMp;
+          }
+        }
+        hero.activeMirrorTrial = "none";
+        const bonusRupees =
+          trialId === "sovereign_nemesis"
+            ? 500
+            : trialId === "void_archon_twin"
+            ? 300
+            : trialId === "crimson_doppelganger"
+            ? 200
+            : 120;
+        const bonusCores =
+          trialId === "sovereign_nemesis"
+            ? 12
+            : trialId === "void_archon_twin"
+            ? 8
+            : trialId === "crimson_doppelganger"
+            ? 5
+            : 3;
+        hero.rupees += bonusRupees;
+        hero.monsterCores = (hero.monsterCores ?? 0) + bonusCores;
+        soundEngine.playVictoryFanfare();
+        pushBanner(
+          `🪞 SHADOW-TWIN VANQUISHED! (+${bonusRupees} Rupees & +${bonusCores} Monster Cores)`,
+          isFirstClear
+            ? trialId === "sovereign_nemesis"
+              ? "First-Clear Blessing: +1 Heart Container, +25 Max MP & Sovereign Shadow-Echo Sword Beams unlocked!"
+              : trialId === "void_archon_twin"
+              ? "First-Clear Blessing: +1 Heart Container & -25% Incoming Damage (Eclipse Aegis) unlocked!"
+              : trialId === "crimson_doppelganger"
+              ? "First-Clear Blessing: +1 Permanent Sword & Bow Damage (Mirror-Edge Mastery) unlocked!"
+              : "First-Clear Blessing: +15% Move Speed & -25% Dash Cooldown (Shadow-Step Reflex) unlocked!"
+            : "Press [=] anytime to challenge another Shadow-Twin or toggle Master World Remix!",
+          5.8
+        );
+      }
 
       // Crimson Leech Fang (`vampiric_fang`): +1 HP (Half-Heart) & +8 MP on every monster kill!
       if (hasRelic("vampiric_fang")) {
@@ -15742,7 +16073,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       (hasHomesteadWing("trophy_vault") ? 0.25 : 0) +
       (activeSongAura === "harvest_serenade" ? 0.5 : 0) +
       (activeWeather === "starfall" ? 0.5 : 0) +
-      (activeWeather === "blood_moon" ? 1.0 : 0);
+      (activeWeather === "blood_moon" ? 1.0 : 0) +
+      (masterRemixActive ? 1.0 : 0);
 
     for (const rupee of rupees) {
       if (rupee.zone !== zone || rupee.collected) continue;
@@ -16319,6 +16651,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Wind-Caller's Sky-Sail Roost & Thermal Updraft Geyser — Press [F] or [ / ] to Launch Sky-Sail Flight & Aerial Dive-Slam!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(MIRROR_PORTAL_POS.x - hero.x, MIRROR_PORTAL_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Hall of Mirrors Obsidian Archway — Press [F] or [ = ] to Duel Your Shadow-Twin & Toggle Master World Remix!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -16346,6 +16684,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let maskOpen = state.maskOpen;
     let artificerOpen = state.artificerOpen;
     let gliderOpen = state.gliderOpen;
+    let mirrorOpen = state.mirrorOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -16540,6 +16879,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       gliderOpen = true;
+      mirrorOpen = false;
+      artificerOpen = false;
+      maskOpen = false;
+      lyreOpen = false;
+      homesteadOpen = false;
+      weatherOpen = false;
+      alchemyOpen = false;
+      colosseumOpen = false;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(MIRROR_PORTAL_POS.x - hero.x, MIRROR_PORTAL_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      mirrorOpen = true;
+      gliderOpen = false;
       artificerOpen = false;
       maskOpen = false;
       lyreOpen = false;
@@ -16801,6 +17162,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       maskOpen,
       artificerOpen,
       gliderOpen,
+      mirrorOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

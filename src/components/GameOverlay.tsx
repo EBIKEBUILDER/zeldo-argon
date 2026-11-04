@@ -15,6 +15,7 @@ import {
   HomesteadWingId,
   LyreNoteId,
   MaskId,
+  MirrorTrialId,
   MountId,
   OffhandId,
   PrimaryHandId,
@@ -272,6 +273,7 @@ export default function GameOverlay() {
   const maskOpen = useGameStore((s) => s.maskOpen);
   const artificerOpen = useGameStore((s) => s.artificerOpen);
   const gliderOpen = useGameStore((s) => s.gliderOpen);
+  const mirrorOpen = useGameStore((s) => s.mirrorOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -307,6 +309,10 @@ export default function GameOverlay() {
   const setMaskOpen = useGameStore((s) => s.setMaskOpen);
   const setArtificerOpen = useGameStore((s) => s.setArtificerOpen);
   const setGliderOpen = useGameStore((s) => s.setGliderOpen);
+  const setMirrorOpen = useGameStore((s) => s.setMirrorOpen);
+  const summonShadowTwinDuel = useGameStore((s) => s.summonShadowTwinDuel);
+  const toggleMasterWorldRemix = useGameStore((s) => s.toggleMasterWorldRemix);
+  const grantMirrorPlaytestBundle = useGameStore((s) => s.grantMirrorPlaytestBundle);
   const unlockOrEquipGlider = useGameStore((s) => s.unlockOrEquipGlider);
   const toggleSkySailFlight = useGameStore((s) => s.toggleSkySailFlight);
   const triggerAerialDiveSlam = useGameStore((s) => s.triggerAerialDiveSlam);
@@ -408,6 +414,8 @@ export default function GameOverlay() {
         if (lyreOpen) setLyreOpen(false);
         if (maskOpen) setMaskOpen(false);
         if (artificerOpen) setArtificerOpen(false);
+        if (gliderOpen) setGliderOpen(false);
+        if (mirrorOpen) setMirrorOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -428,6 +436,8 @@ export default function GameOverlay() {
     lyreOpen,
     maskOpen,
     artificerOpen,
+    gliderOpen,
+    mirrorOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -443,6 +453,8 @@ export default function GameOverlay() {
     setLyreOpen,
     setMaskOpen,
     setArtificerOpen,
+    setGliderOpen,
+    setMirrorOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -1632,6 +1644,25 @@ export default function GameOverlay() {
                     ? `${Math.ceil(hero.gliderTimer ?? 0)}s`
                     : "/"}
                   )
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMirrorOpen(!mirrorOpen)}
+                  className={`char-toggle-btn ${
+                    mirrorOpen || Boolean(hero.masterRemixActive) ? "active" : ""
+                  }`}
+                  style={
+                    Boolean(hero.masterRemixActive)
+                      ? {
+                          borderColor: "rgba(202, 128, 255, 0.95)",
+                          background: "rgba(42, 16, 66, 0.92)",
+                          color: "#e6c4ff",
+                        }
+                      : undefined
+                  }
+                  title="Open Hall of Mirrors Shadow-Twin Duel & Master World Remix Console (Shortcut: =)"
+                >
+                  🪞 Mirrors ({(hero.clearedMirrorTrials ?? []).length}/4 • =)
                 </button>
                 <button
                   type="button"
@@ -8065,6 +8096,343 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Sky-Sail (/)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          HALL OF MIRRORS SHADOW-TWIN DUEL & MASTER WORLD REMIX MODAL (Shortcut: =)
+         ========================================================= */}
+      {phase === "playing" && !editorMode && mirrorOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card char-sheet-card" style={{ maxWidth: 860 }}>
+            <div className="shop-header">
+              <div>
+                <div
+                  className="shop-pill"
+                  style={{
+                    background: "rgba(186, 104, 255, 0.18)",
+                    color: "#e6c4ff",
+                    borderColor: "rgba(186, 104, 255, 0.48)",
+                  }}
+                >
+                  CROSSROADS HALL OF MIRRORS • SHADOW-TWIN TRIALS &amp; SECOND-QUEST REMIX
+                </div>
+                <h2 className="shop-title">
+                  🪞 HALL OF MIRRORS &amp; MASTER WORLD REMIX
+                </h2>
+              </div>
+              <div className="char-summary-badges">
+                <div
+                  className="shop-wallet"
+                  style={{
+                    borderColor: "rgba(186, 104, 255, 0.55)",
+                    color: "#e6c4ff",
+                  }}
+                  title="Mirror Trials Conquered"
+                >
+                  <span style={{ fontSize: "1.05rem" }}>🪞</span>
+                  <span>{(hero.clearedMirrorTrials ?? []).length} / 4 Cleared</span>
+                </div>
+                <div className="shop-wallet" title="Crystallized Monster Cores">
+                  <span style={{ color: "#ff9e5e", fontSize: "1.05rem" }}>✦</span>
+                  <span>{hero.monsterCores ?? 0} Cores</span>
+                </div>
+                <div className="shop-wallet" title="Rupees">
+                  <span className="rupee-gem" />
+                  <span>{hero.rupees}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => grantMirrorPlaytestBundle()}
+                  className="char-equip-btn"
+                  style={{
+                    padding: "6px 12px",
+                    fontSize: "0.75rem",
+                    background: "rgba(186, 104, 255, 0.18)",
+                    borderColor: "rgba(186, 104, 255, 0.55)",
+                    color: "#e6c4ff",
+                  }}
+                >
+                  ⚡ Playtest: Unlock All 4 Mirror Blessings + Remix
+                </button>
+              </div>
+            </div>
+
+            <p className="shop-sub">
+              Step before the 3D <strong>Obsidian Mirror Archway</strong> at{" "}
+              <code>(24.5, -13.5)</code> in Crossroads Village or press <strong>=</strong> anytime
+              to summon your own <strong>Shadow-Twin Doppelganger</strong> in the field for
+              permanent First-Clear Blessings, or toggle{" "}
+              <strong>Master World Remix (Second Quest)</strong> for{" "}
+              <strong>2× Rupee Spoils &amp; +1 Bonus Monster Core per kill</strong>!
+            </p>
+
+            {/* Master World Remix Toggle Banner */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 14,
+                padding: "14px 18px",
+                marginBottom: 16,
+                borderRadius: 14,
+                border: Boolean(hero.masterRemixActive)
+                  ? "1px solid rgba(214, 132, 255, 0.88)"
+                  : "1px solid rgba(145, 168, 214, 0.32)",
+                background: Boolean(hero.masterRemixActive)
+                  ? "linear-gradient(90deg, rgba(58, 18, 86, 0.92), rgba(26, 14, 48, 0.92))"
+                  : "rgba(14, 20, 34, 0.85)",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: "0.94rem",
+                    fontWeight: 900,
+                    color: Boolean(hero.masterRemixActive) ? "#f0d4ff" : "#d8e6ff",
+                  }}
+                >
+                  {Boolean(hero.masterRemixActive)
+                    ? "👑 MASTER WORLD REMIX: SECOND-QUEST ACTIVE (2× Rupees & +1 Core / Kill!)"
+                    : "🪞 Master World Remix (Second-Quest Mode): Currently Standard Realm"}
+                </div>
+                <div style={{ fontSize: "0.78rem", color: "#b8cce8", marginTop: 3 }}>
+                  When active, all Rupee pickups are <strong>Doubled (2×)</strong>, every slain foe
+                  awards <strong>+1 Bonus Monster Core (✦)</strong>, and your 3D{" "}
+                  <strong>Dark-Mirror Phantom Afterimage</strong> trails behind you!
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleMasterWorldRemix()}
+                className="char-equip-btn"
+                style={{
+                  padding: "8px 16px",
+                  fontSize: "0.82rem",
+                  fontWeight: 800,
+                  background: Boolean(hero.masterRemixActive)
+                    ? "rgba(255, 96, 128, 0.25)"
+                    : "linear-gradient(180deg, #c678ff 0%, #6e28b5 100%)",
+                  borderColor: Boolean(hero.masterRemixActive)
+                    ? "rgba(255, 118, 146, 0.78)"
+                    : "rgba(218, 162, 255, 0.9)",
+                  color: Boolean(hero.masterRemixActive) ? "#ffb8c8" : "#18062c",
+                }}
+              >
+                {Boolean(hero.masterRemixActive)
+                  ? "Disengage Master Remix"
+                  : "👑 Engage Master World Remix (2× Spoils)"}
+              </button>
+            </div>
+
+            {(() => {
+              const clearedList = hero.clearedMirrorTrials ?? [];
+              const MIRROR_TRIALS: Array<{
+                id: MirrorTrialId;
+                name: string;
+                icon: string;
+                subtitle: string;
+                blessingTitle: string;
+                desc: string;
+                rewardText: string;
+                accent: string;
+              }> = [
+                {
+                  id: "shadow_apprentice",
+                  name: "I. Umbral Echo Apprentice",
+                  icon: "🌑",
+                  subtitle: "14 HP • Agile Shadow-Twin • Fast Pursuit",
+                  blessingTitle: "Shadow-Step Reflex (+15% Speed & -25% Dash CD)",
+                  desc: "Materializes your Umbral Echo Apprentice 5.5m ahead in your current zone. Vanquish it to claim its permanent agility blessing!",
+                  rewardText: "+120 Rupees • +3✦ Cores • Permanent +15% Move Speed & -25% Dash Cooldown",
+                  accent: "#9ee8ff",
+                },
+                {
+                  id: "crimson_doppelganger",
+                  name: "II. Crimson Blade-Twin",
+                  icon: "⚔️",
+                  subtitle: "22 HP • Shielded Doppelganger • Heavy Lunge",
+                  blessingTitle: "Mirror-Edge Mastery (+1 Permanent Sword & Bow DMG)",
+                  desc: "Summons your Crimson Blade-Twin armed with a wooden buckler (strip with Hookshot [H], Flame Rod [R], or War-Hammer [T]).",
+                  rewardText: "+200 Rupees • +5✦ Cores • First-Clear: +1 Permanent Sword DMG",
+                  accent: "#ff9868",
+                },
+                {
+                  id: "void_archon_twin",
+                  name: "III. Void-Crowned Archon Twin",
+                  icon: "🔮",
+                  subtitle: "30 HP • Permafrost & Shock Carapace",
+                  blessingTitle: "Eclipse Aegis (+1 Heart Container & -25% Damage Taken)",
+                  desc: "Summons the Void-Crowned Archon Twin sheathed in Ice & Shock Armor. Melt its shell with Flame Rod [R] or War-Hammer [T]!",
+                  rewardText: "+300 Rupees • +8✦ Cores • First-Clear: +1 Full Heart Container & -25% Incoming Damage",
+                  accent: "#d68eff",
+                },
+                {
+                  id: "sovereign_nemesis",
+                  name: "IV. Sovereign Nemesis — True Dark-Self",
+                  icon: "👑",
+                  subtitle: "38 HP • Supreme Shadow-Twin Boss Duel",
+                  blessingTitle: "Sovereign Shadow-Echo (+1 Heart, +25 MP & Piercing Sword-Beams)",
+                  desc: "Confront your True Dark-Self in single combat! Conquering the Sovereign Nemesis awakens permanent piercing Crescent Sword-Beams on every swing!",
+                  rewardText: "+500 Rupees • +12✦ Cores • First-Clear: +1 Heart Container, +25 Max MP & Piercing Sword-Beams",
+                  accent: "#ffe268",
+                },
+              ];
+
+              return (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))",
+                    gap: "12px",
+                    marginBottom: "16px",
+                  }}
+                >
+                  {MIRROR_TRIALS.map((tr) => {
+                    const isCleared = clearedList.includes(tr.id);
+                    const isActiveDuel = hero.activeMirrorTrial === tr.id;
+                    return (
+                      <div
+                        key={tr.id}
+                        style={{
+                          padding: "14px",
+                          borderRadius: "12px",
+                          border: isActiveDuel
+                            ? `2px solid ${tr.accent}`
+                            : isCleared
+                            ? "1px solid rgba(114, 245, 168, 0.55)"
+                            : "1px solid rgba(255,255,255,0.12)",
+                          background: isActiveDuel
+                            ? "rgba(44, 22, 68, 0.92)"
+                            : isCleared
+                            ? "rgba(16, 38, 32, 0.88)"
+                            : "rgba(14, 18, 28, 0.82)",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                          gap: "10px",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: "8px",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ fontSize: "1.45rem" }}>{tr.icon}</span>
+                              <div>
+                                <div
+                                  style={{
+                                    fontWeight: 800,
+                                    color: tr.accent,
+                                    fontSize: "0.95rem",
+                                  }}
+                                >
+                                  {tr.name}
+                                </div>
+                                <div style={{ fontSize: "0.73rem", color: "#9cb8d8" }}>
+                                  {tr.subtitle}
+                                </div>
+                              </div>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: "0.7rem",
+                                fontWeight: 800,
+                                padding: "3px 8px",
+                                borderRadius: "999px",
+                                background: isCleared
+                                  ? "rgba(68, 238, 148, 0.22)"
+                                  : "rgba(186, 104, 255, 0.16)",
+                                color: isCleared ? "#88ffbe" : "#e2beff",
+                                border: `1px solid ${
+                                  isCleared
+                                    ? "rgba(68, 238, 148, 0.55)"
+                                    : "rgba(186, 104, 255, 0.4)"
+                                }`,
+                              }}
+                            >
+                              {isCleared ? "✓ BLESSING ACTIVE" : "UNCONQUERED"}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.76rem",
+                              fontWeight: 800,
+                              color: "#ffe49e",
+                              marginBottom: 4,
+                            }}
+                          >
+                            ✦ {tr.blessingTitle}
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.78rem",
+                              color: "#c8daf0",
+                              lineHeight: 1.45,
+                              margin: "0 0 6px 0",
+                            }}
+                          >
+                            {tr.desc}
+                          </p>
+                          <div
+                            style={{
+                              fontSize: "0.73rem",
+                              color: "#a8f0c6",
+                              fontWeight: 700,
+                            }}
+                          >
+                            🏆 Spoils: {tr.rewardText}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => summonShadowTwinDuel(tr.id)}
+                          className="char-equip-btn"
+                          style={{
+                            width: "100%",
+                            padding: "8px 12px",
+                            background: isCleared
+                              ? "rgba(186, 104, 255, 0.22)"
+                              : "linear-gradient(180deg, #d28cff 0%, #7428c2 100%)",
+                            color: isCleared ? "#f0d6ff" : "#18052c",
+                            borderColor: "rgba(214, 152, 255, 0.78)",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {isCleared
+                            ? `⚔️ Re-Challenge ${tr.name} (Repeatable Bounty)`
+                            : `🪞 Summon & Duel ${tr.name}`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>=</strong> (Equal) or <strong>Esc</strong> anytime to close the Hall
+                of Mirrors.
+              </span>
+              <button
+                type="button"
+                onClick={() => setMirrorOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Mirrors (=)
               </button>
             </div>
           </div>

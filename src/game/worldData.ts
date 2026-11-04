@@ -334,6 +334,12 @@ export const SKY_SAIL_ROOST_POS = {
   z: -13.5,
 };
 
+// Map 1 Hall of Mirrors Obsidian Archway & Shadow-Twin Portal (Duel 4 Shadow-Twin Doppelgangers & toggle Master World Remix!)
+export const MIRROR_PORTAL_POS = {
+  x: 24.5,
+  z: -13.5,
+};
+
 // Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,
