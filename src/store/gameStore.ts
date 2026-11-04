@@ -71,6 +71,7 @@ import {
   SECRET_STASH_POS,
   SHOP_INTERACT_POS,
   SKY_CELESTIAL_CHEST_POS,
+  SKY_SAIL_ROOST_POS,
   SKY_VICTORY_CHEST_POS,
   WARP_STONE_META,
   WEATHER_OBELISK_POS,
@@ -201,6 +202,12 @@ export type ConstructId =
   | "tesla_pylon"
   | "clockwork_golem"
   | "aether_beacon";
+
+export type GliderId =
+  | "zephyr_sail"
+  | "ember_wing"
+  | "storm_pinion"
+  | "astral_canopy";
 
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
@@ -344,6 +351,11 @@ export interface HeroState {
   constructX?: number;
   constructZ?: number;
   constructFacing?: number;
+  unlockedGliders?: GliderId[];
+  equippedGlider?: GliderId;
+  gliderActive?: boolean;
+  gliderTimer?: number;
+  gliderPulseTimer?: number;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -790,6 +802,7 @@ export interface SerializableGameState {
   lyreOpen: boolean;
   maskOpen: boolean;
   artificerOpen: boolean;
+  gliderOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -831,6 +844,11 @@ export interface GameActions {
   setLyreOpen: (open: boolean) => void;
   setMaskOpen: (open: boolean) => void;
   setArtificerOpen: (open: boolean) => void;
+  setGliderOpen: (open: boolean) => void;
+  unlockOrEquipGlider: (glider: GliderId) => void;
+  toggleSkySailFlight: () => void;
+  triggerAerialDiveSlam: () => void;
+  grantGliderPlaytestBundle: () => void;
   unlockOrDeployConstruct: (construct: Exclude<ConstructId, "none">) => void;
   quickDeployConstruct: () => void;
   grantArtificerPlaytestBundle: () => void;
@@ -1218,6 +1236,11 @@ function createInitialState(
       constructX: 0,
       constructZ: 0,
       constructFacing: 0,
+      unlockedGliders: ["zephyr_sail"],
+      equippedGlider: "zephyr_sail",
+      gliderActive: false,
+      gliderTimer: 0,
+      gliderPulseTimer: 0,
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1439,6 +1462,7 @@ function createInitialState(
     lyreOpen: false,
     maskOpen: false,
     artificerOpen: false,
+    gliderOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -2080,6 +2104,276 @@ export const useGameStore = create<GameStore>((set, get) => ({
       homesteadOpen: open ? false : state.homesteadOpen,
       lyreOpen: open ? false : state.lyreOpen,
       maskOpen: open ? false : state.maskOpen,
+      gliderOpen: open ? false : state.gliderOpen,
+    }));
+  },
+
+  setGliderOpen: (open: boolean) => {
+    set((state) => ({
+      gliderOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
+      weatherOpen: open ? false : state.weatherOpen,
+      homesteadOpen: open ? false : state.homesteadOpen,
+      lyreOpen: open ? false : state.lyreOpen,
+      maskOpen: open ? false : state.maskOpen,
+      artificerOpen: open ? false : state.artificerOpen,
+    }));
+  },
+
+  unlockOrEquipGlider: (glider: GliderId) => {
+    const state = get();
+    const unlocked = [...(state.hero.unlockedGliders ?? ["zephyr_sail"])];
+    const GLIDER_META: Record<
+      GliderId,
+      {
+        name: string;
+        cores: number;
+        rupees: number;
+        desc: string;
+      }
+    > = {
+      zephyr_sail: {
+        name: "Zephyr Feather-Sail",
+        cores: 0,
+        rupees: 0,
+        desc: "Soar aloft for 18s across water & hazards at +45% speed! Press Attack [Space] while gliding for a 3 DMG + 2.0s Stun Seismic Dive-Slam!",
+      },
+      ember_wing: {
+        name: "Phoenix Ember-Wing",
+        cores: 2,
+        rupees: 170,
+        desc: "+50% Glide Speed! Drops 2 DMG Fireballs on foes & auto-ignites unlit braziers below every 1.3s + 4 DMG Supernova Dive-Slam!",
+      },
+      storm_pinion: {
+        name: "Storm-Hawk Gale-Pinion",
+        cores: 3,
+        rupees: 250,
+        desc: "+65% Supersonic Glide Speed & -40% Damage Taken! Zaps up to 3 foes below for 2 DMG + 1.4s Stun every 1.3s + 4 DMG Thunder Dive-Slam!",
+      },
+      astral_canopy: {
+        name: "Astral Star-Weaver Canopy",
+        cores: 5,
+        rupees: 360,
+        desc: "+55% Speed, +10 MP/s, 20m Rupee Magnet & Starlight Bolts (3 DMG) every 1.3s + 5 DMG Starfall Dive-Slam that cracks Boss Carapace!",
+      },
+    };
+
+    const meta = GLIDER_META[glider];
+    const isUnlocked = unlocked.includes(glider);
+    let nextCores = state.hero.monsterCores ?? 0;
+    let nextRupees = state.hero.rupees;
+
+    if (!isUnlocked) {
+      if (nextCores < meta.cores || nextRupees < meta.rupees) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: "Not Enough Cores or Rupees to Weave Sky-Sail Canopy!",
+            subtext: `Weaving ${meta.name} requires ${meta.cores} Monster Cores and ${meta.rupees} Rupees.`,
+            timer: 3.5,
+          },
+        });
+        return;
+      }
+      nextCores -= meta.cores;
+      nextRupees -= meta.rupees;
+      unlocked.push(glider);
+      soundEngine.unlock();
+      soundEngine.playVictoryFanfare();
+    } else {
+      soundEngine.unlock();
+      soundEngine.playFairyRevive();
+    }
+
+    set({
+      hero: {
+        ...state.hero,
+        monsterCores: nextCores,
+        rupees: nextRupees,
+        unlockedGliders: unlocked,
+        equippedGlider: glider,
+        gliderActive: true,
+        gliderTimer: 18.0,
+        gliderPulseTimer: 0.4,
+      },
+      banner: {
+        id: Date.now(),
+        text: isUnlocked
+          ? `🪂 Launched Aloft on ${meta.name}! (18s Thermal Updraft)`
+          : `🪂 Crafted & Launched: ${meta.name}!`,
+        subtext: meta.desc,
+        timer: 4.6,
+      },
+    });
+  },
+
+  toggleSkySailFlight: () => {
+    const state = get();
+    if (state.hero.gliderActive && (state.hero.gliderTimer ?? 0) > 0) {
+      get().triggerAerialDiveSlam();
+    } else {
+      const equipped = state.hero.equippedGlider ?? "zephyr_sail";
+      get().unlockOrEquipGlider(equipped);
+    }
+  },
+
+  triggerAerialDiveSlam: () => {
+    const state = get();
+    const glider = state.hero.equippedGlider ?? "zephyr_sail";
+    const zone = state.zone;
+    const gx = state.hero.x;
+    const gz = state.hero.z;
+    const slamDmg =
+      glider === "astral_canopy"
+        ? 5
+        : glider === "ember_wing" || glider === "storm_pinion"
+        ? 4
+        : 3;
+    const slamStun =
+      glider === "astral_canopy" ? 2.6 : glider === "storm_pinion" ? 2.2 : 2.0;
+
+    soundEngine.unlock();
+    soundEngine.playHammerSlam();
+    soundEngine.playBossWallCrash();
+
+    const nextFlags = { ...state.flags };
+    let nextEnemies = state.enemies.map((e) => ({ ...e }));
+    let defeatedBonusCores = 0;
+
+    for (const enemy of nextEnemies) {
+      if (
+        enemy.zone !== zone ||
+        enemy.state === "dead" ||
+        (enemy.kind === "burrower" && enemy.burrowed)
+      ) {
+        continue;
+      }
+      const d = Math.hypot(enemy.x - gx, enemy.z - gz);
+      if (d <= 5.2) {
+        enemy.provoked = true;
+        if (enemy.kind === "boss") {
+          if (glider === "astral_canopy" && nextFlags.bossState === "ARMORED") {
+            nextFlags.bossState = "EXPOSED_EYE";
+            nextFlags.bossArmorTimer = 8.0;
+            enemy.hitFlashTimer = 0.45;
+          } else if (nextFlags.bossState === "STUNNED" || enemy.state === "stunned") {
+            enemy.hp = Math.max(0, enemy.hp - slamDmg);
+            enemy.hitFlashTimer = 0.42;
+          }
+        } else {
+          enemy.shieldArmor = "none";
+          enemy.hp -= slamDmg;
+          enemy.hitFlashTimer = 0.38;
+          enemy.stunTimer = Math.max(enemy.stunTimer, slamStun);
+          if (enemy.kind !== "turret") {
+            enemy.state = "stunned";
+            enemy.stateTimer = Math.max(enemy.stateTimer, slamStun);
+            const pushAng = Math.atan2(enemy.x - gx, enemy.z - gz);
+            enemy.knockbackVx = Math.sin(pushAng) * 14.5;
+            enemy.knockbackVz = Math.cos(pushAng) * 14.5;
+          }
+          if (enemy.hp <= 0) {
+            enemy.hp = 0;
+            enemy.state = "dead";
+            defeatedBonusCores += 1;
+            soundEngine.playEnemyDefeat();
+          }
+        }
+      }
+    }
+
+    const nextShockwaves = [
+      ...(state.hammerShockwaves ?? []),
+      {
+        id: `glider-slam-${Date.now()}`,
+        zone,
+        x: gx,
+        z: gz,
+        timer: 0.52,
+        maxTimer: 0.52,
+        maxRadius: 5.6,
+      },
+    ];
+
+    const nextFireZones = [...(state.fireZones ?? [])];
+    if (glider === "ember_wing") {
+      nextFireZones.push({
+        id: `ember-slam-fz-${Date.now()}`,
+        zone,
+        x: gx,
+        z: gz,
+        radius: 3.4,
+        timer: 5.0,
+        maxTimer: 5.0,
+        tickTimer: 0.2,
+      });
+    }
+
+    set({
+      hero: {
+        ...state.hero,
+        gliderActive: false,
+        gliderTimer: 0,
+        invulnerableTimer: Math.max(state.hero.invulnerableTimer, 0.45),
+        monsterCores: (state.hero.monsterCores ?? 0) + defeatedBonusCores,
+      },
+      enemies: nextEnemies,
+      flags: nextFlags,
+      hammerShockwaves: nextShockwaves,
+      fireZones: nextFireZones,
+      banner: {
+        id: Date.now(),
+        text: `💥 SEISMIC AERIAL DIVE-SLAM! (${slamDmg} AoE DMG + ${slamStun}s Stun within 5.2m!)`,
+        subtext:
+          glider === "astral_canopy"
+            ? "Starfall Dive-Slam shattered enemy shields and cracked Boss outer armor!"
+            : "Your Sky-Sail plunge sent a seismic shockwave across the battlefield!",
+        timer: 3.8,
+      },
+    });
+  },
+
+  grantGliderPlaytestBundle: () => {
+    soundEngine.unlock();
+    soundEngine.playVictoryFanfare();
+    soundEngine.playFairyRevive();
+    set((state) => ({
+      hero: {
+        ...state.hero,
+        maxHp: Math.min(40, state.hero.maxHp + 2),
+        hp: Math.min(40, state.hero.maxHp + 2),
+        maxMp: (state.hero.maxMp || 100) + 25,
+        mp: (state.hero.maxMp || 100) + 25,
+        monsterCores: (state.hero.monsterCores ?? 0) + 12,
+        rupees: state.hero.rupees + 600,
+        unlockedGliders: [
+          "zephyr_sail",
+          "ember_wing",
+          "storm_pinion",
+          "astral_canopy",
+        ],
+        equippedGlider: "astral_canopy",
+        gliderActive: true,
+        gliderTimer: 18.0,
+        gliderPulseTimer: 0.35,
+      },
+      banner: {
+        id: Date.now(),
+        text: "🪂 All 4 Celestial Sky-Sail Canopies Unlocked! (+1 Heart, +25 MP, +12 Cores & +600 Rupees)",
+        subtext:
+          "Astral Star-Weaver Canopy equipped & launched! Press Attack [Space] mid-glide to unleash a Seismic Dive-Slam!",
+        timer: 4.8,
+      },
     }));
   },
 
@@ -6051,6 +6345,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     const activeConstruct: ConstructId = hero.activeConstruct ?? "none";
 
+    // Update Active Celestial Sky-Sail Flight Timer (`gliderTimer`)
+    if (hero.gliderActive && (hero.gliderTimer ?? 0) > 0) {
+      hero.gliderTimer = Math.max(0, (hero.gliderTimer ?? 0) - dt);
+      if (hero.gliderTimer <= 0) {
+        hero.gliderActive = false;
+      }
+    } else {
+      hero.gliderActive = false;
+      hero.gliderTimer = 0;
+    }
+    const equippedGlider: GliderId = hero.equippedGlider ?? "zephyr_sail";
+    const isGliding = Boolean(hero.gliderActive);
+
     // Passive Greenhouse Herb Cultivation (`herb_greenhouse` wing grows +1 random Biome Herb every 25s!)
     if (hasHomesteadWing("herb_greenhouse")) {
       hero.greenhouseTimer = (hero.greenhouseTimer ?? 25.0) - dt;
@@ -6074,18 +6381,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // Passive Magic Power regeneration (2.5 MP/s base, 5.0 MP/s with Archmage's Ley-Crystal, +15.0 MP/s with Archmage Ley-Font Elixir, +8.0 MP/s during Starfall, +4.0 MP/s with Tide-Fin Mask!)
+    // Passive Magic Power regeneration (2.5 MP/s base, 5.0 MP/s with Archmage's Ley-Crystal, +15.0 MP/s with Archmage Ley-Font Elixir, +8.0 MP/s during Starfall, +4.0 MP/s with Tide-Fin Mask, +10.0 MP/s while gliding with Astral Star-Canopy!)
     const mpRegenRate =
       (hasRelic("arcane_conduit") ? 5.0 : 2.5) +
       (activeElixir === "archmage_elixir" ? 15.0 : 0) +
       (activeWeather === "starfall" ? 8.0 : 0) +
-      (equippedMask === "tidefin_mask" ? 4.0 : 0);
+      (equippedMask === "tidefin_mask" ? 4.0 : 0) +
+      (isGliding && equippedGlider === "astral_canopy" ? 10.0 : 0);
     hero.maxMp = hero.maxMp || 100;
     hero.mp = Math.min(hero.maxMp, (hero.mp ?? 100) + dt * mpRegenRate);
     hero.maxBombs = hero.maxBombs ?? 0;
     hero.bombs = hero.bombs ?? 0;
 
-    // Tunic, Relic, Steed, Elixir, Song, Mask & Blizzard damage multiplier:
+    // Tunic, Relic, Steed, Elixir, Song, Mask, Glider & Blizzard damage multiplier:
     const getTunicDamageMultiplier = (): number => {
       const baseMult =
         hero.equippedTunic === "red_mail"
@@ -6099,7 +6407,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const songMult = activeSongAura === "time_ballad" ? elixirMult * 0.7 : elixirMult;
       const maskMult = equippedMask === "stoneborn_mask" ? songMult * 0.5 : songMult;
       const golemMult = activeConstruct === "clockwork_golem" ? maskMult * 0.75 : maskMult;
-      return activeWeather === "blizzard" ? golemMult * 0.75 : golemMult;
+      const gliderMult =
+        isGliding && equippedGlider === "storm_pinion" ? golemMult * 0.6 : golemMult;
+      return activeWeather === "blizzard" ? gliderMult * 0.75 : gliderMult;
     };
 
     // Helper: check if hero died and auto-revive with Bottled Fairy OR Immortal Phoenix Ankh (`aegis_ankh`)!
@@ -6162,7 +6472,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       attackerWeight = 1.0,
       isMagical = false
     ): { triggered: boolean; blocked: boolean } => {
-      if (hero.invulnerableTimer > 0 || phase !== "playing") {
+      if (hero.invulnerableTimer > 0 || phase !== "playing" || (isGroundHazard && hero.gliderActive)) {
         return { triggered: false, blocked: false };
       }
 
@@ -7746,6 +8056,55 @@ export const useGameStore = create<GameStore>((set, get) => ({
       canUseWeapon &&
       input.attackPressed &&
       !consumedAttackThisFrame &&
+      hero.gliderActive
+    ) {
+      // Mid-Glide Attack [Space / LMB]: Execute Seismic Aerial Dive-Slam!
+      consumedAttackThisFrame = true;
+      hero.gliderActive = false;
+      hero.gliderTimer = 0;
+      hero.isAttacking = true;
+      hero.isSpinAttacking = true;
+      hero.isBlocking = false;
+      hero.spinAttackTimer = 0.38;
+      hero.attackTimer = 0.38;
+      hero.hammerAnimTimer = 0.38;
+      hero.attackCooldown = 0.42;
+      hero.weaponLockTimer = 0.4;
+      hero.invulnerableTimer = Math.max(hero.invulnerableTimer, 0.55);
+      hero.swingId += 1;
+      hammerSlamImpactPos = { x: hero.x, z: hero.z };
+      soundEngine.playHammerSlam();
+      soundEngine.playBombExplosion();
+      hammerShockwaves.push({
+        id: `dive-slam-sw-${stats.elapsedSeconds.toFixed(3)}-${Math.random().toFixed(3)}`,
+        zone,
+        x: hero.x,
+        z: hero.z,
+        timer: 0.52,
+        maxTimer: 0.52,
+        maxRadius: 5.2,
+      });
+      if (equippedGlider === "ember_wing") {
+        fireZones.push({
+          id: `dive-firezone-${stats.elapsedSeconds.toFixed(3)}`,
+          zone,
+          x: hero.x,
+          z: hero.z,
+          radius: 3.4,
+          timer: 4.5,
+          maxTimer: 4.5,
+          tickTimer: 0.2,
+        });
+      }
+      pushBanner(
+        "🦅 SEISMIC AERIAL DIVE-SLAM!",
+        "Plunged from the sky with a 5.2m shockwave — shattering boulders, pounding stakes & stunning nearby foes!",
+        3.8
+      );
+    } else if (
+      canUseWeapon &&
+      input.attackPressed &&
+      !consumedAttackThisFrame &&
       hero.attackCooldown <= 0
     ) {
       // Trigger Sword Swing
@@ -7846,6 +8205,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
         : equippedMask === "sylvan_mask"
         ? 1.25
         : 1.0;
+    const gliderSpeedMult = hero.gliderActive
+      ? equippedGlider === "storm_pinion"
+        ? 1.65
+        : equippedGlider === "astral_canopy"
+        ? 1.55
+        : equippedGlider === "ember_wing"
+        ? 1.5
+        : 1.45
+      : 1.0;
     const bootsMultiplier =
       (hero.equippedBoots === "swift_boots"
         ? 1.25
@@ -7859,6 +8227,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       elixirSpeedMult *
       songSpeedMult *
       maskSpeedMult *
+      gliderSpeedMult *
       dashSpeedMult;
 
     const initialGatePassable =
@@ -7959,6 +8328,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? Math.max(13.55, nextHeroZ)
           : nextHeroZ;
       const mountIgnoresWater =
+        Boolean(hero.gliderActive) ||
         hero.mountedSteed === "frost_stag" ||
         hero.mountedSteed === "war_drake" ||
         equippedMask === "tidefin_mask";
@@ -12914,6 +13284,158 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hero.constructFacing = cFacing;
     }
 
+    // 9b-3. Celestial Sky-Sail Paraglider Active Wing Pulses (`hero.gliderActive`)
+    if (hero.gliderActive) {
+      hero.gliderPulseTimer = (hero.gliderPulseTimer ?? 1.2) - dt;
+      if (hero.gliderPulseTimer <= 0) {
+        hero.gliderPulseTimer = 1.3;
+        if (equippedGlider === "ember_wing") {
+          let emberTarget: EnemyState | null = null;
+          let bestDist = 9.5;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - hero.x, e.z - hero.z);
+            if (d <= bestDist) {
+              bestDist = d;
+              emberTarget = e;
+            }
+          }
+          if (emberTarget) {
+            const shotAngle = Math.atan2(emberTarget.x - hero.x, emberTarget.z - hero.z);
+            soundEngine.playFireballShoot(false);
+            fireballs.push({
+              id: `glider-ember-fb-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: hero.x + Math.sin(shotAngle) * 0.75,
+              z: hero.z + Math.cos(shotAngle) * 0.75,
+              angle: shotAngle,
+              speed: 14.5,
+              damage: 2,
+              radius: 0.48,
+              isCharged: false,
+              lifeTimer: 1.25,
+            });
+          }
+          const unlitTorch = mapProps.find(
+            (p) =>
+              p.zone === zone &&
+              p.prefab === "wall_torch" &&
+              p.lit === false &&
+              Math.hypot(p.x - hero.x, p.z - hero.z) <= 8.5
+          );
+          if (unlitTorch) {
+            const shotAngle = Math.atan2(unlitTorch.x - hero.x, unlitTorch.z - hero.z);
+            fireballs.push({
+              id: `glider-torch-fb-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: hero.x + Math.sin(shotAngle) * 0.7,
+              z: hero.z + Math.cos(shotAngle) * 0.7,
+              angle: shotAngle,
+              speed: 15.0,
+              damage: 1,
+              radius: 0.45,
+              isCharged: false,
+              lifeTimer: 1.1,
+            });
+          }
+        } else if (equippedGlider === "storm_pinion") {
+          let zappedCount = 0;
+          for (const e of enemies) {
+            if (zappedCount >= 3) break;
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - hero.x, e.z - hero.z);
+            if (d <= 10.0) {
+              zappedCount++;
+              e.provoked = true;
+              if (e.kind !== "boss") {
+                e.hp -= 2;
+                e.hitFlashTimer = 0.28;
+                e.stunTimer = Math.max(e.stunTimer, 1.4);
+                if (e.kind !== "turret") {
+                  e.state = "stunned";
+                  e.stateTimer = Math.max(e.stateTimer, 1.4);
+                }
+                if (e.hp <= 0) {
+                  handleEnemyDeath(e);
+                }
+              } else if (flags.bossState === "STUNNED") {
+                e.hp -= 2;
+                e.hitFlashTimer = 0.28;
+                if (e.hp <= 0) {
+                  handleEnemyDeath(e);
+                }
+              }
+              lightningArcs.push({
+                id: `glider-storm-${e.id}-${stats.elapsedSeconds.toFixed(3)}`,
+                zone,
+                x1: hero.x,
+                z1: hero.z,
+                x2: e.x,
+                z2: e.z,
+                timer: 0.3,
+                maxTimer: 0.3,
+              });
+            }
+          }
+          if (zappedCount > 0) {
+            soundEngine.playElectricShock();
+          }
+        } else if (equippedGlider === "astral_canopy") {
+          if (hero.hp < hero.maxHp) {
+            hero.hp = Math.min(hero.maxHp, hero.hp + 1);
+          }
+          hero.mp = Math.min(hero.maxMp, (hero.mp ?? 0) + 6);
+          let starTarget: EnemyState | null = null;
+          let bestDist = 11.0;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - hero.x, e.z - hero.z);
+            if (d <= bestDist) {
+              bestDist = d;
+              starTarget = e;
+            }
+          }
+          if (starTarget) {
+            const shotAngle = Math.atan2(starTarget.x - hero.x, starTarget.z - hero.z);
+            arrows.push({
+              id: `glider-star-arrow-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              fromHero: true,
+              x: hero.x + Math.sin(shotAngle) * 0.85,
+              z: hero.z + Math.cos(shotAngle) * 0.85,
+              angle: shotAngle,
+              speed: 22.0,
+              damage: 3,
+              lifeTimer: 1.2,
+              isPiercing: true,
+              hitEnemyIds: [],
+            });
+          }
+        }
+      }
+    }
+
     // 9c. Update Thrown Clay Pots & Light Rocks in Flight (`thrownObjects`)
     const remainingThrown: ThrownObjectState[] = [];
     for (const obj of thrownObjects) {
@@ -15198,13 +15720,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const magnetRange =
       activeConstruct === "aether_beacon"
         ? 22.0
+        : hero.gliderActive && equippedGlider === "astral_canopy"
+        ? 20.0
         : activeSongAura === "gale_requiem"
         ? 18.0
         : hero.activeCompanion === "gold_sprite"
         ? 8.5
         : 2.6;
     const magnetSpeed =
-      activeConstruct === "aether_beacon" || activeSongAura === "gale_requiem"
+      activeConstruct === "aether_beacon" ||
+      (hero.gliderActive && equippedGlider === "astral_canopy") ||
+      activeSongAura === "gale_requiem"
         ? 19.0
         : hero.activeCompanion === "gold_sprite"
         ? 12.5
@@ -15787,6 +16313,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Artificer's Magitech Foundry & Automaton Workbench — Press [F] or [ . ] to Craft & Deploy 3D Magitech Constructs!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(SKY_SAIL_ROOST_POS.x - hero.x, SKY_SAIL_ROOST_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Wind-Caller's Sky-Sail Roost & Thermal Updraft Geyser — Press [F] or [ / ] to Launch Sky-Sail Flight & Aerial Dive-Slam!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -15813,6 +16345,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let lyreOpen = state.lyreOpen;
     let maskOpen = state.maskOpen;
     let artificerOpen = state.artificerOpen;
+    let gliderOpen = state.gliderOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -15987,6 +16520,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       artificerOpen = true;
+      gliderOpen = false;
+      maskOpen = false;
+      lyreOpen = false;
+      homesteadOpen = false;
+      weatherOpen = false;
+      alchemyOpen = false;
+      colosseumOpen = false;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(SKY_SAIL_ROOST_POS.x - hero.x, SKY_SAIL_ROOST_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      gliderOpen = true;
+      artificerOpen = false;
       maskOpen = false;
       lyreOpen = false;
       homesteadOpen = false;
@@ -16246,6 +16800,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lyreOpen,
       maskOpen,
       artificerOpen,
+      gliderOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

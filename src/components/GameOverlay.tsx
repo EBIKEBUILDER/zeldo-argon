@@ -10,6 +10,7 @@ import {
   EditorPlaceCategory,
   ElixirId,
   FishId,
+  GliderId,
   HerbId,
   HomesteadWingId,
   LyreNoteId,
@@ -270,6 +271,7 @@ export default function GameOverlay() {
   const lyreOpen = useGameStore((s) => s.lyreOpen);
   const maskOpen = useGameStore((s) => s.maskOpen);
   const artificerOpen = useGameStore((s) => s.artificerOpen);
+  const gliderOpen = useGameStore((s) => s.gliderOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -304,6 +306,11 @@ export default function GameOverlay() {
   const setLyreOpen = useGameStore((s) => s.setLyreOpen);
   const setMaskOpen = useGameStore((s) => s.setMaskOpen);
   const setArtificerOpen = useGameStore((s) => s.setArtificerOpen);
+  const setGliderOpen = useGameStore((s) => s.setGliderOpen);
+  const unlockOrEquipGlider = useGameStore((s) => s.unlockOrEquipGlider);
+  const toggleSkySailFlight = useGameStore((s) => s.toggleSkySailFlight);
+  const triggerAerialDiveSlam = useGameStore((s) => s.triggerAerialDiveSlam);
+  const grantGliderPlaytestBundle = useGameStore((s) => s.grantGliderPlaytestBundle);
   const unlockOrDeployConstruct = useGameStore((s) => s.unlockOrDeployConstruct);
   const quickDeployConstruct = useGameStore((s) => s.quickDeployConstruct);
   const grantArtificerPlaytestBundle = useGameStore((s) => s.grantArtificerPlaytestBundle);
@@ -1601,6 +1608,29 @@ export default function GameOverlay() {
                   {(hero.constructTimer ?? 0) > 0
                     ? `${Math.ceil(hero.constructTimer ?? 0)}s`
                     : "."}
+                  )
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGliderOpen(!gliderOpen)}
+                  className={`char-toggle-btn ${
+                    gliderOpen || Boolean(hero.gliderActive) ? "active" : ""
+                  }`}
+                  style={
+                    Boolean(hero.gliderActive)
+                      ? {
+                          borderColor: "rgba(126, 236, 255, 0.95)",
+                          background: "rgba(12, 48, 66, 0.92)",
+                          color: "#b8f7ff",
+                        }
+                      : undefined
+                  }
+                  title="Open Wind-Caller's Celestial Sky-Sail Paraglider & Thermal Updraft Roost (Shortcut: /)"
+                >
+                  🪂 Sky-Sail (
+                  {Boolean(hero.gliderActive)
+                    ? `${Math.ceil(hero.gliderTimer ?? 0)}s`
+                    : "/"}
                   )
                 </button>
                 <button
@@ -7689,6 +7719,352 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Foundry (.)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          WIND-CALLER'S CELESTIAL SKY-SAIL PARAGLIDER & THERMAL UPDRAFTS MODAL [/]
+         ========================================================= */}
+      {phase === "playing" && !editorMode && gliderOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card" style={{ maxWidth: "1060px", width: "95vw" }}>
+            <div className="shop-header">
+              <div>
+                <div
+                  className="shop-pill"
+                  style={{
+                    background: "rgba(78, 255, 198, 0.16)",
+                    borderColor: "rgba(78, 255, 198, 0.55)",
+                    color: "#8effdb",
+                  }}
+                >
+                  WIND-CALLER&apos;S SKY-SAIL ROOST • 4 CELESTIAL PARAGLIDER WINGS, THERMAL UPDRAFTS &amp; AERIAL DIVE-SLAM
+                </div>
+                <h2 className="shop-title">CELESTIAL SKY-SAIL PARAGLIDER &amp; AERIAL DIVE-SLAM</h2>
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <div
+                  className="shop-wallet"
+                  style={{
+                    borderColor: "rgba(78, 255, 198, 0.55)",
+                    background: "rgba(10, 42, 34, 0.65)",
+                  }}
+                >
+                  <span className="shop-wallet-label">WINGS WOVEN:</span>
+                  <span className="shop-wallet-val" style={{ color: "#8effdb" }}>
+                    {(hero.unlockedGliders ?? ["zephyr_sail"]).length}/4 🪂
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">MONSTER CORES:</span>
+                  <span className="shop-wallet-val" style={{ color: "#ffd875" }}>
+                    {hero.monsterCores ?? 0} ✦
+                  </span>
+                </div>
+                <div className="shop-wallet">
+                  <span className="shop-wallet-label">RUPEES:</span>
+                  <span className="shop-wallet-val">{hero.rupees}</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+                padding: "10px 14px",
+                marginBottom: "14px",
+                borderRadius: "10px",
+                background: "rgba(10, 36, 30, 0.78)",
+                border: "1px solid rgba(78, 255, 198, 0.35)",
+              }}
+            >
+              <p className="shop-greeting" style={{ margin: 0, flex: "1 1 480px" }}>
+                &ldquo;Catch the <strong>Thermal Updrafts</strong> and soar high above rivers,
+                deep water, and ground traps for <strong>45 seconds</strong>! While airborne,
+                press <strong>Attack [Space / LMB]</strong> (or click{" "}
+                <strong>Seismic Aerial Dive-Slam</strong> below) to plunge from the sky with a{" "}
+                <strong>5.2m shockwave</strong> that shatters Cracked Boulders, pounds Rusted
+                Stakes flat, and stuns nearby monsters!&rdquo;
+              </p>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={toggleSkySailFlight}
+                  className="char-equip-btn"
+                  style={{
+                    background: hero.gliderActive
+                      ? "rgba(255, 96, 118, 0.28)"
+                      : "linear-gradient(180deg, #2ee6b8 0%, #0d7a62 100%)",
+                    borderColor: hero.gliderActive
+                      ? "#ff7890"
+                      : "rgba(150, 255, 228, 0.9)",
+                    color: hero.gliderActive ? "#ffd0d8" : "#04211a",
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {hero.gliderActive
+                    ? `🪂 Fold Sky-Sail (${Math.ceil(hero.gliderTimer ?? 0)}s Left)`
+                    : "🪂 Launch Thermal Updraft Flight (45s)"}
+                </button>
+                <button
+                  type="button"
+                  onClick={triggerAerialDiveSlam}
+                  className="char-equip-btn"
+                  style={{
+                    background: "linear-gradient(180deg, #ffb838 0%, #b8680a 100%)",
+                    borderColor: "rgba(255, 228, 150, 0.9)",
+                    color: "#1b1102",
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Plunge from the sky with a 5.2m Seismic Shockwave (4 DMG + Stun + Shatters Cracked Boulders & Pounds Stakes)!"
+                >
+                  🦅 Execute Seismic Aerial Dive-Slam!
+                </button>
+                <button
+                  type="button"
+                  onClick={grantGliderPlaytestBundle}
+                  className="char-equip-btn"
+                  style={{
+                    background: "linear-gradient(180deg, #38c8ff 0%, #0e6094 100%)",
+                    borderColor: "rgba(162, 236, 255, 0.9)",
+                    color: "#ffffff",
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Playtest Shortcut: Unlock all 4 Celestial Sky-Sail Wings + +1 Heart Container + +25 Max MP + +12 Cores + +600 Rupees"
+                >
+                  ★ Playtest: Unlock All 4 Sky-Sail Wings
+                </button>
+              </div>
+            </div>
+
+            {(() => {
+              const unlocked = hero.unlockedGliders ?? ["zephyr_sail"];
+              const equipped = hero.equippedGlider ?? "zephyr_sail";
+              const isFlying = Boolean(hero.gliderActive);
+              const timer = hero.gliderTimer ?? 0;
+              const cores = hero.monsterCores ?? 0;
+
+              const gliderCatalog: Array<{
+                id: GliderId;
+                name: string;
+                subtitle: string;
+                icon: string;
+                costCores: number;
+                costRupees: number;
+                traitOne: string;
+                traitTwo: string;
+                desc: string;
+                accent: string;
+              }> = [
+                {
+                  id: "zephyr_sail",
+                  name: "I. Zephyr Wind-Sail",
+                  subtitle: "EMERALD UPDRAFT CANOPY • +45% GLIDE SPEED & CHASM FLIGHT",
+                  icon: "🍃🪂",
+                  costCores: 0,
+                  costRupees: 0,
+                  traitOne: "+45% Glide Speed & Soars Freely Over All Deep Water, Rivers & Ground Traps",
+                  traitTwo: "Mid-Flight Attack [Space/LMB] Unleashes a 4 DMG Seismic Aerial Dive-Slam!",
+                  desc: "Woven from whispering vale silk and wind-caller feathers. Catch thermal updrafts to glide effortlessly across rivers and hazards, then Dive-Slam onto foes and cracked boulders!",
+                  accent: "#4effc6",
+                },
+                {
+                  id: "ember_wing",
+                  name: "II. Phoenix Ember-Wing",
+                  subtitle: "CRIMSON SOLAR PINIONS • AUTO-FIREBALLS & SCORCHING DIVE",
+                  icon: "🔥🪂",
+                  costCores: 2,
+                  costRupees: 160,
+                  traitOne: "+50% Glide Speed & Rains 2 DMG Seeking Fireballs Every 1.3s From Above",
+                  traitTwo: "Automatically Lights Unlit Braziers Below & Leaves a Burning Fire Zone on Dive-Slam!",
+                  desc: "Forged from caldera phoenix plumes. Rains seeking fireballs onto monsters below, ignites unlit dungeon torches from the air, and erupts a blazing fire ring when you Dive-Slam!",
+                  accent: "#ff7847",
+                },
+                {
+                  id: "storm_pinion",
+                  name: "III. Tempest Storm-Pinion",
+                  subtitle: "THUNDERHEAD GALE WINGS • +65% SPEED, CHAIN-LIGHTNING & WARD",
+                  icon: "⚡🪂",
+                  costCores: 3,
+                  costRupees: 240,
+                  traitOne: "+65% Supersonic Glide Speed & -40% Damage Taken While Airborne",
+                  traitTwo: "Discharges 3-Target Chain Lightning (2 DMG + 1.4s Stun) Every 1.3s!",
+                  desc: "Crackling with tempest gale energy. Grants our fastest +65% aerial flight speed, shields you from 40% of incoming damage, and continuously zaps monsters below with chain lightning!",
+                  accent: "#4ce6ff",
+                },
+                {
+                  id: "astral_canopy",
+                  name: "IV. Astral Star-Canopy",
+                  subtitle: "CELESTIAL SOVEREIGN WINGS • STARLIGHT ARROWS, HEAL & 20m VACUUM",
+                  icon: "🌠🪂",
+                  costCores: 4,
+                  costRupees: 320,
+                  traitOne: "+55% Glide Speed, +10 MP/s, +1 HP & +6 MP Pulse + 3 DMG Starlight Arrows Every 1.3s",
+                  traitTwo: "20m Aerial Loot-Magnet Vacuum & Dive-Slam Cracks Boss Outer Carapace!",
+                  desc: "Woven from pure starlight in the Celestial Sky-Temple. Fires piercing 3 DMG Starlight Arrows while regenerating HP & MP, vacuums loot across 20m, and shatters Boss armor on Dive-Slam!",
+                  accent: "#ffd858",
+                },
+              ];
+
+              return (
+                <div
+                  className="shop-items-grid"
+                  style={{ gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}
+                >
+                  {gliderCatalog.map((gl) => {
+                    const isUnlocked = unlocked.includes(gl.id);
+                    const isEquipped = equipped === gl.id;
+                    const isThisFlying = isEquipped && isFlying && timer > 0;
+                    const canAfford =
+                      !isUnlocked && cores >= gl.costCores && hero.rupees >= gl.costRupees;
+
+                    return (
+                      <div
+                        key={gl.id}
+                        className={`shop-item-card ${isUnlocked ? "shop-item-owned" : ""}`}
+                        style={{
+                          borderColor: isThisFlying
+                            ? "#4eff91"
+                            : isEquipped
+                            ? gl.accent
+                            : "rgba(140, 165, 210, 0.3)",
+                          padding: "12px",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: "0.65rem",
+                                fontWeight: 800,
+                                letterSpacing: "0.06em",
+                                color: gl.accent,
+                              }}
+                            >
+                              {gl.subtitle}
+                            </span>
+                            {isThisFlying ? (
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  fontWeight: 900,
+                                  color: "#4eff91",
+                                }}
+                              >
+                                ● AIRBORNE ({Math.ceil(timer)}s)
+                              </span>
+                            ) : isEquipped ? (
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  fontWeight: 800,
+                                  color: "#8effdb",
+                                }}
+                              >
+                                ✓ EQUIPPED WING
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <div className="shop-item-top" style={{ marginBottom: "8px" }}>
+                            <span
+                              className="shop-item-name"
+                              style={{ color: "#ffffff", fontSize: "0.94rem" }}
+                            >
+                              {gl.icon} {gl.name}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                              marginBottom: "10px",
+                              padding: "7px 10px",
+                              borderRadius: "8px",
+                              background: "rgba(10, 16, 28, 0.7)",
+                              border: "1px solid rgba(255, 255, 255, 0.08)",
+                              fontSize: "0.72rem",
+                            }}
+                          >
+                            <div style={{ color: "#8effb8", fontWeight: 800 }}>
+                              ⚡ {gl.traitOne}
+                            </div>
+                            <div style={{ color: "#ffd978", fontWeight: 700 }}>
+                              ✦ {gl.traitTwo}
+                            </div>
+                          </div>
+
+                          <p
+                            className="shop-item-desc"
+                            style={{ fontSize: "0.72rem", marginBottom: "12px" }}
+                          >
+                            {gl.desc}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={!isUnlocked && !canAfford}
+                          onClick={() => unlockOrEquipGlider(gl.id)}
+                          className="shop-buy-btn"
+                          style={{
+                            fontSize: "0.8rem",
+                            padding: "8px 12px",
+                            background: isThisFlying
+                              ? "rgba(46, 214, 118, 0.28)"
+                              : isUnlocked
+                              ? "linear-gradient(180deg, #2ee6b8 0%, #0d7a62 100%)"
+                              : undefined,
+                            color: isUnlocked && !isThisFlying ? "#04211a" : undefined,
+                            fontWeight: 800,
+                          }}
+                        >
+                          {isThisFlying
+                            ? `🪂 Refresh ${gl.name} Flight (45s)`
+                            : isUnlocked
+                            ? `🪂 Equip & Launch ${gl.name} (45s)`
+                            : `Weave Sky-Sail (${gl.costCores}✦ Cores + ${gl.costRupees} Rupees)`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>/</strong> (Slash) or <strong>Esc</strong> anytime to close the
+                Wind-Caller&apos;s Celestial Sky-Sail Roost.
+              </span>
+              <button
+                type="button"
+                onClick={() => setGliderOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Sky-Sail (/)
               </button>
             </div>
           </div>

@@ -82,6 +82,7 @@ import {
   SHOP_INTERACT_POS,
   SHOP_STALL_POS,
   SKY_CELESTIAL_CHEST_POS,
+  SKY_SAIL_ROOST_POS,
   SKY_VICTORY_CHEST_POS,
   WARP_STONE_META,
   WEATHER_OBELISK_POS,
@@ -6729,6 +6730,121 @@ export default function BabylonCanvas() {
     constructOrbitGear.isPickable = false;
     constructOrbitGear.parent = deployedConstructNode;
 
+    // 1d-10. 3D Wind-Caller's Celestial Sky-Sail Roost & Thermal Updraft Geyser (`SKY_SAIL_ROOST_POS` in Map 1 Overworld)
+    const skySailRoostNode = new TransformNode("skySailRoostNode", scene);
+    skySailRoostNode.position.set(SKY_SAIL_ROOST_POS.x, 0, SKY_SAIL_ROOST_POS.z);
+
+    const skySailZephyrMat = makeMat(
+      "skySailZephyrMat",
+      new Color3(0.28, 0.94, 0.86),
+      new Color3(0.14, 0.62, 0.56),
+      new Color3(1.0, 1.0, 1.0)
+    );
+
+    const skySailDais = MeshBuilder.CreateCylinder(
+      "skySailDais",
+      { diameterTop: 3.1, diameterBottom: 3.55, height: 0.36, tessellation: 12 },
+      scene
+    );
+    skySailDais.position.set(0, 0.18, 0);
+    skySailDais.material = dgPillarMat;
+    skySailDais.isPickable = false;
+    skySailDais.parent = skySailRoostNode;
+
+    const skySailUpdraftRings: Mesh[] = [];
+    for (let uIdx = 0; uIdx < 3; uIdx++) {
+      const updraftRing = MeshBuilder.CreateTorus(
+        `skySailUpdraftRing-${uIdx}`,
+        { diameter: 2.15 + uIdx * 0.45, thickness: 0.095, tessellation: 24 },
+        scene
+      );
+      updraftRing.position.set(0, 0.75 + uIdx * 0.85, 0);
+      updraftRing.material = uIdx === 2 ? goldKeyMat : skySailZephyrMat;
+      updraftRing.isPickable = false;
+      updraftRing.parent = skySailRoostNode;
+      skySailUpdraftRings.push(updraftRing);
+    }
+
+    const skySailPinionCrest = MeshBuilder.CreatePolyhedron(
+      "skySailPinionCrest",
+      { type: 1, size: 0.44 },
+      scene
+    );
+    skySailPinionCrest.position.set(0, 2.75, 0);
+    skySailPinionCrest.scaling.set(1.65, 0.95, 0.55);
+    skySailPinionCrest.material = goldKeyMat;
+    skySailPinionCrest.isPickable = false;
+    skySailPinionCrest.parent = skySailRoostNode;
+
+    const skySailGroundHalo = MeshBuilder.CreateTorus(
+      "skySailGroundHalo",
+      { diameter: 3.55, thickness: 0.085, tessellation: 28 },
+      scene
+    );
+    skySailGroundHalo.position.set(0, 0.14, 0);
+    skySailGroundHalo.material = skySailZephyrMat;
+    skySailGroundHalo.isPickable = false;
+    skySailGroundHalo.parent = skySailRoostNode;
+
+    // 3D Hero Overhead Celestial Sky-Sail Paraglider Rig (`heroGliderNode`)
+    const heroGliderNode = new TransformNode("heroGliderNode", scene);
+    heroGliderNode.parent = heroRoot;
+    heroGliderNode.setEnabled(false);
+
+    const gliderGripBar = MeshBuilder.CreateCylinder(
+      "gliderGripBar",
+      { diameter: 0.08, height: 1.55, tessellation: 10 },
+      scene
+    );
+    gliderGripBar.rotation.z = Math.PI * 0.5;
+    gliderGripBar.position.set(0, 2.15, 0.12);
+    gliderGripBar.material = artificerBrassMat;
+    gliderGripBar.isPickable = false;
+    gliderGripBar.parent = heroGliderNode;
+
+    const gliderWingLeft = MeshBuilder.CreateBox(
+      "gliderWingLeft",
+      { width: 1.65, height: 0.08, depth: 0.95 },
+      scene
+    );
+    gliderWingLeft.position.set(-0.78, 2.42, -0.05);
+    gliderWingLeft.rotation.set(-0.14, 0.22, 0.18);
+    gliderWingLeft.material = skySailZephyrMat;
+    gliderWingLeft.isPickable = false;
+    gliderWingLeft.parent = heroGliderNode;
+
+    const gliderWingRight = MeshBuilder.CreateBox(
+      "gliderWingRight",
+      { width: 1.65, height: 0.08, depth: 0.95 },
+      scene
+    );
+    gliderWingRight.position.set(0.78, 2.42, -0.05);
+    gliderWingRight.rotation.set(-0.14, -0.22, -0.18);
+    gliderWingRight.material = skySailZephyrMat;
+    gliderWingRight.isPickable = false;
+    gliderWingRight.parent = heroGliderNode;
+
+    const gliderCenterCrest = MeshBuilder.CreatePolyhedron(
+      "gliderCenterCrest",
+      { type: 1, size: 0.3 },
+      scene
+    );
+    gliderCenterCrest.position.set(0, 2.52, 0.18);
+    gliderCenterCrest.scaling.set(0.9, 0.65, 1.35);
+    gliderCenterCrest.material = goldKeyMat;
+    gliderCenterCrest.isPickable = false;
+    gliderCenterCrest.parent = heroGliderNode;
+
+    const gliderWindTrailRing = MeshBuilder.CreateTorus(
+      "gliderWindTrailRing",
+      { diameter: 2.1, thickness: 0.075, tessellation: 26 },
+      scene
+    );
+    gliderWindTrailRing.position.set(0, -0.35, 0);
+    gliderWindTrailRing.material = skySailZephyrMat;
+    gliderWindTrailRing.isPickable = false;
+    gliderWindTrailRing.parent = heroGliderNode;
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -10345,6 +10461,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // / (Slash) toggles Wind-Caller's Celestial Sky-Sail Paraglider & Thermal Updrafts Modal
+      if (code === "Slash" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setGliderOpen(!store.gliderOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -11082,6 +11205,8 @@ export default function BabylonCanvas() {
 
       const dashTimer = snap.hero.dashTimer ?? 0;
       const isDashingNow = dashTimer > 0;
+      const isGlidingNow = Boolean(snap.hero.gliderActive) && !snap.editorMode;
+      const gliderHoverY = isGlidingNow ? 2.25 + Math.sin(t * 4.2) * 0.16 : 0;
       const mountedSteed = snap.hero.mountedSteed ?? "none";
       const isMounted = mountedSteed !== "none" && !snap.editorMode;
       const mountHopY =
@@ -11096,6 +11221,8 @@ export default function BabylonCanvas() {
         heroGroundY +
           (kbLock > 0
             ? launchArcY
+            : isGlidingNow
+            ? gliderHoverY
             : isMounted
             ? mountHopY
             : isDashingNow
@@ -11421,6 +11548,7 @@ export default function BabylonCanvas() {
       lyreShrineNode.setEnabled(inOverworld);
       maskShrineNode.setEnabled(inOverworld);
       artificerBenchNode.setEnabled(inOverworld);
+      skySailRoostNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -11583,6 +11711,49 @@ export default function BabylonCanvas() {
         artificerDynamoCore.rotation.y = t * 2.7;
         artificerDynamoCore.position.y = 2.15 + Math.sin(t * 4.0) * 0.14;
         artificerGroundHalo.rotation.y = t * 1.5;
+
+        const skySailGroundY = sampleTerrainHeight(
+          activeCells,
+          SKY_SAIL_ROOST_POS.x,
+          SKY_SAIL_ROOST_POS.z
+        );
+        skySailRoostNode.position.set(
+          SKY_SAIL_ROOST_POS.x,
+          skySailGroundY,
+          SKY_SAIL_ROOST_POS.z
+        );
+        for (let uIdx = 0; uIdx < skySailUpdraftRings.length; uIdx++) {
+          const ring = skySailUpdraftRings[uIdx];
+          const phase = ((t * 0.85 + uIdx * 0.33) % 1);
+          ring.position.y = 0.45 + phase * 2.15;
+          ring.rotation.y = t * (uIdx % 2 === 0 ? 2.4 : -2.6);
+          const s = 0.82 + Math.sin(phase * Math.PI) * 0.35;
+          ring.scaling.set(s, 1, s);
+        }
+        skySailPinionCrest.rotation.y = t * 2.5;
+        skySailPinionCrest.position.y = 2.85 + Math.sin(t * 3.8) * 0.14;
+        skySailGroundHalo.rotation.y = -t * 1.6;
+      }
+
+      // Sync 3D Hero Overhead Celestial Sky-Sail Paraglider Rig (`heroGliderNode`)
+      heroGliderNode.setEnabled(isGlidingNow);
+      if (isGlidingNow) {
+        const equippedGlider = snap.hero.equippedGlider ?? "zephyr_sail";
+        const gMat =
+          equippedGlider === "ember_wing"
+            ? maskStonebornMat
+            : equippedGlider === "storm_pinion"
+            ? stormBoltMat
+            : equippedGlider === "astral_canopy"
+            ? goldKeyMat
+            : skySailZephyrMat;
+        gliderWingLeft.material = gMat;
+        gliderWingRight.material = gMat;
+        gliderWindTrailRing.material = gMat;
+        const wingBank = Math.sin(t * 6.5) * 0.08;
+        gliderWingLeft.rotation.z = 0.18 + wingBank;
+        gliderWingRight.rotation.z = -0.18 - wingBank;
+        gliderWindTrailRing.rotation.y = -t * 4.2;
       }
 
       // Sync 3D Deployed Battlefield Magitech Construct (`deployedConstructNode`)

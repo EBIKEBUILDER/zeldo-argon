@@ -328,6 +328,12 @@ export const ARTIFICER_BENCH_POS = {
   z: -31.8,
 };
 
+// Map 1 Wind-Caller's Sky-Sail Roost & Thermal Updraft Spire (Launch 4 Celestial Sky-Sail Paragliders & execute Seismic Dive-Slams!)
+export const SKY_SAIL_ROOST_POS = {
+  x: -24.5,
+  z: -13.5,
+};
+
 // Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,
