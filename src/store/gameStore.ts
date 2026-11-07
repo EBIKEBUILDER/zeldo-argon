@@ -4,6 +4,7 @@ import {
   ARTIFICER_BENCH_POS,
   ATOLL_PEARL_CHEST_POS,
   ATOLL_VICTORY_CHEST_POS,
+  BESTIARY_LECTERN_POS,
   BIG_KEY_CHEST_POS,
   BOSS_CHEST_POS,
   BOSS_EXIT_GATE_POS,
@@ -230,6 +231,12 @@ export type ConstellationId =
   | "lyra_ley_star"
   | "aegis_world_star";
 
+export type SoulCardId =
+  | "wraith_soul"
+  | "sapper_soul"
+  | "colossus_soul"
+  | "dragon_soul";
+
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
   propId?: string;
@@ -392,6 +399,9 @@ export interface HeroState {
   unlockedConstellations?: ConstellationId[];
   activeConstellation?: ConstellationId | "none";
   starPulseTimer?: number;
+  unlockedSoulCards?: SoulCardId[];
+  equippedSoulCard?: SoulCardId | "none";
+  soulCardPulseTimer?: number;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -842,6 +852,7 @@ export interface SerializableGameState {
   mirrorOpen: boolean;
   chronoOpen: boolean;
   starsOpen: boolean;
+  bestiaryOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -892,6 +903,9 @@ export interface GameActions {
   setStarsOpen: (open: boolean) => void;
   unlockOrAlignConstellation: (star: ConstellationId) => void;
   grantStarsPlaytestBundle: () => void;
+  setBestiaryOpen: (open: boolean) => void;
+  unlockOrAttuneSoulCard: (card: SoulCardId) => void;
+  grantBestiaryPlaytestBundle: () => void;
   summonShadowTwinDuel: (trial: MirrorTrialId) => void;
   toggleMasterWorldRemix: () => void;
   grantMirrorPlaytestBundle: () => void;
@@ -1306,6 +1320,9 @@ function createInitialState(
       unlockedConstellations: [],
       activeConstellation: "none",
       starPulseTimer: 0,
+      unlockedSoulCards: ["wraith_soul"],
+      equippedSoulCard: "none",
+      soulCardPulseTimer: 0,
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1531,6 +1548,7 @@ function createInitialState(
     mirrorOpen: false,
     chronoOpen: false,
     starsOpen: false,
+    bestiaryOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -2266,7 +2284,183 @@ export const useGameStore = create<GameStore>((set, get) => ({
       gliderOpen: open ? false : state.gliderOpen,
       mirrorOpen: open ? false : state.mirrorOpen,
       chronoOpen: open ? false : state.chronoOpen,
+      bestiaryOpen: open ? false : state.bestiaryOpen,
     }));
+  },
+
+  setBestiaryOpen: (open: boolean) => {
+    set((state) => ({
+      bestiaryOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
+      weatherOpen: open ? false : state.weatherOpen,
+      homesteadOpen: open ? false : state.homesteadOpen,
+      lyreOpen: open ? false : state.lyreOpen,
+      maskOpen: open ? false : state.maskOpen,
+      artificerOpen: open ? false : state.artificerOpen,
+      gliderOpen: open ? false : state.gliderOpen,
+      mirrorOpen: open ? false : state.mirrorOpen,
+      chronoOpen: open ? false : state.chronoOpen,
+      starsOpen: open ? false : state.starsOpen,
+    }));
+  },
+
+  unlockOrAttuneSoulCard: (card: SoulCardId) => {
+    const state = get();
+    const unlocked = [...(state.hero.unlockedSoulCards ?? ["wraith_soul"])];
+    const CARD_META: Record<
+      SoulCardId,
+      {
+        name: string;
+        cores: number;
+        rupees: number;
+        subtitle: string;
+      }
+    > = {
+      wraith_soul: {
+        name: "Frost Wraith Soul-Card (Glacial Specter)",
+        cores: 0,
+        rupees: 0,
+        subtitle:
+          "Frost-Slow Immunity + Attuned Chilling Frost Nova (2 DMG + 1.8s Freeze & +6 MP every 2.4s)!",
+      },
+      sapper_soul: {
+        name: "Sapper Gremlin Soul-Card (Demolition Alchemist)",
+        cores: 3,
+        rupees: 150,
+        subtitle:
+          "Unlocks 25-Bomb Satchel + Synthesizes +1 Free Bomb & Hurls a 3 DMG Alchemical Fireball every 2.4s!",
+      },
+      colossus_soul: {
+        name: "Glacial Colossus Soul-Card (Permafrost Sentinel)",
+        cores: 5,
+        rupees: 250,
+        subtitle:
+          "Permanent +1 Full Heart Container, -15% Damage Taken & Attuned Permafrost Thorns Nova (3 DMG + 1.6s Freeze + 1 HP)!",
+      },
+      dragon_soul: {
+        name: "Dragon-Titan Soul-Card (Sovereign Wyrm)",
+        cores: 7,
+        rupees: 350,
+        subtitle:
+          "Permanent +1 Sword Damage, Molten Magma Dash Trail & Attuned Piercing Dragonfire Breath (3 DMG every 2.4s)!",
+      },
+    };
+    const meta = CARD_META[card];
+    const isUnlocked = unlocked.includes(card);
+    if (!isUnlocked) {
+      if (
+        (state.hero.monsterCores ?? 0) < meta.cores ||
+        state.hero.rupees < meta.rupees
+      ) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: `Insufficient Bestiary Tribute for ${meta.name}!`,
+            subtext: `Requires ${meta.cores} Monster Cores (✦) and ${meta.rupees} Rupees — or click 'Hunter's Guild Playtest Blessing' below!`,
+            timer: 3.8,
+          },
+        });
+        return;
+      }
+      unlocked.push(card);
+    }
+
+    soundEngine.playSecretSolve();
+    if (!isUnlocked) {
+      soundEngine.playVictoryFanfare();
+    }
+    set((s) => {
+      const nextMaxHp =
+        !isUnlocked && card === "colossus_soul"
+          ? Math.min(40, s.hero.maxHp + 2)
+          : s.hero.maxHp;
+      const nextMaxBombs =
+        !isUnlocked && card === "sapper_soul"
+          ? Math.max(25, s.hero.maxBombs ?? 0)
+          : s.hero.maxBombs ?? 0;
+      return {
+        hero: {
+          ...s.hero,
+          monsterCores: isUnlocked
+            ? s.hero.monsterCores ?? 0
+            : (s.hero.monsterCores ?? 0) - meta.cores,
+          rupees: isUnlocked ? s.hero.rupees : s.hero.rupees - meta.rupees,
+          maxHp: nextMaxHp,
+          hp: !isUnlocked && card === "colossus_soul" ? nextMaxHp : s.hero.hp,
+          maxBombs: nextMaxBombs,
+          bombs:
+            !isUnlocked && card === "sapper_soul"
+              ? Math.min(nextMaxBombs, (s.hero.bombs ?? 0) + 10)
+              : s.hero.bombs,
+          swordDamage:
+            !isUnlocked && card === "dragon_soul"
+              ? (s.hero.swordDamage ?? 1) + 1
+              : s.hero.swordDamage,
+          chillTimer: 0,
+          unlockedSoulCards: unlocked,
+          equippedSoulCard: card,
+          soulCardPulseTimer: 0.35,
+        },
+        banner: {
+          id: Date.now(),
+          text: isUnlocked
+            ? `📖 ATTUNED MONSTER SOUL-CARD: ${meta.name.toUpperCase()}!`
+            : `📖 UNLOCKED & ATTUNED SOUL-CARD: ${meta.name.toUpperCase()}!`,
+          subtext: meta.subtitle,
+          timer: 4.8,
+        },
+      };
+    });
+  },
+
+  grantBestiaryPlaytestBundle: () => {
+    soundEngine.playVictoryFanfare();
+    set((state) => {
+      const prev = state.hero.unlockedSoulCards ?? ["wraith_soul"];
+      const addColossus = !prev.includes("colossus_soul");
+      const addDragon = !prev.includes("dragon_soul");
+      const nextMaxHp = Math.min(40, state.hero.maxHp + (addColossus ? 2 : 0));
+      const nextMaxBombs = Math.max(25, state.hero.maxBombs ?? 0);
+      return {
+        hero: {
+          ...state.hero,
+          maxHp: nextMaxHp,
+          hp: nextMaxHp,
+          mp: state.hero.maxMp,
+          maxBombs: nextMaxBombs,
+          bombs: nextMaxBombs,
+          swordDamage: (state.hero.swordDamage ?? 1) + (addDragon ? 1 : 0),
+          monsterCores: (state.hero.monsterCores ?? 0) + 12,
+          rupees: state.hero.rupees + 600,
+          chillTimer: 0,
+          unlockedSoulCards: [
+            "wraith_soul",
+            "sapper_soul",
+            "colossus_soul",
+            "dragon_soul",
+          ],
+          equippedSoulCard: "dragon_soul",
+          soulCardPulseTimer: 0.35,
+        },
+        banner: {
+          id: Date.now(),
+          text: "📖 All 4 Monster Soul-Cards Unlocked & Attuned!",
+          subtext:
+            "Unlocked Frost Wraith, Sapper Gremlin, Glacial Colossus & Dragon-Titan Soul-Cards +1 Heart Container, +1 Sword DMG, +12 Cores & +600 Rupees!",
+          timer: 5.0,
+        },
+      };
+    });
   },
 
   unlockOrAlignConstellation: (star: ConstellationId) => {
@@ -7111,6 +7305,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       Boolean(hero.unlockedConstellations && hero.unlockedConstellations.includes(c));
     const activeConstellation: ConstellationId | "none" =
       hero.activeConstellation ?? "none";
+    const hasSoulCard = (c: SoulCardId): boolean =>
+      Boolean(hero.unlockedSoulCards && hero.unlockedSoulCards.includes(c));
+    const equippedSoulCard: SoulCardId | "none" = hero.equippedSoulCard ?? "none";
+    if (hasSoulCard("wraith_soul")) {
+      hero.chillTimer = 0;
+    }
 
     // Passive Greenhouse Herb Cultivation (`herb_greenhouse` wing grows +1 random Biome Herb every 25s!)
     if (hasHomesteadWing("herb_greenhouse")) {
@@ -7173,7 +7373,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? mirrorMult * 0.65
           : mirrorMult;
       const starMult = hasConstellation("aegis_world_star") ? chronoMult * 0.8 : chronoMult;
-      return activeWeather === "blizzard" ? starMult * 0.75 : starMult;
+      const soulMult = hasSoulCard("colossus_soul") ? starMult * 0.85 : starMult;
+      return activeWeather === "blizzard" ? soulMult * 0.75 : soulMult;
     };
 
     // Helper: check if hero died and auto-revive with Bottled Fairy OR Immortal Phoenix Ankh (`aegis_ankh`)!
@@ -14610,6 +14811,185 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // 9b-6. Hunter's Guild Bestiary Soul-Card Pulses (`equippedSoulCard`) & Dragon-Titan Magma Dash Trail
+    if (hasSoulCard("dragon_soul") && isDashing && phase === "playing") {
+      const hasRecentDashFire = fireZones.some(
+        (fz) => fz.zone === zone && Math.hypot(fz.x - hero.x, fz.z - hero.z) <= 1.25
+      );
+      if (!hasRecentDashFire) {
+        fireZones.push({
+          id: `dragon-dash-magma-${stats.elapsedSeconds.toFixed(3)}`,
+          zone,
+          x: hero.x,
+          z: hero.z,
+          radius: 1.55,
+          timer: 3.6,
+          maxTimer: 3.6,
+          tickTimer: 0.2,
+        });
+      }
+    }
+    if (equippedSoulCard !== "none" && phase === "playing") {
+      hero.soulCardPulseTimer = (hero.soulCardPulseTimer ?? 2.4) - dt;
+      if (hero.soulCardPulseTimer <= 0) {
+        hero.soulCardPulseTimer = 2.4;
+        if (equippedSoulCard === "wraith_soul") {
+          hero.mp = Math.min(hero.maxMp, (hero.mp ?? 0) + 6);
+          let wraithTarget: EnemyState | null = null;
+          let bestDist = 9.0;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - hero.x, e.z - hero.z);
+            if (d <= bestDist) {
+              bestDist = d;
+              wraithTarget = e;
+            }
+          }
+          if (wraithTarget) {
+            const shotAngle = Math.atan2(wraithTarget.x - hero.x, wraithTarget.z - hero.z);
+            arrows.push({
+              id: `wraith-soul-frost-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              fromHero: true,
+              isFrost: true,
+              x: hero.x + Math.sin(shotAngle) * 0.85,
+              z: hero.z + Math.cos(shotAngle) * 0.85,
+              angle: shotAngle,
+              speed: 20.5,
+              damage: 2,
+              lifeTimer: 1.25,
+            });
+          }
+        } else if (equippedSoulCard === "sapper_soul") {
+          if ((hero.maxBombs ?? 0) > 0 && (hero.bombs ?? 0) < (hero.maxBombs ?? 0)) {
+            hero.bombs = Math.min(hero.maxBombs ?? 25, (hero.bombs ?? 0) + 1);
+          }
+          let sapperTarget: EnemyState | null = null;
+          let bestDist = 9.5;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - hero.x, e.z - hero.z);
+            if (d <= bestDist) {
+              bestDist = d;
+              sapperTarget = e;
+            }
+          }
+          if (sapperTarget) {
+            const shotAngle = Math.atan2(sapperTarget.x - hero.x, sapperTarget.z - hero.z);
+            fireballs.push({
+              id: `sapper-soul-fb-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: hero.x + Math.sin(shotAngle) * 0.85,
+              z: hero.z + Math.cos(shotAngle) * 0.85,
+              angle: shotAngle,
+              speed: 14.5,
+              damage: 3,
+              radius: 0.52,
+              isCharged: false,
+              lifeTimer: 1.25,
+            });
+          }
+        } else if (equippedSoulCard === "colossus_soul") {
+          if (hero.hp < hero.maxHp) {
+            hero.hp = Math.min(hero.maxHp, hero.hp + 1);
+          }
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            if (Math.hypot(e.x - hero.x, e.z - hero.z) <= 5.5 && e.kind !== "boss") {
+              e.provoked = true;
+              e.hp -= 3;
+              e.hitFlashTimer = 0.28;
+              e.stunTimer = Math.max(e.stunTimer, 1.6);
+              if (e.kind !== "turret") {
+                e.state = "stunned";
+                e.stateTimer = Math.max(e.stateTimer, 1.6);
+              }
+              if (e.hp <= 0) {
+                handleEnemyDeath(e);
+              }
+            }
+          }
+        } else if (equippedSoulCard === "dragon_soul") {
+          let dragonTarget: EnemyState | null = null;
+          let bestDist = 11.0;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - hero.x, e.z - hero.z);
+            if (d <= bestDist) {
+              bestDist = d;
+              dragonTarget = e;
+            }
+          }
+          if (dragonTarget) {
+            const shotAngle = Math.atan2(dragonTarget.x - hero.x, dragonTarget.z - hero.z);
+            fireballs.push({
+              id: `dragon-soul-fb-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: hero.x + Math.sin(shotAngle) * 0.85,
+              z: hero.z + Math.cos(shotAngle) * 0.85,
+              angle: shotAngle,
+              speed: 16.0,
+              damage: 3,
+              radius: 0.55,
+              isCharged: true,
+              lifeTimer: 1.35,
+            });
+          } else {
+            const unlitTorch = mapProps.find(
+              (p) =>
+                p.zone === zone &&
+                p.prefab === "wall_torch" &&
+                p.lit === false &&
+                Math.hypot(p.x - hero.x, p.z - hero.z) <= 7.5
+            );
+            if (unlitTorch) {
+              const shotAngle = Math.atan2(unlitTorch.x - hero.x, unlitTorch.z - hero.z);
+              fireballs.push({
+                id: `dragon-soul-torch-fb-${stats.elapsedSeconds.toFixed(3)}`,
+                zone,
+                x: hero.x + Math.sin(shotAngle) * 0.8,
+                z: hero.z + Math.cos(shotAngle) * 0.8,
+                angle: shotAngle,
+                speed: 15.0,
+                damage: 1,
+                radius: 0.46,
+                isCharged: false,
+                lifeTimer: 1.15,
+              });
+            }
+          }
+        }
+      }
+    }
+
     // 9c. Update Thrown Clay Pots & Light Rocks in Flight (`thrownObjects`)
     const remainingThrown: ThrownObjectState[] = [];
     for (const obj of thrownObjects) {
@@ -17512,6 +17892,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Star-Weaver's Celestial Armillary Observatory — Press [F] or [ , ] to Awaken & Align the 4 Zodiac Constellations!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(BESTIARY_LECTERN_POS.x - hero.x, BESTIARY_LECTERN_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Hunter's Guild Bestiary Lectern & Soul-Crystal — Press [F] or [ - ] to Study Species & Attune Monster Soul-Cards!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -17542,6 +17928,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let mirrorOpen = state.mirrorOpen;
     let chronoOpen = state.chronoOpen;
     let starsOpen = state.starsOpen;
+    let bestiaryOpen = state.bestiaryOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -17802,6 +18189,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       starsOpen = true;
+      bestiaryOpen = false;
+      chronoOpen = false;
+      mirrorOpen = false;
+      gliderOpen = false;
+      artificerOpen = false;
+      maskOpen = false;
+      lyreOpen = false;
+      homesteadOpen = false;
+      weatherOpen = false;
+      alchemyOpen = false;
+      colosseumOpen = false;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(BESTIARY_LECTERN_POS.x - hero.x, BESTIARY_LECTERN_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      bestiaryOpen = true;
+      starsOpen = false;
       chronoOpen = false;
       mirrorOpen = false;
       gliderOpen = false;
@@ -18069,6 +18481,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       mirrorOpen,
       chronoOpen,
       starsOpen,
+      bestiaryOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

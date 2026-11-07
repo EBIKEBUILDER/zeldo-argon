@@ -23,6 +23,7 @@ import {
   PrimaryHandId,
   RelicId,
   SongId,
+  SoulCardId,
   TerrainBrushMode,
   TunicId,
   useGameStore,
@@ -278,6 +279,7 @@ export default function GameOverlay() {
   const mirrorOpen = useGameStore((s) => s.mirrorOpen);
   const chronoOpen = useGameStore((s) => s.chronoOpen);
   const starsOpen = useGameStore((s) => s.starsOpen);
+  const bestiaryOpen = useGameStore((s) => s.bestiaryOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -318,6 +320,9 @@ export default function GameOverlay() {
   const setStarsOpen = useGameStore((s) => s.setStarsOpen);
   const unlockOrAlignConstellation = useGameStore((s) => s.unlockOrAlignConstellation);
   const grantStarsPlaytestBundle = useGameStore((s) => s.grantStarsPlaytestBundle);
+  const setBestiaryOpen = useGameStore((s) => s.setBestiaryOpen);
+  const unlockOrAttuneSoulCard = useGameStore((s) => s.unlockOrAttuneSoulCard);
+  const grantBestiaryPlaytestBundle = useGameStore((s) => s.grantBestiaryPlaytestBundle);
   const unlockOrCastChronoArt = useGameStore((s) => s.unlockOrCastChronoArt);
   const triggerTemporalRewind = useGameStore((s) => s.triggerTemporalRewind);
   const grantChronoPlaytestBundle = useGameStore((s) => s.grantChronoPlaytestBundle);
@@ -429,6 +434,7 @@ export default function GameOverlay() {
         if (mirrorOpen) setMirrorOpen(false);
         if (chronoOpen) setChronoOpen(false);
         if (starsOpen) setStarsOpen(false);
+        if (bestiaryOpen) setBestiaryOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -453,6 +459,7 @@ export default function GameOverlay() {
     mirrorOpen,
     chronoOpen,
     starsOpen,
+    bestiaryOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -472,6 +479,7 @@ export default function GameOverlay() {
     setMirrorOpen,
     setChronoOpen,
     setStarsOpen,
+    setBestiaryOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -1722,6 +1730,25 @@ export default function GameOverlay() {
                   title="Open Star-Weaver's Observatory & Constellation Skill Tree (Shortcut: ,)"
                 >
                   ✨ Stars ({(hero.unlockedConstellations ?? []).length}/4 • ,)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBestiaryOpen(!bestiaryOpen)}
+                  className={`char-toggle-btn ${
+                    bestiaryOpen || (hero.equippedSoulCard ?? "none") !== "none" ? "active" : ""
+                  }`}
+                  style={
+                    (hero.equippedSoulCard ?? "none") !== "none"
+                      ? {
+                          borderColor: "rgba(86, 246, 178, 0.95)",
+                          background: "rgba(12, 48, 34, 0.92)",
+                          color: "#a8ffda",
+                        }
+                      : undefined
+                  }
+                  title="Open Hunter's Guild Bestiary & Monster Soul-Cards Compendium (Shortcut: -)"
+                >
+                  📖 Bestiary ({(hero.unlockedSoulCards ?? ["wraith_soul"]).length}/4 • -)
                 </button>
                 <button
                   type="button"
@@ -9191,6 +9218,386 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Observatory (,)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          HUNTER'S GUILD BESTIARY, MONSTER SOUL-CARDS & SPECIES COMPENDIUM MODAL (-)
+         ========================================================= */}
+      {phase === "playing" && !editorMode && bestiaryOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card char-sheet-card" style={{ maxWidth: "890px" }}>
+            <div className="shop-header">
+              <div>
+                <div className="shop-pill">
+                  SPECIES COMPENDIUM • MONSTER SOUL-CARDS • TACTICAL WEAKNESSES
+                </div>
+                <h2 className="shop-title">
+                  📖 HUNTER&apos;S GUILD BESTIARY &amp; MONSTER SOUL-CARDS
+                </h2>
+              </div>
+              <div className="char-summary-badges">
+                <span className="char-stat-badge">
+                  Foes Vanquished: <strong>{stats.enemiesDefeated}</strong>
+                </span>
+                <span className="char-stat-badge">
+                  Monster Cores: <strong>{hero.monsterCores ?? 0} ✦</strong>
+                </span>
+                <span className="char-stat-badge">
+                  Attuned Soul:{" "}
+                  <strong>
+                    {(hero.equippedSoulCard ?? "none") !== "none"
+                      ? (hero.equippedSoulCard ?? "").replace(/_/g, " ").toUpperCase()
+                      : "NONE"}
+                  </strong>
+                </span>
+              </div>
+            </div>
+
+            <p className="shop-subtitle" style={{ marginBottom: "14px" }}>
+              Visit the <strong>Hunter&apos;s Guild Bestiary Lectern</strong> in Crossroads Village (
+              <code>-8.5, -22.5</code>) or press <strong>-</strong> (Minus) anytime to study
+              regional monster weaknesses and attune <strong>Monster Soul-Cards</strong>! Your
+              attuned Soul-Card orbits Zeldo in 3D and fires automatic elemental pulses every 2.4
+              seconds!
+            </p>
+
+            {/* Live Hunter's Guild Banner & Playtest Blessing */}
+            <div
+              style={{
+                padding: "14px 16px",
+                borderRadius: "12px",
+                background:
+                  "linear-gradient(135deg, rgba(12, 42, 32, 0.94) 0%, rgba(16, 26, 48, 0.92) 100%)",
+                border: "1px solid rgba(86, 246, 178, 0.45)",
+                marginBottom: "16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "12px",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: "0.74rem",
+                    fontWeight: 800,
+                    letterSpacing: "0.08em",
+                    color: "#88ffce",
+                    textTransform: "uppercase",
+                    marginBottom: "4px",
+                  }}
+                >
+                  ATTUNED MONSTER SOUL-CARD &amp; FIELD CENSUS
+                </div>
+                <div style={{ fontSize: "0.84rem", color: "#e6fff5" }}>
+                  Unlocked Soul-Cards:{" "}
+                  <strong>{(hero.unlockedSoulCards ?? ["wraith_soul"]).length} / 4</strong> • Active
+                  Zone Hostiles:{" "}
+                  <strong>
+                    {enemies.filter((e) => e.zone === zone && e.state !== "dead").length}
+                  </strong>{" "}
+                  • Total Slain: <strong>{stats.enemiesDefeated}</strong>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={grantBestiaryPlaytestBundle}
+                className="char-equip-btn"
+                style={{
+                  background: "rgba(86, 246, 178, 0.18)",
+                  borderColor: "rgba(86, 246, 178, 0.72)",
+                  color: "#b8ffe0",
+                  padding: "8px 14px",
+                  fontSize: "0.78rem",
+                }}
+              >
+                📖 Hunter&apos;s Playtest Blessing (+All 4 Soul-Cards, +12 Cores &amp; +600R)
+              </button>
+            </div>
+
+            {(() => {
+              const unlockedList = hero.unlockedSoulCards ?? ["wraith_soul"];
+              const SOUL_CARDS: Array<{
+                id: SoulCardId;
+                name: string;
+                icon: string;
+                subtitle: string;
+                cores: number;
+                rupees: number;
+                passiveBonus: string;
+                attunedPulse: string;
+                desc: string;
+                accent: string;
+              }> = [
+                {
+                  id: "wraith_soul",
+                  name: "Frost Wraith Soul-Card",
+                  icon: "❄️",
+                  subtitle: "Glacial Specter • Frost-Slow Immunity & Chilling Bolts",
+                  cores: 0,
+                  rupees: 0,
+                  passiveBonus: "100% Immunity to Frost Slow (chillTimer = 0)",
+                  attunedPulse:
+                    "Every 2.4s: Restores +6 MP & fires a 2 DMG Freezing Bolt within 9.0m",
+                  desc: "Captured essence of a Frostpeak Wraith. Prevents all glacial movement slows and automatically looses freezing bolts at nearby foes.",
+                  accent: "#7be8ff",
+                },
+                {
+                  id: "sapper_soul",
+                  name: "Sapper Gremlin Soul-Card",
+                  icon: "💣",
+                  subtitle: "Demolition Alchemist • Free Bomb Synthesis & Blast Orbs",
+                  cores: 3,
+                  rupees: 150,
+                  passiveBonus: "Unlocks 25-Bomb Satchel & +10 Immediate Bombs",
+                  attunedPulse:
+                    "Every 2.4s: Synthesizes +1 Free Bomb & hurls a 3 DMG Alchemical Fireball",
+                  desc: "Distilled from Frontier Sapper Gremlins. Passively refills your Bomb Bag in the field and hurls volatile alchemical fireballs!",
+                  accent: "#ffb86c",
+                },
+                {
+                  id: "colossus_soul",
+                  name: "Glacial Colossus Soul-Card",
+                  icon: "🛡️",
+                  subtitle: "Permafrost Sentinel • +1 Heart Container & Permafrost Thorns",
+                  cores: 5,
+                  rupees: 250,
+                  passiveBonus: "+1 Full Heart Container (+2 Max HP) & -15% Incoming Damage",
+                  attunedPulse:
+                    "Every 2.4s: Heals +1 HP & freezes foes within 5.5m (3 DMG + 1.6s Stun)",
+                  desc: "Forged from Cryos's glacial core. Fortifies Zeldo's life hearts and radiates a freezing Permafrost Thorns shockwave around you.",
+                  accent: "#6effb8",
+                },
+                {
+                  id: "dragon_soul",
+                  name: "Dragon-Titan Soul-Card",
+                  icon: "🐉",
+                  subtitle: "Sovereign Wyrm • +1 Sword DMG & Molten Magma Dash Trail",
+                  cores: 7,
+                  rupees: 350,
+                  passiveBonus:
+                    "+1 Permanent Sword Damage & Dash [X] Leaves a Molten Magma Trail!",
+                  attunedPulse:
+                    "Every 2.4s: Breathes a 3 DMG Charged Dragonfire Bolt within 11.0m",
+                  desc: "Apex soul-sigil of Pyrax the Dragon-Titan. Every Dash-Evade leaves scorching magma pools and your Soul-Card breathes Dragonfire!",
+                  accent: "#ff7a66",
+                },
+              ];
+
+              return (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))",
+                    gap: "12px",
+                    marginBottom: "14px",
+                  }}
+                >
+                  {SOUL_CARDS.map((card) => {
+                    const isUnlocked = unlockedList.includes(card.id);
+                    const isAttuned = hero.equippedSoulCard === card.id;
+                    return (
+                      <div
+                        key={card.id}
+                        style={{
+                          padding: "14px",
+                          borderRadius: "12px",
+                          border: isAttuned
+                            ? `2px solid ${card.accent}`
+                            : isUnlocked
+                            ? "1px solid rgba(86, 246, 178, 0.45)"
+                            : "1px solid rgba(255,255,255,0.12)",
+                          background: isAttuned
+                            ? "rgba(14, 46, 36, 0.94)"
+                            : isUnlocked
+                            ? "rgba(18, 28, 38, 0.88)"
+                            : "rgba(12, 16, 26, 0.82)",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                          gap: "10px",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: "8px",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ fontSize: "1.45rem" }}>{card.icon}</span>
+                              <div>
+                                <div
+                                  style={{
+                                    fontWeight: 800,
+                                    color: card.accent,
+                                    fontSize: "0.95rem",
+                                  }}
+                                >
+                                  {card.name}
+                                </div>
+                                <div style={{ fontSize: "0.73rem", color: "#9cb8d8" }}>
+                                  {card.subtitle}
+                                </div>
+                              </div>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: "0.7rem",
+                                fontWeight: 800,
+                                padding: "3px 8px",
+                                borderRadius: "999px",
+                                background: isAttuned
+                                  ? "rgba(86, 246, 178, 0.25)"
+                                  : isUnlocked
+                                  ? "rgba(68, 238, 148, 0.2)"
+                                  : "rgba(255, 255, 255, 0.08)",
+                                color: isAttuned
+                                  ? "#a8ffda"
+                                  : isUnlocked
+                                  ? "#88ffbe"
+                                  : "#b8cce8",
+                              }}
+                            >
+                              {isAttuned
+                                ? "● ATTUNED"
+                                : isUnlocked
+                                ? "✓ UNLOCKED"
+                                : `${card.cores}✦ + ${card.rupees}R`}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.75rem",
+                              fontWeight: 800,
+                              color: "#ffe49e",
+                              marginBottom: 3,
+                            }}
+                          >
+                            ✦ Passive: {card.passiveBonus}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.74rem",
+                              fontWeight: 700,
+                              color: "#9effd6",
+                              marginBottom: 5,
+                            }}
+                          >
+                            ★ Attuned Pulse: {card.attunedPulse}
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.78rem",
+                              color: "#c8daf0",
+                              lineHeight: 1.45,
+                              margin: 0,
+                            }}
+                          >
+                            {card.desc}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => unlockOrAttuneSoulCard(card.id)}
+                          className="char-equip-btn"
+                          style={{
+                            width: "100%",
+                            padding: "8px 12px",
+                            background: isAttuned
+                              ? "linear-gradient(180deg, #6effb8 0%, #1d8a56 100%)"
+                              : isUnlocked
+                              ? "linear-gradient(180deg, #ffd86b 0%, #b87c0e 100%)"
+                              : "rgba(86, 246, 178, 0.18)",
+                            color: isAttuned || isUnlocked ? "#081c14" : "#b8ffe0",
+                            borderColor: "rgba(86, 246, 178, 0.85)",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {isAttuned
+                            ? `● Attuned: ${card.name} (Click to Pulse)`
+                            : isUnlocked
+                            ? `📖 Attune ${card.name}`
+                            : `Unlock & Attune (${card.cores}✦ Cores + ${card.rupees} Rupees)`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            {/* Compact Species Tactical Weakness Compendium */}
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: "10px",
+                background: "rgba(10, 16, 26, 0.86)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                marginBottom: "14px",
+                fontSize: "0.76rem",
+                color: "#c8daf0",
+              }}
+            >
+              <div style={{ fontWeight: 800, color: "#ffd866", marginBottom: "6px" }}>
+                🔍 HUNTER&apos;S FIELD GUIDE — TACTICAL MONSTER WEAKNESSES:
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                  gap: "6px 14px",
+                }}
+              >
+                <div>
+                  • <strong>Wood-Shield Goblins:</strong> Rip shield with Hookshot [H], burn [R], or
+                  slam [T].
+                </div>
+                <div>
+                  • <strong>Ice-Armored Sentinels:</strong> Melt Ice Armor with Flame Rod [R] or
+                  War-Hammer [T].
+                </div>
+                <div>
+                  • <strong>Frost Wraiths:</strong> 2× weak to Flame Rod [R]; reflect bolts with
+                  Mirror Shield!
+                </div>
+                <div>
+                  • <strong>Subterranean Wyrms:</strong> Unearth with Shovel [G], Bomb [B], or
+                  Hammer [T].
+                </div>
+                <div>
+                  • <strong>Shock-Spiked Beetles:</strong> Stun with Boomerang [Q] or Hookshot [H]
+                  before slashing.
+                </div>
+                <div>
+                  • <strong>Elemental Bosses:</strong> Crack shell [R/T/B] → Pierce Open Eye [E/Q] →
+                  Sword Combo!
+                </div>
+              </div>
+            </div>
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>-</strong> (Minus) or <strong>Esc</strong> anytime to close the
+                Hunter&apos;s Guild Bestiary.
+              </span>
+              <button
+                type="button"
+                onClick={() => setBestiaryOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Bestiary (-)
               </button>
             </div>
           </div>

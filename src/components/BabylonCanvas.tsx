@@ -33,6 +33,7 @@ import {
   ARTIFICER_BENCH_POS,
   ATOLL_PEARL_CHEST_POS,
   ATOLL_VICTORY_CHEST_POS,
+  BESTIARY_LECTERN_POS,
   BIG_KEY_CHEST_POS,
   BOSS_CHEST_POS,
   BOSS_EXIT_GATE_POS,
@@ -7182,6 +7183,104 @@ export default function BabylonCanvas() {
       starGem.parent = heroConstellationNode;
     }
 
+    // 1d-14. 3D Hunter's Guild Bestiary Lectern & Soul-Crystal (`BESTIARY_LECTERN_POS` in Map 1 Overworld)
+    const bestiaryLecternNode = new TransformNode("bestiaryLecternNode", scene);
+    bestiaryLecternNode.position.set(BESTIARY_LECTERN_POS.x, 0, BESTIARY_LECTERN_POS.z);
+
+    const soulEmeraldMat = makeMat(
+      "soulEmeraldMat",
+      new Color3(0.32, 0.96, 0.68),
+      new Color3(0.14, 0.56, 0.36),
+      new Color3(0.95, 1.0, 0.98),
+      0.92
+    );
+
+    const bestiaryDais = MeshBuilder.CreateCylinder(
+      "bestiaryDais",
+      { diameterTop: 2.8, diameterBottom: 3.2, height: 0.3, tessellation: 18 },
+      scene
+    );
+    bestiaryDais.position.set(0, 0.15, 0);
+    bestiaryDais.material = dgPillarMat;
+    bestiaryDais.isPickable = false;
+    bestiaryDais.parent = bestiaryLecternNode;
+
+    const bestiaryStand = MeshBuilder.CreateCylinder(
+      "bestiaryStand",
+      { diameterTop: 0.52, diameterBottom: 0.78, height: 1.25, tessellation: 12 },
+      scene
+    );
+    bestiaryStand.position.set(0, 0.9, 0);
+    bestiaryStand.material = woodMat;
+    bestiaryStand.isPickable = false;
+    bestiaryStand.parent = bestiaryLecternNode;
+
+    const bestiaryTomeDesk = MeshBuilder.CreateBox(
+      "bestiaryTomeDesk",
+      { width: 1.25, height: 0.16, depth: 0.88 },
+      scene
+    );
+    bestiaryTomeDesk.position.set(0, 1.56, 0);
+    bestiaryTomeDesk.rotation.x = 0.38;
+    bestiaryTomeDesk.material = goldKeyMat;
+    bestiaryTomeDesk.isPickable = false;
+    bestiaryTomeDesk.parent = bestiaryLecternNode;
+
+    const bestiarySoulCrystal = MeshBuilder.CreatePolyhedron(
+      "bestiarySoulCrystal",
+      { type: 1, size: 0.38 },
+      scene
+    );
+    bestiarySoulCrystal.position.set(0, 2.35, 0);
+    bestiarySoulCrystal.material = soulEmeraldMat;
+    bestiarySoulCrystal.isPickable = false;
+    bestiarySoulCrystal.parent = bestiaryLecternNode;
+
+    const bestiaryOrbitRing = MeshBuilder.CreateTorus(
+      "bestiaryOrbitRing",
+      { diameter: 1.85, thickness: 0.065, tessellation: 26 },
+      scene
+    );
+    bestiaryOrbitRing.position.set(0, 2.35, 0);
+    bestiaryOrbitRing.material = goldKeyMat;
+    bestiaryOrbitRing.isPickable = false;
+    bestiaryOrbitRing.parent = bestiaryLecternNode;
+
+    const bestiaryGroundHalo = MeshBuilder.CreateTorus(
+      "bestiaryGroundHalo",
+      { diameter: 3.3, thickness: 0.08, tessellation: 28 },
+      scene
+    );
+    bestiaryGroundHalo.position.set(0, 0.14, 0);
+    bestiaryGroundHalo.material = soulEmeraldMat;
+    bestiaryGroundHalo.isPickable = false;
+    bestiaryGroundHalo.parent = bestiaryLecternNode;
+
+    // 3D Hero Orbiting Monster Soul-Card Sigil (`heroSoulCardNode`)
+    const heroSoulCardNode = new TransformNode("heroSoulCardNode", scene);
+    heroSoulCardNode.parent = heroRoot;
+    heroSoulCardNode.setEnabled(false);
+
+    const heroSoulCardMesh = MeshBuilder.CreateBox(
+      "heroSoulCardMesh",
+      { width: 0.28, height: 0.42, depth: 0.04 },
+      scene
+    );
+    heroSoulCardMesh.position.set(1.05, 1.35, 0);
+    heroSoulCardMesh.material = soulEmeraldMat;
+    heroSoulCardMesh.isPickable = false;
+    heroSoulCardMesh.parent = heroSoulCardNode;
+
+    const heroSoulCardFrame = MeshBuilder.CreateBox(
+      "heroSoulCardFrame",
+      { width: 0.34, height: 0.48, depth: 0.025 },
+      scene
+    );
+    heroSoulCardFrame.position.set(1.05, 1.35, 0);
+    heroSoulCardFrame.material = goldKeyMat;
+    heroSoulCardFrame.isPickable = false;
+    heroSoulCardFrame.parent = heroSoulCardNode;
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -10826,6 +10925,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // - (Minus) toggles Hunter's Guild Bestiary & Monster Soul-Cards Modal
+      if (code === "Minus" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setBestiaryOpen(!store.bestiaryOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -11910,6 +12016,7 @@ export default function BabylonCanvas() {
       mirrorPortalNode.setEnabled(inOverworld);
       chronoShrineNode.setEnabled(inOverworld);
       starObservatoryNode.setEnabled(inOverworld);
+      bestiaryLecternNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -12144,6 +12251,32 @@ export default function BabylonCanvas() {
         starCoreGem.rotation.y = t * 3.2;
         starCoreGem.position.y = 2.35 + Math.sin(t * 4.0) * 0.14;
         starGroundHalo.rotation.y = -t * 1.6;
+
+        const bestiaryGroundY = sampleTerrainHeight(
+          activeCells,
+          BESTIARY_LECTERN_POS.x,
+          BESTIARY_LECTERN_POS.z
+        );
+        bestiaryLecternNode.position.set(
+          BESTIARY_LECTERN_POS.x,
+          bestiaryGroundY,
+          BESTIARY_LECTERN_POS.z
+        );
+        bestiarySoulCrystal.rotation.y = t * 2.8;
+        bestiarySoulCrystal.position.y = 2.35 + Math.sin(t * 4.2) * 0.14;
+        bestiaryOrbitRing.rotation.y = -t * 2.4;
+        bestiaryOrbitRing.rotation.z = Math.sin(t * 2.0) * 0.32;
+        bestiaryGroundHalo.rotation.y = t * 1.5;
+      }
+
+      // Sync 3D Hero Orbiting Monster Soul-Card Sigil (`heroSoulCardNode`)
+      const showSoulCard =
+        (snap.hero.equippedSoulCard ?? "none") !== "none" && !snap.editorMode;
+      heroSoulCardNode.setEnabled(showSoulCard);
+      if (showSoulCard) {
+        heroSoulCardNode.rotation.y = t * 2.9;
+        heroSoulCardMesh.rotation.y = t * 4.5;
+        heroSoulCardFrame.rotation.y = t * 4.5;
       }
 
       // Sync 3D Hero Orbiting Zodiac Star-Crown (`heroConstellationNode`)
