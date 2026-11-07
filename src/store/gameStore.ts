@@ -23,6 +23,7 @@ import {
   CITADEL_BOSS_GATE_POS,
   CITADEL_EXIT_GATE_POS,
   CITADEL_VICTORY_CHEST_POS,
+  CHRONO_SHRINE_POS,
   COLOSSEUM_GATE_POS,
   COMPANION_ALTAR_POS,
   computeBossChargePathLength,
@@ -216,6 +217,12 @@ export type MirrorTrialId =
   | "void_archon_twin"
   | "sovereign_nemesis";
 
+export type ChronoArtId =
+  | "chrono_rewind"
+  | "bullet_time"
+  | "paradox_clone"
+  | "chrono_singularity";
+
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
   propId?: string;
@@ -366,6 +373,15 @@ export interface HeroState {
   clearedMirrorTrials?: MirrorTrialId[];
   activeMirrorTrial?: MirrorTrialId | "none";
   masterRemixActive?: boolean;
+  unlockedChronoArts?: ChronoArtId[];
+  equippedChronoArt?: ChronoArtId;
+  chronoActiveTimer?: number;
+  chronoPulseTimer?: number;
+  chronoAnchorX?: number;
+  chronoAnchorZ?: number;
+  chronoAnchorZone?: ZoneId;
+  chronoAnchorHp?: number;
+  chronoAnchorMp?: number;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -814,6 +830,7 @@ export interface SerializableGameState {
   artificerOpen: boolean;
   gliderOpen: boolean;
   mirrorOpen: boolean;
+  chronoOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -857,6 +874,10 @@ export interface GameActions {
   setArtificerOpen: (open: boolean) => void;
   setGliderOpen: (open: boolean) => void;
   setMirrorOpen: (open: boolean) => void;
+  setChronoOpen: (open: boolean) => void;
+  unlockOrCastChronoArt: (art: ChronoArtId) => void;
+  triggerTemporalRewind: () => void;
+  grantChronoPlaytestBundle: () => void;
   summonShadowTwinDuel: (trial: MirrorTrialId) => void;
   toggleMasterWorldRemix: () => void;
   grantMirrorPlaytestBundle: () => void;
@@ -1259,6 +1280,15 @@ function createInitialState(
       clearedMirrorTrials: [],
       activeMirrorTrial: "none",
       masterRemixActive: false,
+      unlockedChronoArts: ["chrono_rewind"],
+      equippedChronoArt: "chrono_rewind",
+      chronoActiveTimer: 0,
+      chronoPulseTimer: 0,
+      chronoAnchorX: HERO_SPAWN.x,
+      chronoAnchorZ: HERO_SPAWN.z,
+      chronoAnchorZone: "overworld",
+      chronoAnchorHp: 10,
+      chronoAnchorMp: 100,
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1482,6 +1512,7 @@ function createInitialState(
     artificerOpen: false,
     gliderOpen: false,
     mirrorOpen: false,
+    chronoOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -2168,6 +2199,261 @@ export const useGameStore = create<GameStore>((set, get) => ({
       maskOpen: open ? false : state.maskOpen,
       artificerOpen: open ? false : state.artificerOpen,
       gliderOpen: open ? false : state.gliderOpen,
+      chronoOpen: open ? false : state.chronoOpen,
+    }));
+  },
+
+  setChronoOpen: (open: boolean) => {
+    set((state) => ({
+      chronoOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
+      weatherOpen: open ? false : state.weatherOpen,
+      homesteadOpen: open ? false : state.homesteadOpen,
+      lyreOpen: open ? false : state.lyreOpen,
+      maskOpen: open ? false : state.maskOpen,
+      artificerOpen: open ? false : state.artificerOpen,
+      gliderOpen: open ? false : state.gliderOpen,
+      mirrorOpen: open ? false : state.mirrorOpen,
+    }));
+  },
+
+  unlockOrCastChronoArt: (art: ChronoArtId) => {
+    const state = get();
+    const unlocked = [...(state.hero.unlockedChronoArts ?? ["chrono_rewind"])];
+    const CHRONO_META: Record<
+      ChronoArtId,
+      {
+        name: string;
+        cores: number;
+        rupees: number;
+        duration: number;
+        subtitle: string;
+      }
+    > = {
+      chrono_rewind: {
+        name: "Sands of Reversal (Temporal Anchor)",
+        cores: 0,
+        rupees: 0,
+        duration: 45.0,
+        subtitle:
+          "Planted a Golden Temporal Anchor at your position (+25% Speed, -35% Damage Taken)! Trigger Rewind anytime to snap back & restore HP/MP!",
+      },
+      bullet_time: {
+        name: "Chronos Dilation (Bullet-Time Reflex)",
+        cores: 4,
+        rupees: 200,
+        duration: 35.0,
+        subtitle:
+          "Engaged Chronos Dilation (+35% Speed, +40% Charge Speed, -35% Damage Taken)! Pulses 8.5m Time-Freeze Shockwaves every 1.3s!",
+      },
+      paradox_clone: {
+        name: "Paradox Twin (Temporal Echo Clone)",
+        cores: 6,
+        rupees: 300,
+        duration: 45.0,
+        subtitle:
+          "Conjured a 3D Golden Temporal Echo Clone at your anchor! Fires piercing Chrono-Arrows (3 DMG) at up to 3 foes every 1.3s!",
+      },
+      chrono_singularity: {
+        name: "Zero-Hour Singularity (Gravity Well)",
+        cores: 8,
+        rupees: 450,
+        duration: 40.0,
+        subtitle:
+          "Unleashed a Zero-Hour Singularity Well! Warps nearby foes toward the anchor, strips shields, deals 3 DMG + 2.0s Stun & restores HP/MP!",
+      },
+    };
+    const meta = CHRONO_META[art];
+    const isUnlocked = unlocked.includes(art);
+    if (!isUnlocked) {
+      if (
+        (state.hero.monsterCores ?? 0) < meta.cores ||
+        state.hero.rupees < meta.rupees
+      ) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: `Insufficient Tribute for ${meta.name}!`,
+            subtext: `Requires ${meta.cores} Monster Cores (✦) and ${meta.rupees} Rupees — or click 'Chronomancer's Playtest Blessing' below!`,
+            timer: 3.8,
+          },
+        });
+        return;
+      }
+      unlocked.push(art);
+    }
+
+    soundEngine.playSecretSolve();
+    soundEngine.playElectricShock();
+    const { hero, zone } = state;
+    set((s) => ({
+      chronoOpen: false,
+      hero: {
+        ...s.hero,
+        monsterCores: isUnlocked
+          ? s.hero.monsterCores ?? 0
+          : (s.hero.monsterCores ?? 0) - meta.cores,
+        rupees: isUnlocked ? s.hero.rupees : s.hero.rupees - meta.rupees,
+        unlockedChronoArts: unlocked,
+        equippedChronoArt: art,
+        chronoActiveTimer: meta.duration,
+        chronoPulseTimer: 0.25,
+        chronoAnchorX: hero.x,
+        chronoAnchorZ: hero.z,
+        chronoAnchorZone: zone,
+        chronoAnchorHp: Math.max(hero.hp, Math.min(hero.maxHp, hero.hp + 4)),
+        chronoAnchorMp: Math.max(hero.mp, Math.min(hero.maxMp, (hero.mp ?? 100) + 30)),
+      },
+      hammerShockwaves: [
+        ...(s.hammerShockwaves ?? []),
+        {
+          id: `chrono-cast-sw-${Date.now()}`,
+          zone,
+          x: hero.x,
+          z: hero.z,
+          timer: 0.48,
+          maxTimer: 0.48,
+          maxRadius: 4.5,
+        },
+      ],
+      banner: {
+        id: Date.now(),
+        text: isUnlocked
+          ? `⏳ CHRONO ART INVOKED: ${meta.name.toUpperCase()}!`
+          : `⏳ UNLOCKED & INVOKED: ${meta.name.toUpperCase()}!`,
+        subtext: meta.subtitle,
+        timer: 4.8,
+      },
+    }));
+  },
+
+  triggerTemporalRewind: () => {
+    const state = get();
+    const { hero, zone } = state;
+    const anchorZone = hero.chronoAnchorZone ?? zone;
+    const targetX = anchorZone === zone ? (hero.chronoAnchorX ?? hero.x) : hero.x;
+    const targetZ = anchorZone === zone ? (hero.chronoAnchorZ ?? hero.z) : hero.z;
+    const restoredHp = Math.max(
+      hero.hp,
+      Math.min(hero.maxHp, Math.max(hero.chronoAnchorHp ?? hero.maxHp, hero.hp + 8))
+    );
+    const restoredMp = Math.max(
+      hero.mp,
+      Math.min(hero.maxMp, Math.max(hero.chronoAnchorMp ?? hero.maxMp, (hero.mp ?? 0) + 50))
+    );
+
+    soundEngine.playFairyRevive();
+    soundEngine.playSecretSolve();
+
+    const updatedEnemies = state.enemies.map((e) => {
+      if (e.zone !== zone || e.state === "dead") return e;
+      const d = Math.hypot(e.x - targetX, e.z - targetZ);
+      if (d <= 6.5 && e.kind !== "boss") {
+        const nextHp = Math.max(1, e.hp - 3);
+        return {
+          ...e,
+          hp: nextHp,
+          stunTimer: Math.max(e.stunTimer, 2.2),
+          state: e.kind !== "turret" ? ("stunned" as const) : e.state,
+          stateTimer: Math.max(e.stateTimer, 2.2),
+          hitFlashTimer: 0.35,
+        };
+      }
+      return e;
+    });
+
+    set((s) => ({
+      chronoOpen: false,
+      enemies: updatedEnemies,
+      hero: {
+        ...s.hero,
+        x: targetX,
+        z: targetZ,
+        hp: restoredHp,
+        mp: restoredMp,
+        invulnerableTimer: Math.max(s.hero.invulnerableTimer, 1.5),
+        chillTimer: 0,
+        knockbackLockTimer: 0,
+        knockbackVx: 0,
+        knockbackVz: 0,
+        chronoActiveTimer: Math.max(s.hero.chronoActiveTimer ?? 0, 25.0),
+      },
+      lightningArcs: [
+        ...(s.lightningArcs ?? []),
+        {
+          id: `chrono-rewind-arc-${Date.now()}`,
+          zone,
+          x1: hero.x,
+          z1: hero.z,
+          x2: targetX,
+          z2: targetZ,
+          timer: 0.55,
+          maxTimer: 0.55,
+        },
+      ],
+      hammerShockwaves: [
+        ...(s.hammerShockwaves ?? []),
+        {
+          id: `chrono-rewind-sw-${Date.now()}`,
+          zone,
+          x: targetX,
+          z: targetZ,
+          timer: 0.52,
+          maxTimer: 0.52,
+          maxRadius: 5.5,
+        },
+      ],
+      banner: {
+        id: Date.now(),
+        text: "⏪ TEMPORAL REWIND TRIGGERED! (Snapped to Chrono-Anchor!)",
+        subtext:
+          "Rewound across space-time to your Temporal Anchor — restored Vitality & Magic, granted 1.5s Invulnerability, and stunned nearby foes!",
+        timer: 4.8,
+      },
+    }));
+  },
+
+  grantChronoPlaytestBundle: () => {
+    soundEngine.playVictoryFanfare();
+    set((state) => ({
+      hero: {
+        ...state.hero,
+        monsterCores: (state.hero.monsterCores ?? 0) + 12,
+        rupees: state.hero.rupees + 600,
+        hp: state.hero.maxHp,
+        mp: state.hero.maxMp,
+        unlockedChronoArts: [
+          "chrono_rewind",
+          "bullet_time",
+          "paradox_clone",
+          "chrono_singularity",
+        ],
+        equippedChronoArt: "chrono_singularity",
+        chronoActiveTimer: 45.0,
+        chronoPulseTimer: 0.25,
+        chronoAnchorX: state.hero.x,
+        chronoAnchorZ: state.hero.z,
+        chronoAnchorZone: state.zone,
+        chronoAnchorHp: state.hero.maxHp,
+        chronoAnchorMp: state.hero.maxMp,
+      },
+      banner: {
+        id: Date.now(),
+        text: "⏳ All 4 Chronomancer Temporal Arts Unlocked & Invoked!",
+        subtext:
+          "Unlocked Sands of Reversal, Chronos Dilation, Paradox Twin & Zero-Hour Singularity + 12 Monster Cores (✦) & +600 Rupees!",
+        timer: 4.8,
+      },
     }));
   },
 
@@ -6617,6 +6903,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       Boolean(hero.clearedMirrorTrials && hero.clearedMirrorTrials.includes(t));
     const masterRemixActive = Boolean(hero.masterRemixActive);
 
+    // Update Active Chronomancer's Hourglass Art Timer (`chronoActiveTimer`)
+    if ((hero.chronoActiveTimer ?? 0) > 0) {
+      hero.chronoActiveTimer = Math.max(0, (hero.chronoActiveTimer ?? 0) - dt);
+    }
+    const equippedChronoArt: ChronoArtId = hero.equippedChronoArt ?? "chrono_rewind";
+    const isChronoActive = (hero.chronoActiveTimer ?? 0) > 0;
+
     // Passive Greenhouse Herb Cultivation (`herb_greenhouse` wing grows +1 random Biome Herb every 25s!)
     if (hasHomesteadWing("herb_greenhouse")) {
       hero.greenhouseTimer = (hero.greenhouseTimer ?? 25.0) - dt;
@@ -6671,7 +6964,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const mirrorMult = hasMirrorBlessing("void_archon_twin")
         ? gliderMult * 0.75
         : gliderMult;
-      return activeWeather === "blizzard" ? mirrorMult * 0.75 : mirrorMult;
+      const chronoMult =
+        isChronoActive &&
+        (equippedChronoArt === "bullet_time" || equippedChronoArt === "chrono_rewind")
+          ? mirrorMult * 0.65
+          : mirrorMult;
+      return activeWeather === "blizzard" ? chronoMult * 0.75 : chronoMult;
     };
 
     // Helper: check if hero died and auto-revive with Bottled Fairy OR Immortal Phoenix Ankh (`aegis_ankh`)!
@@ -7750,7 +8048,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     // Charged Spin Attack Logic: Hold Attack button after swinging to charge, release at >= 0.62s for 360° Double-Damage Spin!
-    const chargeSpeedMult = hasRelic("berserker_torc") ? 1.35 : 1.0;
+    const chargeSpeedMult =
+      (hasRelic("berserker_torc") ? 1.35 : 1.0) *
+      (isChronoActive && equippedChronoArt === "bullet_time" ? 1.4 : 1.0);
     const SPIN_CHARGE_THRESHOLD = 0.62;
     if (
       input.attackHeld &&
@@ -8482,6 +8782,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         : 1.45
       : 1.0;
     const mirrorSpeedMult = hasMirrorBlessing("shadow_apprentice") ? 1.15 : 1.0;
+    const chronoSpeedMult = isChronoActive
+      ? equippedChronoArt === "bullet_time"
+        ? 1.35
+        : equippedChronoArt === "chrono_rewind"
+        ? 1.25
+        : 1.15
+      : 1.0;
     const bootsMultiplier =
       (hero.equippedBoots === "swift_boots"
         ? 1.25
@@ -8497,6 +8804,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       maskSpeedMult *
       gliderSpeedMult *
       mirrorSpeedMult *
+      chronoSpeedMult *
       dashSpeedMult;
 
     const initialGatePassable =
@@ -13767,6 +14075,183 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // 9b-4. Chronomancer's Hourglass Active Temporal Pulses (`isChronoActive`)
+    if (isChronoActive && phase === "playing") {
+      hero.chronoPulseTimer = (hero.chronoPulseTimer ?? 1.2) - dt;
+      if (hero.chronoPulseTimer <= 0) {
+        hero.chronoPulseTimer = 1.3;
+        const anchorX =
+          hero.chronoAnchorZone === zone ? (hero.chronoAnchorX ?? hero.x) : hero.x;
+        const anchorZ =
+          hero.chronoAnchorZone === zone ? (hero.chronoAnchorZ ?? hero.z) : hero.z;
+
+        if (equippedChronoArt === "chrono_rewind") {
+          if (hero.hp < hero.maxHp) {
+            hero.hp = Math.min(hero.maxHp, hero.hp + 1);
+          }
+          hero.mp = Math.min(hero.maxMp, (hero.mp ?? 0) + 6);
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            if (Math.hypot(e.x - anchorX, e.z - anchorZ) <= 4.5 && e.kind !== "boss") {
+              e.provoked = true;
+              e.hp -= 2;
+              e.hitFlashTimer = 0.25;
+              e.stunTimer = Math.max(e.stunTimer, 1.0);
+              if (e.kind !== "turret") {
+                e.state = "stunned";
+                e.stateTimer = Math.max(e.stateTimer, 1.0);
+              }
+              if (e.hp <= 0) {
+                handleEnemyDeath(e);
+              }
+            }
+          }
+        } else if (equippedChronoArt === "bullet_time") {
+          let dilatedCount = 0;
+          for (const e of enemies) {
+            if (dilatedCount >= 5) break;
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            if (Math.hypot(e.x - hero.x, e.z - hero.z) <= 8.5) {
+              dilatedCount++;
+              e.provoked = true;
+              if (e.kind !== "boss") {
+                e.hp -= 2;
+                e.hitFlashTimer = 0.28;
+                e.stunTimer = Math.max(e.stunTimer, 1.5);
+                if (e.kind !== "turret") {
+                  e.state = "stunned";
+                  e.stateTimer = Math.max(e.stateTimer, 1.5);
+                }
+                if (e.hp <= 0) {
+                  handleEnemyDeath(e);
+                }
+              } else if (flags.bossState === "STUNNED") {
+                e.hp -= 2;
+                e.hitFlashTimer = 0.28;
+                if (e.hp <= 0) {
+                  handleEnemyDeath(e);
+                }
+              }
+              lightningArcs.push({
+                id: `chrono-dilation-${e.id}-${stats.elapsedSeconds.toFixed(3)}`,
+                zone,
+                x1: hero.x,
+                z1: hero.z,
+                x2: e.x,
+                z2: e.z,
+                timer: 0.3,
+                maxTimer: 0.3,
+              });
+            }
+          }
+        } else if (equippedChronoArt === "paradox_clone") {
+          let cloneShots = 0;
+          for (const e of enemies) {
+            if (cloneShots >= 3) break;
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            if (Math.hypot(e.x - anchorX, e.z - anchorZ) <= 11.5) {
+              cloneShots++;
+              const shotAngle = Math.atan2(e.x - anchorX, e.z - anchorZ);
+              arrows.push({
+                id: `paradox-arrow-${cloneShots}-${stats.elapsedSeconds.toFixed(3)}`,
+                zone,
+                fromHero: true,
+                x: anchorX + Math.sin(shotAngle) * 0.75,
+                z: anchorZ + Math.cos(shotAngle) * 0.75,
+                angle: shotAngle,
+                speed: 23.0,
+                damage: 3,
+                lifeTimer: 1.25,
+                isPiercing: true,
+                hitEnemyIds: [],
+              });
+            }
+          }
+          if (cloneShots > 0) {
+            soundEngine.playBowShoot();
+          }
+        } else if (equippedChronoArt === "chrono_singularity") {
+          let pulledAny = false;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const dx = anchorX - e.x;
+            const dz = anchorZ - e.z;
+            const d = Math.hypot(dx, dz);
+            if (d <= 9.5) {
+              pulledAny = true;
+              e.provoked = true;
+              if (e.kind !== "boss") {
+                e.shieldArmor = "none";
+                if (d > 1.2) {
+                  e.x += (dx / d) * Math.min(d - 1.0, 2.2);
+                  e.z += (dz / d) * Math.min(d - 1.0, 2.2);
+                }
+                e.hp -= 3;
+                e.hitFlashTimer = 0.3;
+                e.stunTimer = Math.max(e.stunTimer, 2.0);
+                if (e.kind !== "turret") {
+                  e.state = "stunned";
+                  e.stateTimer = Math.max(e.stateTimer, 2.0);
+                }
+                if (e.hp <= 0) {
+                  handleEnemyDeath(e);
+                }
+              } else if (flags.bossState === "STUNNED") {
+                e.hp -= 3;
+                e.hitFlashTimer = 0.3;
+                if (e.hp <= 0) {
+                  handleEnemyDeath(e);
+                }
+              }
+            }
+          }
+          if (pulledAny) {
+            hammerShockwaves.push({
+              id: `singularity-sw-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: anchorX,
+              z: anchorZ,
+              timer: 0.35,
+              maxTimer: 0.35,
+              maxRadius: 4.2,
+            });
+          }
+          if (hero.hp < hero.maxHp) {
+            hero.hp = Math.min(hero.maxHp, hero.hp + 1);
+          }
+          hero.mp = Math.min(hero.maxMp, (hero.mp ?? 0) + 10);
+        }
+      }
+    }
+
     // 9c. Update Thrown Clay Pots & Light Rocks in Flight (`thrownObjects`)
     const remainingThrown: ThrownObjectState[] = [];
     for (const obj of thrownObjects) {
@@ -16657,6 +17142,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Hall of Mirrors Obsidian Archway — Press [F] or [ = ] to Duel Your Shadow-Twin & Toggle Master World Remix!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(CHRONO_SHRINE_POS.x - hero.x, CHRONO_SHRINE_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Chronomancer's Temporal Sundial & Hourglass Shrine — Press [F] or [ ` ] to Command Bullet-Time, Echo Clones & Temporal Rewind!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -16685,6 +17176,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let artificerOpen = state.artificerOpen;
     let gliderOpen = state.gliderOpen;
     let mirrorOpen = state.mirrorOpen;
+    let chronoOpen = state.chronoOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -16900,6 +17392,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       mirrorOpen = true;
+      chronoOpen = false;
+      gliderOpen = false;
+      artificerOpen = false;
+      maskOpen = false;
+      lyreOpen = false;
+      homesteadOpen = false;
+      weatherOpen = false;
+      alchemyOpen = false;
+      colosseumOpen = false;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(CHRONO_SHRINE_POS.x - hero.x, CHRONO_SHRINE_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      chronoOpen = true;
+      mirrorOpen = false;
       gliderOpen = false;
       artificerOpen = false;
       maskOpen = false;
@@ -17163,6 +17678,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       artificerOpen,
       gliderOpen,
       mirrorOpen,
+      chronoOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

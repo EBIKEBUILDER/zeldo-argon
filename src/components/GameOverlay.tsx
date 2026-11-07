@@ -4,6 +4,7 @@ import React, { useRef, useState } from "react";
 import {
   BootsId,
   BottleContentId,
+  ChronoArtId,
   ColosseumTierId,
   CompanionId,
   ConstructId,
@@ -274,6 +275,7 @@ export default function GameOverlay() {
   const artificerOpen = useGameStore((s) => s.artificerOpen);
   const gliderOpen = useGameStore((s) => s.gliderOpen);
   const mirrorOpen = useGameStore((s) => s.mirrorOpen);
+  const chronoOpen = useGameStore((s) => s.chronoOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -310,6 +312,10 @@ export default function GameOverlay() {
   const setArtificerOpen = useGameStore((s) => s.setArtificerOpen);
   const setGliderOpen = useGameStore((s) => s.setGliderOpen);
   const setMirrorOpen = useGameStore((s) => s.setMirrorOpen);
+  const setChronoOpen = useGameStore((s) => s.setChronoOpen);
+  const unlockOrCastChronoArt = useGameStore((s) => s.unlockOrCastChronoArt);
+  const triggerTemporalRewind = useGameStore((s) => s.triggerTemporalRewind);
+  const grantChronoPlaytestBundle = useGameStore((s) => s.grantChronoPlaytestBundle);
   const summonShadowTwinDuel = useGameStore((s) => s.summonShadowTwinDuel);
   const toggleMasterWorldRemix = useGameStore((s) => s.toggleMasterWorldRemix);
   const grantMirrorPlaytestBundle = useGameStore((s) => s.grantMirrorPlaytestBundle);
@@ -416,6 +422,7 @@ export default function GameOverlay() {
         if (artificerOpen) setArtificerOpen(false);
         if (gliderOpen) setGliderOpen(false);
         if (mirrorOpen) setMirrorOpen(false);
+        if (chronoOpen) setChronoOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -438,6 +445,7 @@ export default function GameOverlay() {
     artificerOpen,
     gliderOpen,
     mirrorOpen,
+    chronoOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -455,6 +463,7 @@ export default function GameOverlay() {
     setArtificerOpen,
     setGliderOpen,
     setMirrorOpen,
+    setChronoOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -1663,6 +1672,29 @@ export default function GameOverlay() {
                   title="Open Hall of Mirrors Shadow-Twin Duel & Master World Remix Console (Shortcut: =)"
                 >
                   🪞 Mirrors ({(hero.clearedMirrorTrials ?? []).length}/4 • =)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChronoOpen(!chronoOpen)}
+                  className={`char-toggle-btn ${
+                    chronoOpen || (hero.chronoActiveTimer ?? 0) > 0 ? "active" : ""
+                  }`}
+                  style={
+                    (hero.chronoActiveTimer ?? 0) > 0
+                      ? {
+                          borderColor: "rgba(255, 214, 92, 0.95)",
+                          background: "rgba(58, 42, 12, 0.92)",
+                          color: "#ffe99e",
+                        }
+                      : undefined
+                  }
+                  title="Open Chronomancer's Temporal Sundial & Hourglass Shrine (Shortcut: `)"
+                >
+                  ⏳ Chrono (
+                  {(hero.chronoActiveTimer ?? 0) > 0
+                    ? `${Math.ceil(hero.chronoActiveTimer ?? 0)}s`
+                    : "`"}
+                  )
                 </button>
                 <button
                   type="button"
@@ -8433,6 +8465,340 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Mirrors (=)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          CHRONOMANCER'S TEMPORAL SUNDIAL & HOURGLASS MODAL (Shortcut: `)
+         ========================================================= */}
+      {phase === "playing" && !editorMode && chronoOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card char-sheet-card" style={{ maxWidth: 860 }}>
+            <div className="shop-header">
+              <div>
+                <div
+                  className="shop-pill"
+                  style={{
+                    background: "rgba(255, 206, 84, 0.18)",
+                    color: "#ffe89e",
+                    borderColor: "rgba(255, 206, 84, 0.55)",
+                  }}
+                >
+                  CROSSROADS CHRONOMANCER SHRINE • TEMPORAL ANCHOR, BULLET-TIME &amp; ECHO CLONES
+                </div>
+                <h2 className="shop-title">
+                  ⏳ CHRONOMANCER&apos;S TEMPORAL HOURGLASS
+                </h2>
+              </div>
+              <div className="char-summary-badges">
+                <div
+                  className="shop-wallet"
+                  style={{
+                    borderColor: "rgba(255, 206, 84, 0.6)",
+                    color: "#ffe89e",
+                  }}
+                  title="Unlocked Temporal Arts"
+                >
+                  <span style={{ fontSize: "1.05rem" }}>⏳</span>
+                  <span>{(hero.unlockedChronoArts ?? ["chrono_rewind"]).length} / 4 Arts</span>
+                </div>
+                <div className="shop-wallet" title="Crystallized Monster Cores">
+                  <span style={{ color: "#ff9e5e", fontSize: "1.05rem" }}>✦</span>
+                  <span>{hero.monsterCores ?? 0} Cores</span>
+                </div>
+                <div className="shop-wallet" title="Rupees">
+                  <span className="rupee-gem" />
+                  <span>{hero.rupees}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => grantChronoPlaytestBundle()}
+                  className="char-equip-btn"
+                  style={{
+                    padding: "6px 12px",
+                    fontSize: "0.75rem",
+                    background: "rgba(255, 206, 84, 0.18)",
+                    borderColor: "rgba(255, 206, 84, 0.6)",
+                    color: "#ffe89e",
+                  }}
+                >
+                  ⚡ Playtest: Unlock All 4 Chrono Arts + Cores
+                </button>
+              </div>
+            </div>
+
+            <p className="shop-sub">
+              Visit the 3D <strong>Chronomancer&apos;s Temporal Sundial &amp; Hourglass</strong> at{" "}
+              <code>(-24.5, -22.5)</code> in Crossroads Village or press <strong>`</strong>{" "}
+              (Backquote) anytime to plant a 3D <strong>Golden Temporal Anchor</strong>, engage{" "}
+              <strong>Bullet-Time Reflex</strong>, summon a <strong>Paradox Echo Clone</strong>, or
+              trigger an instant <strong>Space-Time Rewind</strong>!
+            </p>
+
+            {/* Instant Space-Time Rewind Banner */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 14,
+                padding: "14px 18px",
+                marginBottom: 16,
+                borderRadius: 14,
+                border:
+                  (hero.chronoActiveTimer ?? 0) > 0
+                    ? "1px solid rgba(255, 214, 92, 0.88)"
+                    : "1px solid rgba(145, 168, 214, 0.32)",
+                background:
+                  (hero.chronoActiveTimer ?? 0) > 0
+                    ? "linear-gradient(90deg, rgba(64, 46, 12, 0.92), rgba(28, 22, 10, 0.92))"
+                    : "rgba(14, 20, 34, 0.85)",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: "0.94rem",
+                    fontWeight: 900,
+                    color: (hero.chronoActiveTimer ?? 0) > 0 ? "#ffe89e" : "#d8e6ff",
+                  }}
+                >
+                  {(hero.chronoActiveTimer ?? 0) > 0
+                    ? `⏳ TEMPORAL ANCHOR ACTIVE (${Math.ceil(hero.chronoActiveTimer ?? 0)}s Remaining at ${(hero.chronoAnchorX ?? 0).toFixed(1)}, ${(hero.chronoAnchorZ ?? 0).toFixed(1)})`
+                    : `⏳ Temporal Anchor Ready at (${(hero.chronoAnchorX ?? 0).toFixed(1)}, ${(hero.chronoAnchorZ ?? 0).toFixed(1)})`}
+                </div>
+                <div style={{ fontSize: "0.78rem", color: "#b8cce8", marginTop: 3 }}>
+                  Triggering <strong>Space-Time Rewind</strong> snaps you back to your{" "}
+                  <strong>Temporal Anchor</strong>, restores Vitality &amp; Magic, grants{" "}
+                  <strong>1.5s Invulnerability</strong>, and stuns nearby foes for 2.2s!
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => triggerTemporalRewind()}
+                className="char-equip-btn"
+                style={{
+                  padding: "8px 16px",
+                  fontSize: "0.82rem",
+                  fontWeight: 800,
+                  background: "linear-gradient(180deg, #ffd86b 0%, #b87c0e 100%)",
+                  borderColor: "rgba(255, 232, 148, 0.95)",
+                  color: "#221402",
+                }}
+              >
+                ⏪ Trigger Space-Time Rewind Now!
+              </button>
+            </div>
+
+            {(() => {
+              const unlockedList = hero.unlockedChronoArts ?? ["chrono_rewind"];
+              const CHRONO_ARTS: Array<{
+                id: ChronoArtId;
+                name: string;
+                icon: string;
+                subtitle: string;
+                cores: number;
+                rupees: number;
+                effectSummary: string;
+                desc: string;
+                accent: string;
+              }> = [
+                {
+                  id: "chrono_rewind",
+                  name: "I. Sands of Reversal (Temporal Anchor)",
+                  icon: "⏳",
+                  subtitle: "45s Duration • +25% Speed • -35% Damage Taken",
+                  cores: 0,
+                  rupees: 0,
+                  effectSummary: "Plants Golden Anchor + Pulses 2 DMG & +1 HP/+6 MP Every 1.3s",
+                  desc: "Plants a 3D Golden Temporal Anchor at your feet. Pulses temporal shockwaves around the anchor while granting +25% Speed & -35% Damage Taken.",
+                  accent: "#ffe078",
+                },
+                {
+                  id: "bullet_time",
+                  name: "II. Chronos Dilation (Bullet-Time Reflex)",
+                  icon: "⚡",
+                  subtitle: "35s Duration • +35% Speed • +40% Charge Speed",
+                  cores: 4,
+                  rupees: 200,
+                  effectSummary: "8.5m Time-Dilation Pulse (2 DMG + 1.5s Stun to 5 Foes) Every 1.3s",
+                  desc: "Dilates time around you! Boosts movement speed by +35% and Spin/Flame charge speed by +40% while freezing nearby monsters in place every 1.3s.",
+                  accent: "#7ee8ff",
+                },
+                {
+                  id: "paradox_clone",
+                  name: "III. Paradox Twin (Temporal Echo Clone)",
+                  icon: "👥",
+                  subtitle: "45s Duration • 3D Autonomous Echo Archer",
+                  cores: 6,
+                  rupees: 300,
+                  effectSummary: "3D Echo Clone Fires Piercing 3 DMG Chrono-Arrows at 3 Foes Every 1.3s",
+                  desc: "Conjures a 3D Golden Paradox Clone at your anchor that autonomously fires piercing 3 DMG Chrono-Arrows at up to 3 enemies within 11.5m!",
+                  accent: "#ffc268",
+                },
+                {
+                  id: "chrono_singularity",
+                  name: "IV. Zero-Hour Singularity (Gravity Well)",
+                  icon: "🌀",
+                  subtitle: "40s Duration • 9.5m Temporal Vortex & Shield Strip",
+                  cores: 8,
+                  rupees: 450,
+                  effectSummary: "Warps Foes to Anchor, Strips Shields, Deals 3 DMG + 2.0s Stun & Heals +1 HP/+10 MP",
+                  desc: "Collapses space-time at your anchor! Continuously pulls non-boss foes within 9.5m inward, strips shields, deals 3 DMG + 2.0s Stun, and restores HP/MP!",
+                  accent: "#e29eff",
+                },
+              ];
+
+              return (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))",
+                    gap: "12px",
+                    marginBottom: "16px",
+                  }}
+                >
+                  {CHRONO_ARTS.map((art) => {
+                    const isUnlocked = unlockedList.includes(art.id);
+                    const isEquipped = hero.equippedChronoArt === art.id;
+                    const isActiveNow = isEquipped && (hero.chronoActiveTimer ?? 0) > 0;
+                    return (
+                      <div
+                        key={art.id}
+                        style={{
+                          padding: "14px",
+                          borderRadius: "12px",
+                          border: isActiveNow
+                            ? `2px solid ${art.accent}`
+                            : isUnlocked
+                            ? "1px solid rgba(255, 214, 102, 0.48)"
+                            : "1px solid rgba(255,255,255,0.12)",
+                          background: isActiveNow
+                            ? "rgba(54, 40, 14, 0.92)"
+                            : isUnlocked
+                            ? "rgba(24, 28, 38, 0.88)"
+                            : "rgba(14, 18, 28, 0.82)",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                          gap: "10px",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: "8px",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ fontSize: "1.45rem" }}>{art.icon}</span>
+                              <div>
+                                <div
+                                  style={{
+                                    fontWeight: 800,
+                                    color: art.accent,
+                                    fontSize: "0.95rem",
+                                  }}
+                                >
+                                  {art.name}
+                                </div>
+                                <div style={{ fontSize: "0.73rem", color: "#9cb8d8" }}>
+                                  {art.subtitle}
+                                </div>
+                              </div>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: "0.7rem",
+                                fontWeight: 800,
+                                padding: "3px 8px",
+                                borderRadius: "999px",
+                                background: isActiveNow
+                                  ? "rgba(255, 214, 92, 0.25)"
+                                  : isUnlocked
+                                  ? "rgba(68, 238, 148, 0.2)"
+                                  : "rgba(255, 255, 255, 0.08)",
+                                color: isActiveNow
+                                  ? "#ffe89e"
+                                  : isUnlocked
+                                  ? "#88ffbe"
+                                  : "#b8cce8",
+                              }}
+                            >
+                              {isActiveNow
+                                ? `● ACTIVE (${Math.ceil(hero.chronoActiveTimer ?? 0)}s)`
+                                : isUnlocked
+                                ? "✓ UNLOCKED"
+                                : `${art.cores}✦ + ${art.rupees}R`}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.76rem",
+                              fontWeight: 800,
+                              color: "#ffe49e",
+                              marginBottom: 4,
+                            }}
+                          >
+                            ✦ {art.effectSummary}
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.78rem",
+                              color: "#c8daf0",
+                              lineHeight: 1.45,
+                              margin: 0,
+                            }}
+                          >
+                            {art.desc}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => unlockOrCastChronoArt(art.id)}
+                          className="char-equip-btn"
+                          style={{
+                            width: "100%",
+                            padding: "8px 12px",
+                            background: isUnlocked
+                              ? "linear-gradient(180deg, #ffd86b 0%, #b87c0e 100%)"
+                              : "rgba(255, 206, 84, 0.2)",
+                            color: isUnlocked ? "#221402" : "#ffe89e",
+                            borderColor: "rgba(255, 214, 92, 0.85)",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {isUnlocked
+                            ? `⏳ Invoke ${art.name} & Plant Anchor`
+                            : `Unlock & Invoke (${art.cores}✦ Cores + ${art.rupees} Rupees)`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>`</strong> (Backquote) or <strong>Esc</strong> anytime to close the
+                Chronomancer&apos;s Temporal Hourglass.
+              </span>
+              <button
+                type="button"
+                onClick={() => setChronoOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Hourglass (`)
               </button>
             </div>
           </div>

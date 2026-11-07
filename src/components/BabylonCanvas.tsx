@@ -47,6 +47,7 @@ import {
   CITADEL_BOSS_GATE_POS,
   CITADEL_EXIT_GATE_POS,
   CITADEL_VICTORY_CHEST_POS,
+  CHRONO_SHRINE_POS,
   COLOSSEUM_GATE_POS,
   COMPANION_ALTAR_POS,
   CRYPT_SHORTCUT_DOOR_POS,
@@ -6945,6 +6946,141 @@ export default function BabylonCanvas() {
     heroMirrorPhantom.isPickable = false;
     heroMirrorPhantom.parent = heroMirrorAuraNode;
 
+    // 1d-12. 3D Chronomancer's Temporal Sundial & Hourglass Shrine (`CHRONO_SHRINE_POS` in Map 1 Overworld)
+    const chronoShrineNode = new TransformNode("chronoShrineNode", scene);
+    chronoShrineNode.position.set(CHRONO_SHRINE_POS.x, 0, CHRONO_SHRINE_POS.z);
+
+    const chronoAmberMat = makeMat(
+      "chronoAmberMat",
+      new Color3(1.0, 0.82, 0.25),
+      new Color3(0.65, 0.46, 0.08),
+      new Color3(1.0, 0.96, 0.75),
+      0.9
+    );
+
+    const chronoDais = MeshBuilder.CreateCylinder(
+      "chronoDais",
+      { diameterTop: 3.1, diameterBottom: 3.55, height: 0.34, tessellation: 16 },
+      scene
+    );
+    chronoDais.position.set(0, 0.17, 0);
+    chronoDais.material = dgPillarMat;
+    chronoDais.isPickable = false;
+    chronoDais.parent = chronoShrineNode;
+
+    const chronoPedestal = MeshBuilder.CreateCylinder(
+      "chronoPedestal",
+      { diameterTop: 0.85, diameterBottom: 1.15, height: 1.35, tessellation: 12 },
+      scene
+    );
+    chronoPedestal.position.set(0, 0.95, 0);
+    chronoPedestal.material = darkObsidianMat;
+    chronoPedestal.isPickable = false;
+    chronoPedestal.parent = chronoShrineNode;
+
+    const chronoHourglassRoot = new TransformNode("chronoHourglassRoot", scene);
+    chronoHourglassRoot.position.set(0, 2.25, 0);
+    chronoHourglassRoot.parent = chronoShrineNode;
+
+    const chronoTopCone = MeshBuilder.CreateCylinder(
+      "chronoTopCone",
+      { diameterTop: 0.95, diameterBottom: 0.14, height: 0.68, tessellation: 14 },
+      scene
+    );
+    chronoTopCone.position.set(0, 0.36, 0);
+    chronoTopCone.material = chronoAmberMat;
+    chronoTopCone.isPickable = false;
+    chronoTopCone.parent = chronoHourglassRoot;
+
+    const chronoBotCone = MeshBuilder.CreateCylinder(
+      "chronoBotCone",
+      { diameterTop: 0.14, diameterBottom: 0.95, height: 0.68, tessellation: 14 },
+      scene
+    );
+    chronoBotCone.position.set(0, -0.36, 0);
+    chronoBotCone.material = chronoAmberMat;
+    chronoBotCone.isPickable = false;
+    chronoBotCone.parent = chronoHourglassRoot;
+
+    const chronoAstrolabeOuter = MeshBuilder.CreateTorus(
+      "chronoAstrolabeOuter",
+      { diameter: 2.25, thickness: 0.08, tessellation: 28 },
+      scene
+    );
+    chronoAstrolabeOuter.position.set(0, 2.25, 0);
+    chronoAstrolabeOuter.material = goldKeyMat;
+    chronoAstrolabeOuter.isPickable = false;
+    chronoAstrolabeOuter.parent = chronoShrineNode;
+
+    const chronoGroundHalo = MeshBuilder.CreateTorus(
+      "chronoGroundHalo",
+      { diameter: 3.55, thickness: 0.085, tessellation: 28 },
+      scene
+    );
+    chronoGroundHalo.position.set(0, 0.14, 0);
+    chronoGroundHalo.material = chronoAmberMat;
+    chronoGroundHalo.isPickable = false;
+    chronoGroundHalo.parent = chronoShrineNode;
+
+    // 3D Deployed Temporal Anchor & Paradox Echo Clone (`chronoAnchorNode`)
+    const chronoAnchorNode = new TransformNode("chronoAnchorNode", scene);
+    chronoAnchorNode.setEnabled(false);
+
+    const chronoAnchorDial = MeshBuilder.CreateTorus(
+      "chronoAnchorDial",
+      { diameter: 2.35, thickness: 0.08, tessellation: 28 },
+      scene
+    );
+    chronoAnchorDial.position.set(0, 0.14, 0);
+    chronoAnchorDial.material = chronoAmberMat;
+    chronoAnchorDial.isPickable = false;
+    chronoAnchorDial.parent = chronoAnchorNode;
+
+    const chronoAnchorCloneMesh = MeshBuilder.CreateCylinder(
+      "chronoAnchorCloneMesh",
+      { diameterTop: 0.56, diameterBottom: 0.78, height: 1.45, tessellation: 12 },
+      scene
+    );
+    chronoAnchorCloneMesh.position.set(0, 0.85, 0);
+    chronoAnchorCloneMesh.material = chronoAmberMat;
+    chronoAnchorCloneMesh.isPickable = false;
+    chronoAnchorCloneMesh.parent = chronoAnchorNode;
+
+    const chronoAnchorApex = MeshBuilder.CreatePolyhedron(
+      "chronoAnchorApex",
+      { type: 1, size: 0.32 },
+      scene
+    );
+    chronoAnchorApex.position.set(0, 1.95, 0);
+    chronoAnchorApex.material = goldKeyMat;
+    chronoAnchorApex.isPickable = false;
+    chronoAnchorApex.parent = chronoAnchorNode;
+
+    // 3D Hero Overhead Chronos Clock-Face Halo (`heroChronoHaloNode`)
+    const heroChronoHaloNode = new TransformNode("heroChronoHaloNode", scene);
+    heroChronoHaloNode.parent = heroRoot;
+    heroChronoHaloNode.setEnabled(false);
+
+    const heroChronoRing = MeshBuilder.CreateTorus(
+      "heroChronoRing",
+      { diameter: 2.05, thickness: 0.065, tessellation: 28 },
+      scene
+    );
+    heroChronoRing.position.set(0, 1.85, 0);
+    heroChronoRing.material = chronoAmberMat;
+    heroChronoRing.isPickable = false;
+    heroChronoRing.parent = heroChronoHaloNode;
+
+    const heroChronoHand = MeshBuilder.CreateBox(
+      "heroChronoHand",
+      { width: 0.08, height: 0.05, depth: 0.92 },
+      scene
+    );
+    heroChronoHand.position.set(0, 1.86, 0.42);
+    heroChronoHand.material = goldKeyMat;
+    heroChronoHand.isPickable = false;
+    heroChronoHand.parent = heroChronoHaloNode;
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -10575,6 +10711,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // ` (Backquote) toggles Chronomancer's Temporal Sundial & Hourglass Modal
+      if (code === "Backquote" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setChronoOpen(!store.chronoOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -11657,6 +11800,7 @@ export default function BabylonCanvas() {
       artificerBenchNode.setEnabled(inOverworld);
       skySailRoostNode.setEnabled(inOverworld);
       mirrorPortalNode.setEnabled(inOverworld);
+      chronoShrineNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -11857,6 +12001,46 @@ export default function BabylonCanvas() {
         mirrorGroundHalo.rotation.y = t * 1.8;
         const mirrorGlassPulse = 0.94 + Math.sin(t * 5.0) * 0.06;
         mirrorGlassPane.scaling.set(mirrorGlassPulse, 1, 1);
+
+        const chronoGroundY = sampleTerrainHeight(
+          activeCells,
+          CHRONO_SHRINE_POS.x,
+          CHRONO_SHRINE_POS.z
+        );
+        chronoShrineNode.position.set(
+          CHRONO_SHRINE_POS.x,
+          chronoGroundY,
+          CHRONO_SHRINE_POS.z
+        );
+        chronoHourglassRoot.rotation.y = t * 2.2;
+        chronoHourglassRoot.position.y = 2.25 + Math.sin(t * 3.8) * 0.14;
+        chronoAstrolabeOuter.rotation.y = -t * 2.6;
+        chronoAstrolabeOuter.rotation.x = Math.sin(t * 2.1) * 0.35;
+        chronoGroundHalo.rotation.y = t * 1.7;
+      }
+
+      // Sync 3D Chronomancer Temporal Anchor & Hero Overhead Clock-Face Halo (`chronoAnchorNode`, `heroChronoHaloNode`)
+      const isChronoActiveNow =
+        (snap.hero.chronoActiveTimer ?? 0) > 0 && !snap.editorMode;
+      heroChronoHaloNode.setEnabled(isChronoActiveNow);
+      if (isChronoActiveNow) {
+        heroChronoHaloNode.rotation.y = t * 3.8;
+      }
+      const showChronoAnchor =
+        isChronoActiveNow && (snap.hero.chronoAnchorZone ?? "overworld") === snap.zone;
+      chronoAnchorNode.setEnabled(showChronoAnchor);
+      if (showChronoAnchor) {
+        const ax = snap.hero.chronoAnchorX ?? snap.hero.x;
+        const az = snap.hero.chronoAnchorZ ?? snap.hero.z;
+        const aGroundY = sampleTerrainHeight(activeCells, ax, az);
+        chronoAnchorNode.position.set(ax, aGroundY, az);
+        chronoAnchorDial.rotation.y = -t * 3.2;
+        chronoAnchorApex.rotation.y = t * 3.6;
+        chronoAnchorApex.position.y = 1.95 + Math.sin(t * 4.5) * 0.14;
+        chronoAnchorCloneMesh.setEnabled(
+          snap.hero.equippedChronoArt === "paradox_clone" ||
+            snap.hero.equippedChronoArt === "chrono_rewind"
+        );
       }
 
       // Sync 3D Hero Dark-Mirror Phantom Afterimage & Eclipse Halo (`heroMirrorAuraNode`)

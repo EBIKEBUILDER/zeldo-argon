@@ -340,6 +340,36 @@ export const MIRROR_PORTAL_POS = {
   z: -13.5,
 };
 
+// Map 1 Chronomancer's Temporal Sundial & Floating Hourglass Shrine (Command 4 Temporal Arts & Rewind Time!)
+export const CHRONO_SHRINE_POS = {
+  x: -24.5,
+  z: -22.5,
+};
+
+// Map 1 Star-Weaver's Celestial Armillary & Constellation Observatory (Illuminate 4 Zodiac Mastery Constellations!)
+export const STAR_OBSERVATORY_POS = {
+  x: 24.5,
+  z: -22.5,
+};
+
+// Map 1 Hunter's Guild Bestiary Lectern & Soul-Crystal Pedestal (Inspect Monster Compendium & Attune 4 Soul-Cards!)
+export const BESTIARY_LECTERN_POS = {
+  x: -8.5,
+  z: -22.5,
+};
+
+// Map 1 Wayfarer's Guild Bounty Board & Cartographer's Table (Accept World Contracts & Decipher X-Marks-the-Spot Treasure Maps!)
+export const BOUNTY_BOARD_POS = {
+  x: 8.5,
+  z: -22.5,
+};
+
+// Map 1 Archmage's Floating Grimoire Sanctum & Ley-Pillar (Cast 4 Cataclysmic Ultimate Spells!)
+export const GRIMOIRE_SANCTUM_POS = {
+  x: 0,
+  z: -31.8,
+};
+
 // Dungeon Entry Key Pedestal inside Map 1B (West Exit: The Mini-Cave / Forest Grove!)
 export const DUNGEON_KEY_POS = {
   x: 0,
