@@ -37,6 +37,7 @@ import {
   BIG_KEY_CHEST_POS,
   BOSS_CHEST_POS,
   BOSS_EXIT_GATE_POS,
+  BOUNTY_BOARD_POS,
   CALDERA_BOSS_GATE_POS,
   CALDERA_EXIT_GATE_POS,
   CALDERA_FORGE_CHEST_POS,
@@ -7281,6 +7282,128 @@ export default function BabylonCanvas() {
     heroSoulCardFrame.isPickable = false;
     heroSoulCardFrame.parent = heroSoulCardNode;
 
+    // 1d-15. 3D Wayfarer's Guild Bounty Board & Cartographer's Table (`BOUNTY_BOARD_POS` in Map 1 Overworld)
+    const bountyBoardNode = new TransformNode("bountyBoardNode", scene);
+    bountyBoardNode.position.set(BOUNTY_BOARD_POS.x, 0, BOUNTY_BOARD_POS.z);
+
+    const parchmentMat = makeMat(
+      "parchmentMat",
+      new Color3(0.96, 0.88, 0.68),
+      new Color3(0.38, 0.32, 0.16),
+      new Color3(1.0, 0.96, 0.85),
+      0.95
+    );
+
+    const bountyDais = MeshBuilder.CreateCylinder(
+      "bountyDais",
+      { diameterTop: 2.9, diameterBottom: 3.3, height: 0.3, tessellation: 18 },
+      scene
+    );
+    bountyDais.position.set(0, 0.15, 0);
+    bountyDais.material = dgPillarMat;
+    bountyDais.isPickable = false;
+    bountyDais.parent = bountyBoardNode;
+
+    for (const px of [-0.95, 0.95]) {
+      const post = MeshBuilder.CreateCylinder(
+        `bountyPost-${px}`,
+        { diameter: 0.24, height: 2.35, tessellation: 10 },
+        scene
+      );
+      post.position.set(px, 1.25, -0.35);
+      post.material = woodMat;
+      post.isPickable = false;
+      post.parent = bountyBoardNode;
+    }
+
+    const bountyBoardPanel = MeshBuilder.CreateBox(
+      "bountyBoardPanel",
+      { width: 2.15, height: 1.25, depth: 0.16 },
+      scene
+    );
+    bountyBoardPanel.position.set(0, 1.72, -0.35);
+    bountyBoardPanel.material = woodMat;
+    bountyBoardPanel.isPickable = false;
+    bountyBoardPanel.parent = bountyBoardNode;
+
+    for (const sx of [-0.55, 0, 0.55]) {
+      const scrollPoster = MeshBuilder.CreateBox(
+        `bountyPoster-${sx}`,
+        { width: 0.42, height: 0.58, depth: 0.04 },
+        scene
+      );
+      scrollPoster.position.set(sx, 1.72, -0.25);
+      scrollPoster.material = parchmentMat;
+      scrollPoster.isPickable = false;
+      scrollPoster.parent = bountyBoardNode;
+    }
+
+    const bountyCompassGem = MeshBuilder.CreatePolyhedron(
+      "bountyCompassGem",
+      { type: 1, size: 0.36 },
+      scene
+    );
+    bountyCompassGem.position.set(0, 2.75, -0.35);
+    bountyCompassGem.material = goldKeyMat;
+    bountyCompassGem.isPickable = false;
+    bountyCompassGem.parent = bountyBoardNode;
+
+    const bountyGroundHalo = MeshBuilder.CreateTorus(
+      "bountyGroundHalo",
+      { diameter: 3.4, thickness: 0.08, tessellation: 28 },
+      scene
+    );
+    bountyGroundHalo.position.set(0, 0.14, 0);
+    bountyGroundHalo.material = goldKeyMat;
+    bountyGroundHalo.isPickable = false;
+    bountyGroundHalo.parent = bountyBoardNode;
+
+    // 3D Active Golden X Treasure Beacon (`treasureBeaconNode`)
+    const treasureBeaconNode = new TransformNode("treasureBeaconNode", scene);
+    treasureBeaconNode.setEnabled(false);
+
+    const treasureXBar1 = MeshBuilder.CreateBox(
+      "treasureXBar1",
+      { width: 2.1, height: 0.12, depth: 0.32 },
+      scene
+    );
+    treasureXBar1.position.set(0, 0.12, 0);
+    treasureXBar1.rotation.y = Math.PI / 4;
+    treasureXBar1.material = goldKeyMat;
+    treasureXBar1.isPickable = false;
+    treasureXBar1.parent = treasureBeaconNode;
+
+    const treasureXBar2 = MeshBuilder.CreateBox(
+      "treasureXBar2",
+      { width: 2.1, height: 0.12, depth: 0.32 },
+      scene
+    );
+    treasureXBar2.position.set(0, 0.12, 0);
+    treasureXBar2.rotation.y = -Math.PI / 4;
+    treasureXBar2.material = goldKeyMat;
+    treasureXBar2.isPickable = false;
+    treasureXBar2.parent = treasureBeaconNode;
+
+    const treasureCompassRing = MeshBuilder.CreateTorus(
+      "treasureCompassRing",
+      { diameter: 2.65, thickness: 0.085, tessellation: 28 },
+      scene
+    );
+    treasureCompassRing.position.set(0, 0.16, 0);
+    treasureCompassRing.material = goldKeyMat;
+    treasureCompassRing.isPickable = false;
+    treasureCompassRing.parent = treasureBeaconNode;
+
+    const treasureCrownGem = MeshBuilder.CreatePolyhedron(
+      "treasureCrownGem",
+      { type: 1, size: 0.42 },
+      scene
+    );
+    treasureCrownGem.position.set(0, 1.95, 0);
+    treasureCrownGem.material = goldKeyMat;
+    treasureCrownGem.isPickable = false;
+    treasureCrownGem.parent = treasureBeaconNode;
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -10932,6 +11055,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // 0 (Digit0) toggles Wayfarer's Guild Bounty Board, World Contracts & Treasure Maps Modal
+      if (code === "Digit0" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setBountyOpen(!store.bountyOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -12017,6 +12147,7 @@ export default function BabylonCanvas() {
       chronoShrineNode.setEnabled(inOverworld);
       starObservatoryNode.setEnabled(inOverworld);
       bestiaryLecternNode.setEnabled(inOverworld);
+      bountyBoardNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -12267,6 +12398,33 @@ export default function BabylonCanvas() {
         bestiaryOrbitRing.rotation.y = -t * 2.4;
         bestiaryOrbitRing.rotation.z = Math.sin(t * 2.0) * 0.32;
         bestiaryGroundHalo.rotation.y = t * 1.5;
+
+        const bountyGroundY = sampleTerrainHeight(
+          activeCells,
+          BOUNTY_BOARD_POS.x,
+          BOUNTY_BOARD_POS.z
+        );
+        bountyBoardNode.position.set(
+          BOUNTY_BOARD_POS.x,
+          bountyGroundY,
+          BOUNTY_BOARD_POS.z
+        );
+        bountyCompassGem.rotation.y = -t * 2.9;
+        bountyCompassGem.position.y = 2.75 + Math.sin(t * 4.1) * 0.12;
+        bountyGroundHalo.rotation.y = -t * 1.7;
+      }
+
+      // Sync 3D Active Golden X Treasure Beacon (`treasureBeaconNode`)
+      const tbPos = snap.hero.treasureBeaconPos;
+      const showTreasureBeacon =
+        Boolean(tbPos && tbPos.zone === snap.zone) && !snap.editorMode;
+      treasureBeaconNode.setEnabled(showTreasureBeacon);
+      if (showTreasureBeacon && tbPos) {
+        const tbGroundY = sampleTerrainHeight(activeCells, tbPos.x, tbPos.z);
+        treasureBeaconNode.position.set(tbPos.x, tbGroundY, tbPos.z);
+        treasureCompassRing.rotation.y = t * 3.1;
+        treasureCrownGem.rotation.y = -t * 3.4;
+        treasureCrownGem.position.y = 1.95 + Math.sin(t * 4.5) * 0.18;
       }
 
       // Sync 3D Hero Orbiting Monster Soul-Card Sigil (`heroSoulCardNode`)

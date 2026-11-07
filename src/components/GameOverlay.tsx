@@ -9,6 +9,7 @@ import {
   CompanionId,
   ConstellationId,
   ConstructId,
+  ContractId,
   EditorPlaceCategory,
   ElixirId,
   FishId,
@@ -280,6 +281,7 @@ export default function GameOverlay() {
   const chronoOpen = useGameStore((s) => s.chronoOpen);
   const starsOpen = useGameStore((s) => s.starsOpen);
   const bestiaryOpen = useGameStore((s) => s.bestiaryOpen);
+  const bountyOpen = useGameStore((s) => s.bountyOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -323,6 +325,10 @@ export default function GameOverlay() {
   const setBestiaryOpen = useGameStore((s) => s.setBestiaryOpen);
   const unlockOrAttuneSoulCard = useGameStore((s) => s.unlockOrAttuneSoulCard);
   const grantBestiaryPlaytestBundle = useGameStore((s) => s.grantBestiaryPlaytestBundle);
+  const setBountyOpen = useGameStore((s) => s.setBountyOpen);
+  const acceptOrClaimContract = useGameStore((s) => s.acceptOrClaimContract);
+  const unearthTreasureHoard = useGameStore((s) => s.unearthTreasureHoard);
+  const grantBountyPlaytestBundle = useGameStore((s) => s.grantBountyPlaytestBundle);
   const unlockOrCastChronoArt = useGameStore((s) => s.unlockOrCastChronoArt);
   const triggerTemporalRewind = useGameStore((s) => s.triggerTemporalRewind);
   const grantChronoPlaytestBundle = useGameStore((s) => s.grantChronoPlaytestBundle);
@@ -435,6 +441,7 @@ export default function GameOverlay() {
         if (chronoOpen) setChronoOpen(false);
         if (starsOpen) setStarsOpen(false);
         if (bestiaryOpen) setBestiaryOpen(false);
+        if (bountyOpen) setBountyOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -460,6 +467,7 @@ export default function GameOverlay() {
     chronoOpen,
     starsOpen,
     bestiaryOpen,
+    bountyOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -480,6 +488,7 @@ export default function GameOverlay() {
     setChronoOpen,
     setStarsOpen,
     setBestiaryOpen,
+    setBountyOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -1749,6 +1758,25 @@ export default function GameOverlay() {
                   title="Open Hunter's Guild Bestiary & Monster Soul-Cards Compendium (Shortcut: -)"
                 >
                   📖 Bestiary ({(hero.unlockedSoulCards ?? ["wraith_soul"]).length}/4 • -)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBountyOpen(!bountyOpen)}
+                  className={`char-toggle-btn ${
+                    bountyOpen || Boolean(hero.treasureBeaconPos) ? "active" : ""
+                  }`}
+                  style={
+                    Boolean(hero.treasureBeaconPos)
+                      ? {
+                          borderColor: "rgba(255, 214, 92, 0.95)",
+                          background: "rgba(56, 38, 12, 0.92)",
+                          color: "#ffe89e",
+                        }
+                      : undefined
+                  }
+                  title="Open Wayfarer's Guild Bounty Board, World Contracts & Treasure Maps (Shortcut: 0)"
+                >
+                  📜 Bounties ({(hero.completedContracts ?? []).length}/4 • 0)
                 </button>
                 <button
                   type="button"
@@ -9598,6 +9626,343 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Bestiary (-)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          WAYFARER'S GUILD BOUNTY BOARD, WORLD CONTRACTS & TREASURE MAPS MODAL (0)
+         ========================================================= */}
+      {phase === "playing" && !editorMode && bountyOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card char-sheet-card" style={{ maxWidth: "890px" }}>
+            <div className="shop-header">
+              <div>
+                <div className="shop-pill">
+                  WORLD BOUNTY WARRANTS • X-MARKS-THE-SPOT TREASURE MAPS • ROYAL HOARDS
+                </div>
+                <h2 className="shop-title">
+                  📜 WAYFARER&apos;S GUILD BOUNTY BOARD &amp; TREASURE MAPS
+                </h2>
+              </div>
+              <div className="char-summary-badges">
+                <span className="char-stat-badge">
+                  Contracts Cleared: <strong>{(hero.completedContracts ?? []).length}/4</strong>
+                </span>
+                <span className="char-stat-badge">
+                  Monster Cores: <strong>{hero.monsterCores ?? 0} ✦</strong>
+                </span>
+                <span className="char-stat-badge">
+                  Rupees: <strong>{hero.rupees}</strong>
+                </span>
+              </div>
+            </div>
+
+            <p className="shop-subtitle" style={{ marginBottom: "14px" }}>
+              Visit the <strong>Wayfarer&apos;s Guild Bounty Board</strong> in Crossroads Village (
+              <code>8.5, -22.5</code>) or press <strong>0</strong> anytime to accept{" "}
+              <strong>World Bounty Warrants</strong> &amp; decipher{" "}
+              <strong>X-Marks-the-Spot Treasure Maps</strong>! Accepting a contract plants a glowing
+              3D <strong>Golden X Treasure Beacon</strong> &amp; summons an Elite Bounty Target 6.2m
+              ahead—unearth the hoard with your Shovel [G], Hammer [T], Interact [F], or click{" "}
+              <strong>Unearth Golden X Hoard</strong> below!
+            </p>
+
+            {/* Live Cartographer's Treasure Beacon Radar & Instant Unearth Bar */}
+            <div
+              style={{
+                padding: "14px 16px",
+                borderRadius: "12px",
+                background:
+                  "linear-gradient(135deg, rgba(46, 32, 12, 0.94) 0%, rgba(24, 18, 38, 0.92) 100%)",
+                border: "1px solid rgba(255, 214, 92, 0.55)",
+                marginBottom: "16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "12px",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: "0.74rem",
+                    fontWeight: 800,
+                    letterSpacing: "0.08em",
+                    color: "#ffe078",
+                    textTransform: "uppercase",
+                    marginBottom: "4px",
+                  }}
+                >
+                  CARTOGRAPHER&apos;S COMPASS &amp; ACTIVE GOLDEN-X BEACON
+                </div>
+                <div style={{ fontSize: "0.84rem", color: "#fff5d6" }}>
+                  Active Warrant:{" "}
+                  <strong style={{ color: "#ffd866" }}>
+                    {(hero.activeContract ?? "none") !== "none"
+                      ? (hero.activeContract ?? "").replace(/_/g, " ").toUpperCase()
+                      : "No Active Contract Selected"}
+                  </strong>{" "}
+                  • Golden X Beacon:{" "}
+                  <strong>
+                    {hero.treasureBeaconPos
+                      ? `(${hero.treasureBeaconPos.x.toFixed(1)}, ${hero.treasureBeaconPos.z.toFixed(
+                          1
+                        )}) in ${hero.treasureBeaconPos.zone.toUpperCase()}`
+                      : "Not Planted"}
+                  </strong>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {hero.treasureBeaconPos && (
+                  <button
+                    type="button"
+                    onClick={unearthTreasureHoard}
+                    className="char-equip-btn"
+                    style={{
+                      background: "linear-gradient(180deg, #ffd86b 0%, #b87c0e 100%)",
+                      borderColor: "rgba(255, 232, 148, 0.95)",
+                      color: "#221402",
+                      padding: "8px 14px",
+                      fontSize: "0.8rem",
+                      fontWeight: 900,
+                    }}
+                  >
+                    ⛏️ Unearth Golden X Treasure Hoard Now!
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={grantBountyPlaytestBundle}
+                  className="char-equip-btn"
+                  style={{
+                    background: "rgba(255, 214, 92, 0.18)",
+                    borderColor: "rgba(255, 214, 92, 0.72)",
+                    color: "#ffe89e",
+                    padding: "8px 14px",
+                    fontSize: "0.78rem",
+                  }}
+                >
+                  📜 Guild Playtest Blessing (+All 4 Contracts, +12 Cores &amp; +600R)
+                </button>
+              </div>
+            </div>
+
+            {(() => {
+              const completedList = hero.completedContracts ?? [];
+              const CONTRACTS: Array<{
+                id: ContractId;
+                name: string;
+                icon: string;
+                subtitle: string;
+                spoilsSummary: string;
+                firstClearBonus: string;
+                desc: string;
+                accent: string;
+              }> = [
+                {
+                  id: "frost_colossus_hunt",
+                  name: "I. Frost-Wraith & Glacial Vanguard Warrant",
+                  icon: "❄️",
+                  subtitle: "Bounty Tier I • Elite Frost-Wraith Target & Herb Cache",
+                  spoilsSummary: "+180 Rupees, +4 Monster Cores (✦) & +2 of All 4 Biome Herbs",
+                  firstClearBonus: "Guild Commendation + Restocks Apothecary Herb Satchel",
+                  desc: "Tracks a rogue Frost-Wraith captain carrying a sealed alchemist crate. Plant the Golden X Beacon to challenge the Wraith and unearth its herb & rupee cache!",
+                  accent: "#7be8ff",
+                },
+                {
+                  id: "sunken_reef_map",
+                  name: "II. Sunken Reef Corsair Treasure Map",
+                  icon: "🗺️",
+                  subtitle: "Bounty Tier II • Elite Sapper Captain & Munitions Hoard",
+                  spoilsSummary: "+260 Rupees, +6 Monster Cores (✦), +25 Arrows & +10 Bombs",
+                  firstClearBonus: "Permanent +25 Max Magic Power (MP) Capacity!",
+                  desc: "An ancient salt-stained chart pointing to a Corsair Sapper's buried munitions chest. Unearth the Golden X for arrows, bombs, and a permanent +25 Max MP Ley-Stone!",
+                  accent: "#6effb8",
+                },
+                {
+                  id: "caldera_drake_bounty",
+                  name: "III. Magma Warlord Bounty Warrant",
+                  icon: "⚔️",
+                  subtitle: "Bounty Tier III • Elite Ice-Armored Dread-Knight",
+                  spoilsSummary: "+380 Rupees, +8 Monster Cores (✦) & 100% HP/MP Refill",
+                  firstClearBonus: "Permanent +1 Sword & Bow Base Damage!",
+                  desc: "High-priority Guild warrant for an armored Dread-Knight Warlord. Claiming its reliquary hoard permanently sharpens your Sword and Bow (+1 Base Damage)!",
+                  accent: "#ffb86c",
+                },
+                {
+                  id: "sovereign_x_hoard",
+                  name: "IV. Sovereign's X-Marks-the-Spot Royal Hoard",
+                  icon: "👑",
+                  subtitle: "Bounty Tier IV • Elite Subterranean Wyrm & Royal Vault",
+                  spoilsSummary: "+600 Rupees, +12 Monster Cores (✦) & Full Restoration",
+                  firstClearBonus: "Permanent +1 Full Heart Container (+2 Max HP)!",
+                  desc: "The legendary lost map of the First Sovereign! Plants a Golden X Beacon guarded by an Elder Burrower Wyrm — unearth the chest for +600 Rupees and a Full Heart Container!",
+                  accent: "#ffd866",
+                },
+              ];
+
+              return (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))",
+                    gap: "12px",
+                    marginBottom: "16px",
+                  }}
+                >
+                  {CONTRACTS.map((ct) => {
+                    const isCompleted = completedList.includes(ct.id);
+                    const isActive = hero.activeContract === ct.id && Boolean(hero.treasureBeaconPos);
+                    return (
+                      <div
+                        key={ct.id}
+                        style={{
+                          padding: "14px",
+                          borderRadius: "12px",
+                          border: isActive
+                            ? `2px solid ${ct.accent}`
+                            : isCompleted
+                            ? "1px solid rgba(255, 214, 102, 0.48)"
+                            : "1px solid rgba(255,255,255,0.12)",
+                          background: isActive
+                            ? "rgba(52, 38, 14, 0.94)"
+                            : isCompleted
+                            ? "rgba(22, 28, 38, 0.88)"
+                            : "rgba(14, 18, 28, 0.82)",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                          gap: "10px",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: "8px",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ fontSize: "1.45rem" }}>{ct.icon}</span>
+                              <div>
+                                <div
+                                  style={{
+                                    fontWeight: 800,
+                                    color: ct.accent,
+                                    fontSize: "0.95rem",
+                                  }}
+                                >
+                                  {ct.name}
+                                </div>
+                                <div style={{ fontSize: "0.73rem", color: "#9cb8d8" }}>
+                                  {ct.subtitle}
+                                </div>
+                              </div>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: "0.7rem",
+                                fontWeight: 800,
+                                padding: "3px 8px",
+                                borderRadius: "999px",
+                                background: isActive
+                                  ? "rgba(255, 214, 92, 0.25)"
+                                  : isCompleted
+                                  ? "rgba(68, 238, 148, 0.2)"
+                                  : "rgba(255, 255, 255, 0.08)",
+                                color: isActive
+                                  ? "#ffe89e"
+                                  : isCompleted
+                                  ? "#88ffbe"
+                                  : "#b8cce8",
+                              }}
+                            >
+                              {isActive
+                                ? "📍 X BEACON ACTIVE"
+                                : isCompleted
+                                ? "✓ COMPLETED"
+                                : "FREE CONTRACT"}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.75rem",
+                              fontWeight: 800,
+                              color: "#ffe49e",
+                              marginBottom: 3,
+                            }}
+                          >
+                            💰 Hoard Spoils: {ct.spoilsSummary}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.74rem",
+                              fontWeight: 700,
+                              color: "#88ffce",
+                              marginBottom: 5,
+                            }}
+                          >
+                            ★ First-Clear Bonus: {ct.firstClearBonus}
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.78rem",
+                              color: "#c8daf0",
+                              lineHeight: 1.45,
+                              margin: 0,
+                            }}
+                          >
+                            {ct.desc}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => acceptOrClaimContract(ct.id)}
+                          className="char-equip-btn"
+                          style={{
+                            width: "100%",
+                            padding: "8px 12px",
+                            background: isActive
+                              ? "linear-gradient(180deg, #6effb8 0%, #1d8a56 100%)"
+                              : "linear-gradient(180deg, #ffd86b 0%, #b87c0e 100%)",
+                            color: "#1a1102",
+                            borderColor: "rgba(255, 214, 92, 0.85)",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {isActive
+                            ? `⛏️ Unearth Golden X Hoard (${ct.name.split(".")[0]})`
+                            : isCompleted
+                            ? `📜 Re-Accept Contract & Plant Golden X Beacon`
+                            : `📜 Accept Contract & Plant Golden X Beacon`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>0</strong> or <strong>Esc</strong> anytime to close the Wayfarer&apos;s
+                Guild Bounty Board.
+              </span>
+              <button
+                type="button"
+                onClick={() => setBountyOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Bounty Board (0)
               </button>
             </div>
           </div>

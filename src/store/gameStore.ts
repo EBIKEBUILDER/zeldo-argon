@@ -10,6 +10,7 @@ import {
   BOSS_EXIT_GATE_POS,
   BOSS_MAX_LUNGE_RANGE,
   BossArmorState,
+  BOUNTY_BOARD_POS,
   buildInitialMapProps,
   buildObstaclesFromMapProps,
   BuriedRewardKind,
@@ -237,6 +238,12 @@ export type SoulCardId =
   | "colossus_soul"
   | "dragon_soul";
 
+export type ContractId =
+  | "frost_colossus_hunt"
+  | "sunken_reef_map"
+  | "caldera_drake_bounty"
+  | "sovereign_x_hoard";
+
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
   propId?: string;
@@ -402,6 +409,9 @@ export interface HeroState {
   unlockedSoulCards?: SoulCardId[];
   equippedSoulCard?: SoulCardId | "none";
   soulCardPulseTimer?: number;
+  completedContracts?: ContractId[];
+  activeContract?: ContractId | "none";
+  treasureBeaconPos?: { x: number; z: number; zone: ZoneId } | null;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -853,6 +863,7 @@ export interface SerializableGameState {
   chronoOpen: boolean;
   starsOpen: boolean;
   bestiaryOpen: boolean;
+  bountyOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -906,6 +917,10 @@ export interface GameActions {
   setBestiaryOpen: (open: boolean) => void;
   unlockOrAttuneSoulCard: (card: SoulCardId) => void;
   grantBestiaryPlaytestBundle: () => void;
+  setBountyOpen: (open: boolean) => void;
+  acceptOrClaimContract: (contract: ContractId) => void;
+  unearthTreasureHoard: () => void;
+  grantBountyPlaytestBundle: () => void;
   summonShadowTwinDuel: (trial: MirrorTrialId) => void;
   toggleMasterWorldRemix: () => void;
   grantMirrorPlaytestBundle: () => void;
@@ -1323,6 +1338,9 @@ function createInitialState(
       unlockedSoulCards: ["wraith_soul"],
       equippedSoulCard: "none",
       soulCardPulseTimer: 0,
+      completedContracts: [],
+      activeContract: "none",
+      treasureBeaconPos: null,
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1549,6 +1567,7 @@ function createInitialState(
     chronoOpen: false,
     starsOpen: false,
     bestiaryOpen: false,
+    bountyOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -2310,7 +2329,368 @@ export const useGameStore = create<GameStore>((set, get) => ({
       mirrorOpen: open ? false : state.mirrorOpen,
       chronoOpen: open ? false : state.chronoOpen,
       starsOpen: open ? false : state.starsOpen,
+      bountyOpen: open ? false : state.bountyOpen,
     }));
+  },
+
+  setBountyOpen: (open: boolean) => {
+    set((state) => ({
+      bountyOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
+      weatherOpen: open ? false : state.weatherOpen,
+      homesteadOpen: open ? false : state.homesteadOpen,
+      lyreOpen: open ? false : state.lyreOpen,
+      maskOpen: open ? false : state.maskOpen,
+      artificerOpen: open ? false : state.artificerOpen,
+      gliderOpen: open ? false : state.gliderOpen,
+      mirrorOpen: open ? false : state.mirrorOpen,
+      chronoOpen: open ? false : state.chronoOpen,
+      starsOpen: open ? false : state.starsOpen,
+      bestiaryOpen: open ? false : state.bestiaryOpen,
+    }));
+  },
+
+  acceptOrClaimContract: (contract: ContractId) => {
+    const state = get();
+    if (state.hero.activeContract === contract && state.hero.treasureBeaconPos) {
+      get().unearthTreasureHoard();
+      return;
+    }
+
+    const CONTRACT_META: Record<
+      ContractId,
+      {
+        title: string;
+        kind: EnemyKind;
+        hp: number;
+        speed: number;
+        damage: number;
+        shieldArmor: EnemyShieldArmor;
+        shockArmor: boolean;
+        subtitle: string;
+      }
+    > = {
+      frost_colossus_hunt: {
+        title: "Contract I: Frost-Wraith & Vanguard Hunt",
+        kind: "wraith",
+        hp: 16,
+        speed: 5.8,
+        damage: 1,
+        shieldArmor: "none",
+        shockArmor: false,
+        subtitle:
+          "Planted a Golden X Treasure Beacon & Elite Bounty Wraith 6.5m ahead! Vanquish it or dig/interact at the Golden X for +180 Rupees, +4 Cores & +2 All Herbs!",
+      },
+      sunken_reef_map: {
+        title: "Contract II: Sunken Reef Corsair Treasure Map",
+        kind: "bomber",
+        hp: 20,
+        speed: 6.0,
+        damage: 2,
+        shieldArmor: "wood",
+        shockArmor: false,
+        subtitle:
+          "Deciphered the Corsair Treasure Map — Golden X Beacon & Elite Sapper Captain materialized 6.5m ahead! Unearth for +260 Rupees, +6 Cores & +25 Max MP!",
+      },
+      caldera_drake_bounty: {
+        title: "Contract III: Magma Warlord Bounty Warrant",
+        kind: "knight",
+        hp: 26,
+        speed: 6.2,
+        damage: 2,
+        shieldArmor: "ice",
+        shockArmor: true,
+        subtitle:
+          "Tracked the Magma Warlord — Golden X Beacon & Elite Dread-Knight materialized 6.5m ahead! Claim for +380 Rupees, +8 Cores & +1 Permanent Sword/Bow DMG!",
+      },
+      sovereign_x_hoard: {
+        title: "Contract IV: Sovereign's X-Marks-the-Spot Hoard",
+        kind: "burrower",
+        hp: 32,
+        speed: 6.4,
+        damage: 2,
+        shieldArmor: "none",
+        shockArmor: true,
+        subtitle:
+          "Pinpointed the Sovereign's Royal Hoard — Golden X Beacon & Elite Burrower Wyrm materialized 6.5m ahead! Unearth for +600 Rupees, +12 Cores & +1 Heart Container!",
+      },
+    };
+
+    const meta = CONTRACT_META[contract];
+    const { hero, zone } = state;
+    const dist = 6.2;
+    const rawX = hero.x + Math.sin(hero.facing) * dist;
+    const rawZ = hero.z + Math.cos(hero.facing) * dist;
+    const beaconX = Math.max(-24, Math.min(24, Number(rawX.toFixed(2))));
+    const beaconZ = Math.max(-24, Math.min(24, Number(rawZ.toFixed(2))));
+
+    const filteredEnemies = state.enemies.filter(
+      (e) => !e.id.startsWith("bounty-contract-")
+    );
+    const bountyEnemy: EnemyState = {
+      id: `bounty-contract-${contract}-${Date.now()}`,
+      kind: meta.kind,
+      zone,
+      x: beaconX,
+      z: beaconZ,
+      spawnX: beaconX,
+      spawnZ: beaconZ,
+      facing: hero.facing + Math.PI,
+      hp: meta.hp,
+      maxHp: meta.hp,
+      weight: 3.2,
+      state: "aggro",
+      stateTimer: 0,
+      hitFlashTimer: 0.45,
+      knockbackImmunityTimer: 0,
+      stunTimer: 0,
+      lastHitSwingId: -1,
+      knockbackVx: 0,
+      knockbackVz: 0,
+      aggroRadius: 28.0,
+      speed: meta.speed,
+      damage: meta.damage,
+      rupeeDrop: "red",
+      shieldArmor: meta.shieldArmor,
+      initialShieldArmor: meta.shieldArmor,
+      shockArmor: meta.shockArmor,
+      initialShockArmor: meta.shockArmor,
+      isBounty: true,
+      initialIsBounty: true,
+      burrowed: false,
+      provoked: true,
+      chargeAngle: hero.facing + Math.PI,
+      chargePathLength: 11.0,
+      chargeDistanceTraveled: 0,
+      actionCounter: 0,
+      actionCooldown: 0.7,
+    };
+
+    soundEngine.playSecretSolve();
+    soundEngine.playGateUnlock();
+    set((s) => ({
+      bountyOpen: false,
+      enemies: [...filteredEnemies, bountyEnemy],
+      hero: {
+        ...s.hero,
+        activeContract: contract,
+        treasureBeaconPos: { x: beaconX, z: beaconZ, zone },
+      },
+      hammerShockwaves: [
+        ...(s.hammerShockwaves ?? []),
+        {
+          id: `bounty-beacon-sw-${Date.now()}`,
+          zone,
+          x: beaconX,
+          z: beaconZ,
+          timer: 0.5,
+          maxTimer: 0.5,
+          maxRadius: 4.2,
+        },
+      ],
+      banner: {
+        id: Date.now(),
+        text: `📜 BOUNTY & TREASURE MAP ACCEPTED: ${meta.title.toUpperCase()}!`,
+        subtext: meta.subtitle,
+        timer: 5.4,
+      },
+    }));
+  },
+
+  unearthTreasureHoard: () => {
+    const state = get();
+    const contract: ContractId =
+      state.hero.activeContract && state.hero.activeContract !== "none"
+        ? state.hero.activeContract
+        : "sovereign_x_hoard";
+    const completed = [...(state.hero.completedContracts ?? [])];
+    const isFirstClear = !completed.includes(contract);
+    if (isFirstClear) {
+      completed.push(contract);
+    }
+
+    const bx = state.hero.treasureBeaconPos?.x ?? state.hero.x;
+    const bz = state.hero.treasureBeaconPos?.z ?? state.hero.z;
+    const bZone = state.hero.treasureBeaconPos?.zone ?? state.zone;
+
+    soundEngine.playShovelDig(true);
+    soundEngine.playVictoryFanfare();
+
+    set((s) => {
+      const prevHerbs = s.hero.herbs ?? {
+        sun_lotus: 0,
+        frost_cap: 0,
+        ember_root: 0,
+        starlight_dew: 0,
+      };
+      let addRupees = 180;
+      let addCores = 4;
+      let nextMaxHp = s.hero.maxHp;
+      let nextMaxMp = s.hero.maxMp || 100;
+      let nextSwordDmg = s.hero.swordDamage ?? 1;
+      let nextArrows = s.hero.arrows ?? 0;
+      let nextMaxBombs = s.hero.maxBombs ?? 0;
+      let nextBombs = s.hero.bombs ?? 0;
+      let nextHerbs = { ...prevHerbs };
+      let title = "";
+      let sub = "";
+
+      if (contract === "frost_colossus_hunt") {
+        addRupees = 180;
+        addCores = 4;
+        nextHerbs = {
+          sun_lotus: (prevHerbs.sun_lotus ?? 0) + 2,
+          frost_cap: (prevHerbs.frost_cap ?? 0) + 2,
+          ember_root: (prevHerbs.ember_root ?? 0) + 2,
+          starlight_dew: (prevHerbs.starlight_dew ?? 0) + 2,
+        };
+        title = "⛏️ UNEARTHED BOUNTY HOARD I: FROST-WRAITH SPOILS!";
+        sub =
+          "Claimed +180 Rupees, +4 Monster Cores (✦), +2 of all 4 Biome Herbs & Wayfarer's Guild Commendation!";
+      } else if (contract === "sunken_reef_map") {
+        addRupees = 260;
+        addCores = 6;
+        nextArrows = Math.min(99, nextArrows + 25);
+        nextMaxBombs = Math.max(25, nextMaxBombs);
+        nextBombs = Math.min(nextMaxBombs, nextBombs + 10);
+        if (isFirstClear) {
+          nextMaxMp += 25;
+        }
+        title = "⛏️ UNEARTHED CORSAIR TREASURE MAP II: SUNKEN REEF CHEST!";
+        sub = isFirstClear
+          ? "Claimed +260 Rupees, +6 Cores (✦), +25 Arrows, +10 Bombs & First-Clear +25 Permanent Max MP!"
+          : "Claimed +260 Rupees, +6 Monster Cores (✦), +25 Arrows & +10 Bombs!";
+      } else if (contract === "caldera_drake_bounty") {
+        addRupees = 380;
+        addCores = 8;
+        if (isFirstClear) {
+          nextSwordDmg += 1;
+        }
+        title = "⛏️ CLAIMED BOUNTY WARRANT III: MAGMA WARLORD RELIQUARY!";
+        sub = isFirstClear
+          ? "Claimed +380 Rupees, +8 Cores (✦) & First-Clear +1 Permanent Sword & Bow Damage!"
+          : "Claimed +380 Rupees, +8 Monster Cores (✦) & 100% HP/MP Restoration!";
+      } else {
+        addRupees = 600;
+        addCores = 12;
+        if (isFirstClear) {
+          nextMaxHp = Math.min(40, nextMaxHp + 2);
+        }
+        title = "👑 UNEARTHED SOVEREIGN'S X-MARKS-THE-SPOT ROYAL HOARD!";
+        sub = isFirstClear
+          ? "Claimed +600 Rupees, +12 Monster Cores (✦) & First-Clear +1 Permanent Full Heart Container!"
+          : "Claimed +600 Rupees, +12 Monster Cores (✦) & 100% Full Vitality & Mana Refill!";
+      }
+
+      return {
+        bountyOpen: false,
+        hero: {
+          ...s.hero,
+          maxHp: nextMaxHp,
+          hp: nextMaxHp,
+          maxMp: nextMaxMp,
+          mp: nextMaxMp,
+          swordDamage: nextSwordDmg,
+          arrows: nextArrows,
+          maxBombs: nextMaxBombs,
+          bombs: nextBombs,
+          herbs: nextHerbs,
+          monsterCores: (s.hero.monsterCores ?? 0) + addCores,
+          rupees: s.hero.rupees + addRupees,
+          completedContracts: completed,
+          activeContract: "none",
+          treasureBeaconPos: null,
+        },
+        bushBursts: [
+          ...s.bushBursts,
+          {
+            id: `hoard-dig-burst-${Date.now()}`,
+            zone: bZone,
+            x: bx,
+            z: bz,
+            timer: 0.9,
+            maxTimer: 0.9,
+            seed: Math.floor(Math.abs(bx * 61 + bz * 97)),
+            isDirt: true,
+          },
+        ],
+        hammerShockwaves: [
+          ...(s.hammerShockwaves ?? []),
+          {
+            id: `hoard-unearth-sw-${Date.now()}`,
+            zone: bZone,
+            x: bx,
+            z: bz,
+            timer: 0.52,
+            maxTimer: 0.52,
+            maxRadius: 4.8,
+          },
+        ],
+        banner: {
+          id: Date.now(),
+          text: title,
+          subtext: sub,
+          timer: 5.4,
+        },
+      };
+    });
+  },
+
+  grantBountyPlaytestBundle: () => {
+    soundEngine.playVictoryFanfare();
+    set((state) => {
+      const prev = state.hero.completedContracts ?? [];
+      const addMap = !prev.includes("sunken_reef_map");
+      const addDrake = !prev.includes("caldera_drake_bounty");
+      const addSov = !prev.includes("sovereign_x_hoard");
+      const nextMaxHp = Math.min(40, state.hero.maxHp + (addSov ? 2 : 0));
+      const nextMaxMp = (state.hero.maxMp || 100) + (addMap ? 25 : 0);
+      const beaconX = Math.max(
+        -24,
+        Math.min(24, Number((state.hero.x + Math.sin(state.hero.facing) * 5.5).toFixed(2)))
+      );
+      const beaconZ = Math.max(
+        -24,
+        Math.min(24, Number((state.hero.z + Math.cos(state.hero.facing) * 5.5).toFixed(2)))
+      );
+      return {
+        hero: {
+          ...state.hero,
+          maxHp: nextMaxHp,
+          hp: nextMaxHp,
+          maxMp: nextMaxMp,
+          mp: nextMaxMp,
+          swordDamage: (state.hero.swordDamage ?? 1) + (addDrake ? 1 : 0),
+          hasShovel: true,
+          monsterCores: (state.hero.monsterCores ?? 0) + 12,
+          rupees: state.hero.rupees + 600,
+          completedContracts: [
+            "frost_colossus_hunt",
+            "sunken_reef_map",
+            "caldera_drake_bounty",
+            "sovereign_x_hoard",
+          ],
+          activeContract: "sovereign_x_hoard",
+          treasureBeaconPos: { x: beaconX, z: beaconZ, zone: state.zone },
+        },
+        banner: {
+          id: Date.now(),
+          text: "📜 All 4 Wayfarer's Guild Contracts Completed & Golden X Planted!",
+          subtext:
+            "Earned +1 Heart Container, +25 Max MP, +1 Sword DMG, +12 Cores & +600 Rupees — plus an active Golden X Hoard 5.5m ahead!",
+          timer: 5.2,
+        },
+      };
+    });
   },
 
   unlockOrAttuneSoulCard: (card: SoulCardId) => {
@@ -17898,6 +18278,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Hunter's Guild Bestiary Lectern & Soul-Crystal — Press [F] or [ - ] to Study Species & Attune Monster Soul-Cards!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(BOUNTY_BOARD_POS.x - hero.x, BOUNTY_BOARD_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Wayfarer's Guild Bounty Board & Cartographer's Table — Press [F] or [ 0 ] to Accept World Bounties & Decipher X-Marks-the-Spot Treasure Maps!";
+        } else if (
+          hero.treasureBeaconPos &&
+          hero.treasureBeaconPos.zone === zone &&
+          Math.hypot(hero.treasureBeaconPos.x - hero.x, hero.treasureBeaconPos.z - hero.z) <= 3.2
+        ) {
+          hero.interactPrompt =
+            "Golden X Treasure Beacon — Press [G / Shovel], [T / Hammer], or [F] to Unearth the Buried Bounty Hoard!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -17909,6 +18302,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt = null;
         }
       }
+    }
+
+    if (
+      hero.treasureBeaconPos &&
+      hero.treasureBeaconPos.zone === zone &&
+      Math.hypot(hero.treasureBeaconPos.x - hero.x, hero.treasureBeaconPos.z - hero.z) <= 3.2 &&
+      (input.shovelPressed || input.hammerPressed || input.interactPressed)
+    ) {
+      set({
+        hero,
+        enemies,
+        flags,
+        stats,
+      });
+      get().unearthTreasureHoard();
+      return;
     }
 
     let warpBeamTimer = Math.max(0, (state.warpBeamTimer ?? 0) - dt);
@@ -17929,6 +18338,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let chronoOpen = state.chronoOpen;
     let starsOpen = state.starsOpen;
     let bestiaryOpen = state.bestiaryOpen;
+    let bountyOpen = state.bountyOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -18213,6 +18623,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       bestiaryOpen = true;
+      bountyOpen = false;
+      starsOpen = false;
+      chronoOpen = false;
+      mirrorOpen = false;
+      gliderOpen = false;
+      artificerOpen = false;
+      maskOpen = false;
+      lyreOpen = false;
+      homesteadOpen = false;
+      weatherOpen = false;
+      alchemyOpen = false;
+      colosseumOpen = false;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(BOUNTY_BOARD_POS.x - hero.x, BOUNTY_BOARD_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      bountyOpen = true;
+      bestiaryOpen = false;
       starsOpen = false;
       chronoOpen = false;
       mirrorOpen = false;
@@ -18482,6 +18918,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       chronoOpen,
       starsOpen,
       bestiaryOpen,
+      bountyOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,
