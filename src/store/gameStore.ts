@@ -50,6 +50,7 @@ import {
   FRONTIER_HOOKSHOT_CHEST_POS,
   FRONTIER_SAPPER_NPC_POS,
   getDefaultEnemyWeight,
+  GRIMOIRE_SANCTUM_POS,
   GUIDE_NPC_POS,
   HEIRLOOM_NPC_POS,
   HERO_SPAWN,
@@ -244,6 +245,12 @@ export type ContractId =
   | "caldera_drake_bounty"
   | "sovereign_x_hoard";
 
+export type SpellId =
+  | "solar_judgment"
+  | "glacial_nova"
+  | "tempest_maelstrom"
+  | "eclipse_meteor";
+
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
   propId?: string;
@@ -412,6 +419,9 @@ export interface HeroState {
   completedContracts?: ContractId[];
   activeContract?: ContractId | "none";
   treasureBeaconPos?: { x: number; z: number; zone: ZoneId } | null;
+  unlockedSpells?: SpellId[];
+  equippedSpell?: SpellId;
+  grimoireBuffTimer?: number;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -864,6 +874,7 @@ export interface SerializableGameState {
   starsOpen: boolean;
   bestiaryOpen: boolean;
   bountyOpen: boolean;
+  grimoireOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -921,6 +932,9 @@ export interface GameActions {
   acceptOrClaimContract: (contract: ContractId) => void;
   unearthTreasureHoard: () => void;
   grantBountyPlaytestBundle: () => void;
+  setGrimoireOpen: (open: boolean) => void;
+  unlockOrCastUltimateSpell: (spell: SpellId) => void;
+  grantGrimoirePlaytestBundle: () => void;
   summonShadowTwinDuel: (trial: MirrorTrialId) => void;
   toggleMasterWorldRemix: () => void;
   grantMirrorPlaytestBundle: () => void;
@@ -1341,6 +1355,9 @@ function createInitialState(
       completedContracts: [],
       activeContract: "none",
       treasureBeaconPos: null,
+      unlockedSpells: ["solar_judgment"],
+      equippedSpell: "solar_judgment",
+      grimoireBuffTimer: 0,
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1568,6 +1585,7 @@ function createInitialState(
     starsOpen: false,
     bestiaryOpen: false,
     bountyOpen: false,
+    grimoireOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -2356,7 +2374,372 @@ export const useGameStore = create<GameStore>((set, get) => ({
       chronoOpen: open ? false : state.chronoOpen,
       starsOpen: open ? false : state.starsOpen,
       bestiaryOpen: open ? false : state.bestiaryOpen,
+      grimoireOpen: open ? false : state.grimoireOpen,
     }));
+  },
+
+  setGrimoireOpen: (open: boolean) => {
+    set((state) => ({
+      grimoireOpen: open,
+      bountyOpen: open ? false : state.bountyOpen,
+      bestiaryOpen: open ? false : state.bestiaryOpen,
+      starsOpen: open ? false : state.starsOpen,
+      chronoOpen: open ? false : state.chronoOpen,
+      mirrorOpen: open ? false : state.mirrorOpen,
+      gliderOpen: open ? false : state.gliderOpen,
+      artificerOpen: open ? false : state.artificerOpen,
+      maskOpen: open ? false : state.maskOpen,
+      lyreOpen: open ? false : state.lyreOpen,
+      homesteadOpen: open ? false : state.homesteadOpen,
+      weatherOpen: open ? false : state.weatherOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      riftOpen: open ? false : state.riftOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      characterOpen: open ? false : state.characterOpen,
+      shopOpen: open ? false : state.shopOpen,
+    }));
+  },
+
+  unlockOrCastUltimateSpell: (spell: SpellId) => {
+    const state = get();
+    const unlocked = [...(state.hero.unlockedSpells ?? ["solar_judgment"])];
+    const SPELL_META: Record<
+      SpellId,
+      {
+        name: string;
+        cores: number;
+        rupees: number;
+        subtitle: string;
+      }
+    > = {
+      solar_judgment: {
+        name: "Solar Flare Judgment (Sun-Pillar Cataclysm)",
+        cores: 0,
+        rupees: 0,
+        subtitle:
+          "Called down a 9.5m Pillar of Sun-Fire (5 DMG + 2.2s Stun), melted all Ice/Wood shields, ignited braziers, burned thorns & launched 4 radial fireballs!",
+      },
+      glacial_nova: {
+        name: "Absolute Zero Glacier (Cryo-Nova)",
+        cores: 4,
+        rupees: 200,
+        subtitle:
+          "Detonated a 10.5m Cryo-Nova (4 DMG + 4.0s Freeze Stun to all foes), purged Frostbite & restored +2 Full Hearts (+4 HP)!",
+      },
+      tempest_maelstrom: {
+        name: "Chain-Tempest Maelstrom (10-Bolt Fulmination)",
+        cores: 6,
+        rupees: 300,
+        subtitle:
+          "Unleashed a 10-Bolt Chain-Lightning Storm across the battlefield (4 DMG + 2.5s Stun, flips Shock-Beetles) & granted 25s Tempest Overcharge (+30% Speed & +5 MP/s)!",
+      },
+      eclipse_meteor: {
+        name: "Abyssal Eclipse Meteor (Starfall Cataclysm)",
+        cores: 8,
+        rupees: 450,
+        subtitle:
+          "Summoned a Dark-Star Meteor (6 DMG in 9.5m), shattered Cracked Boulders, pounded Iron Stakes, cracked Boss Armor & granted +1 Heart Container + 25 Max MP on unlock!",
+      },
+    };
+
+    const meta = SPELL_META[spell];
+    const isUnlocked = unlocked.includes(spell);
+    let cores = state.hero.monsterCores ?? 0;
+    let rupees = state.hero.rupees;
+    let nextMaxHp = state.hero.maxHp;
+    let nextMaxMp = state.hero.maxMp || 100;
+
+    if (!isUnlocked) {
+      if (cores < meta.cores || rupees < meta.rupees) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: `Requires ${meta.cores} Monster Cores (✦) & ${meta.rupees} Rupees!`,
+            subtext:
+              "Claim Bounties [0], defeat Rift/Colosseum foes, or click the Archmage's Playtest Blessing below!",
+            timer: 3.8,
+          },
+        });
+        return;
+      }
+      cores -= meta.cores;
+      rupees -= meta.rupees;
+      unlocked.push(spell);
+      if (spell === "eclipse_meteor") {
+        nextMaxHp = Math.min(40, nextMaxHp + 2);
+        nextMaxMp += 25;
+      }
+      soundEngine.playVictoryFanfare();
+    }
+
+    const { hero, zone } = state;
+    const nextEnemies = state.enemies.map((e) => ({ ...e }));
+    const nextProps = state.mapProps.map((p) => ({ ...p }));
+    const nextFlags: GameFlags = { ...state.flags };
+    const nextShockwaves = [...(state.hammerShockwaves ?? [])];
+    const nextFireZones = [...(state.fireZones ?? [])];
+    const nextFireballs = [...(state.fireballs ?? [])];
+    const nextArcs = [...(state.lightningArcs ?? [])];
+    const nextStats = { ...state.stats };
+    let nextHp = Math.min(nextMaxHp, hero.hp + (spell === "eclipse_meteor" && !isUnlocked ? 2 : 0));
+    let nextMp = Math.min(nextMaxMp, (hero.mp ?? 100) + (spell === "eclipse_meteor" && !isUnlocked ? 25 : 0));
+    let nextBuffTimer = hero.grimoireBuffTimer ?? 0;
+
+    nextShockwaves.push({
+      id: `grimoire-cast-sw-${spell}-${Date.now()}`,
+      zone,
+      x: hero.x,
+      z: hero.z,
+      timer: 0.56,
+      maxTimer: 0.56,
+      maxRadius: spell === "glacial_nova" ? 10.5 : 9.5,
+    });
+
+    if (spell === "solar_judgment") {
+      soundEngine.playFireballShoot(true);
+      soundEngine.playBombExplosion();
+      nextFireZones.push({
+        id: `solar-judgment-fz-${Date.now()}`,
+        zone,
+        x: hero.x,
+        z: hero.z,
+        radius: 5.5,
+        timer: 6.0,
+        maxTimer: 6.0,
+        tickTimer: 0.2,
+      });
+      for (let k = 0; k < 4; k++) {
+        const ang = hero.facing + (k * Math.PI) / 2;
+        nextFireballs.push({
+          id: `solar-fb-${k}-${Date.now()}`,
+          zone,
+          x: hero.x + Math.sin(ang) * 1.1,
+          z: hero.z + Math.cos(ang) * 1.1,
+          angle: ang,
+          speed: 9.5,
+          damage: 3,
+          radius: 0.85,
+          isCharged: true,
+          lifeTimer: 1.8,
+        });
+      }
+      for (const p of nextProps) {
+        if (p.zone !== zone) continue;
+        if (Math.hypot(p.x - hero.x, p.z - hero.z) <= 9.5) {
+          if (p.prefab === "wall_torch") {
+            p.lit = true;
+            if (p.timedDuration) p.litTimer = p.timedDuration;
+          } else if (
+            (p.prefab === "briar_barrier" || p.prefab === "spiderweb_barrier") &&
+            !p.smashed
+          ) {
+            p.smashed = true;
+            p.hasCollider = false;
+          }
+        }
+      }
+      for (const e of nextEnemies) {
+        if (e.zone !== zone || e.state === "dead") continue;
+        if (Math.hypot(e.x - hero.x, e.z - hero.z) <= 9.5) {
+          if (e.shieldArmor === "ice" || e.shieldArmor === "wood") {
+            e.shieldArmor = "none";
+          }
+          e.provoked = true;
+          e.hp -= 5;
+          e.hitFlashTimer = 0.42;
+          e.stunTimer = Math.max(e.stunTimer, 2.2);
+          if (e.kind !== "turret" && e.kind !== "boss") {
+            e.state = "stunned";
+            e.stateTimer = Math.max(e.stateTimer, 2.2);
+          }
+          if (e.hp <= 0 && e.kind !== "boss") {
+            e.hp = 0;
+            e.state = "dead";
+            nextStats.enemiesDefeated += 1;
+            cores += 1;
+          }
+        }
+      }
+    } else if (spell === "glacial_nova") {
+      soundEngine.playPotSmash();
+      soundEngine.playFairyRevive();
+      nextHp = Math.min(nextMaxHp, nextHp + 4);
+      for (const e of nextEnemies) {
+        if (e.zone !== zone || e.state === "dead") continue;
+        if (Math.hypot(e.x - hero.x, e.z - hero.z) <= 10.5) {
+          e.provoked = true;
+          e.hp -= 4;
+          e.hitFlashTimer = 0.45;
+          e.stunTimer = Math.max(e.stunTimer, 4.0);
+          if (e.kind !== "turret" && e.kind !== "boss") {
+            e.state = "stunned";
+            e.stateTimer = Math.max(e.stateTimer, 4.0);
+          }
+          if (e.hp <= 0 && e.kind !== "boss") {
+            e.hp = 0;
+            e.state = "dead";
+            nextStats.enemiesDefeated += 1;
+            cores += 1;
+          }
+        }
+      }
+    } else if (spell === "tempest_maelstrom") {
+      soundEngine.playElectricShock();
+      soundEngine.playSecretSolve();
+      nextBuffTimer = 25.0;
+      let bolts = 0;
+      for (const e of nextEnemies) {
+        if (bolts >= 10) break;
+        if (e.zone !== zone || e.state === "dead") continue;
+        if (Math.hypot(e.x - hero.x, e.z - hero.z) <= 13.5) {
+          bolts++;
+          e.provoked = true;
+          e.shockArmor = false;
+          e.hp -= 4;
+          e.hitFlashTimer = 0.42;
+          e.stunTimer = Math.max(e.stunTimer, 2.5);
+          if (e.kind !== "turret" && e.kind !== "boss") {
+            e.state = "stunned";
+            e.stateTimer = Math.max(e.stateTimer, 2.5);
+          }
+          nextArcs.push({
+            id: `tempest-maelstrom-arc-${e.id}-${Date.now()}`,
+            zone,
+            x1: hero.x,
+            z1: hero.z,
+            x2: e.x,
+            z2: e.z,
+            timer: 0.48,
+            maxTimer: 0.48,
+          });
+          if (e.hp <= 0 && e.kind !== "boss") {
+            e.hp = 0;
+            e.state = "dead";
+            nextStats.enemiesDefeated += 1;
+            cores += 1;
+          }
+        }
+      }
+    } else if (spell === "eclipse_meteor") {
+      soundEngine.playHammerSlam();
+      soundEngine.playBombExplosion();
+      for (const p of nextProps) {
+        if (p.zone !== zone) continue;
+        if (Math.hypot(p.x - hero.x, p.z - hero.z) <= 9.5) {
+          if (
+            (p.prefab === "cracked_rock" ||
+              p.prefab === "clay_pot" ||
+              p.prefab === "light_rock") &&
+            !p.smashed
+          ) {
+            p.smashed = true;
+            p.hasCollider = false;
+          } else if (p.prefab === "rusted_peg" && !p.pounded) {
+            p.pounded = true;
+            p.hasCollider = false;
+          }
+        }
+      }
+      for (const e of nextEnemies) {
+        if (e.zone !== zone || e.state === "dead") continue;
+        if (Math.hypot(e.x - hero.x, e.z - hero.z) <= 9.5) {
+          e.provoked = true;
+          e.shieldArmor = "none";
+          e.shockArmor = false;
+          if (e.kind === "burrower") e.burrowed = false;
+          if (e.kind === "boss" && nextFlags.bossState === "ARMORED") {
+            nextFlags.bossState = "EXPOSED_EYE";
+            nextFlags.bossArmorTimer = 7.5;
+          }
+          e.hp -= 6;
+          e.hitFlashTimer = 0.48;
+          e.stunTimer = Math.max(e.stunTimer, 3.0);
+          if (e.kind !== "turret" && e.kind !== "boss") {
+            e.state = "stunned";
+            e.stateTimer = Math.max(e.stateTimer, 3.0);
+          }
+          if (e.hp <= 0 && e.kind !== "boss") {
+            e.hp = 0;
+            e.state = "dead";
+            nextStats.enemiesDefeated += 1;
+            cores += 1;
+          }
+        }
+      }
+    }
+
+    set({
+      grimoireOpen: false,
+      enemies: nextEnemies,
+      mapProps: nextProps,
+      flags: nextFlags,
+      stats: nextStats,
+      hammerShockwaves: nextShockwaves,
+      fireZones: nextFireZones,
+      fireballs: nextFireballs,
+      lightningArcs: nextArcs,
+      hero: {
+        ...hero,
+        maxHp: nextMaxHp,
+        hp: nextHp,
+        maxMp: nextMaxMp,
+        mp: nextMp,
+        chillTimer: spell === "glacial_nova" ? 0 : hero.chillTimer,
+        grimoireBuffTimer: nextBuffTimer,
+        monsterCores: cores,
+        rupees,
+        unlockedSpells: unlocked,
+        equippedSpell: spell,
+      },
+      banner: {
+        id: Date.now(),
+        text: `📕 ARCHMAGE GRIMOIRE CAST: ${meta.name.toUpperCase()}!`,
+        subtext: meta.subtitle,
+        timer: 5.4,
+      },
+    });
+  },
+
+  grantGrimoirePlaytestBundle: () => {
+    soundEngine.playVictoryFanfare();
+    set((state) => {
+      const prev = state.hero.unlockedSpells ?? ["solar_judgment"];
+      const addMeteor = !prev.includes("eclipse_meteor");
+      const nextMaxHp = Math.min(40, state.hero.maxHp + (addMeteor ? 2 : 0));
+      const nextMaxMp = (state.hero.maxMp || 100) + (addMeteor ? 25 : 0);
+      return {
+        hero: {
+          ...state.hero,
+          maxHp: nextMaxHp,
+          hp: nextMaxHp,
+          maxMp: nextMaxMp,
+          mp: nextMaxMp,
+          grimoireBuffTimer: 25.0,
+          monsterCores: (state.hero.monsterCores ?? 0) + 12,
+          rupees: state.hero.rupees + 600,
+          unlockedSpells: [
+            "solar_judgment",
+            "glacial_nova",
+            "tempest_maelstrom",
+            "eclipse_meteor",
+          ],
+          equippedSpell: "eclipse_meteor",
+        },
+        banner: {
+          id: Date.now(),
+          text: "📕 All 4 Archmage Ultimate Spells Unsealed & Tempest Overcharge Active!",
+          subtext:
+            "Granted +1 Heart Container, +25 Max MP, 25s Tempest Overcharge (+30% Speed & +5 MP/s), +12 Cores & +600 Rupees!",
+          timer: 5.2,
+        },
+      };
+    });
   },
 
   acceptOrClaimContract: (contract: ContractId) => {
@@ -7691,6 +8074,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (hasSoulCard("wraith_soul")) {
       hero.chillTimer = 0;
     }
+    if ((hero.grimoireBuffTimer ?? 0) > 0) {
+      hero.grimoireBuffTimer = Math.max(0, (hero.grimoireBuffTimer ?? 0) - dt);
+    }
 
     // Passive Greenhouse Herb Cultivation (`herb_greenhouse` wing grows +1 random Biome Herb every 25s!)
     if (hasHomesteadWing("herb_greenhouse")) {
@@ -7722,7 +8108,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       (activeWeather === "starfall" ? 8.0 : 0) +
       (equippedMask === "tidefin_mask" ? 4.0 : 0) +
       (isGliding && equippedGlider === "astral_canopy" ? 10.0 : 0) +
-      (hasConstellation("lyra_ley_star") ? 5.0 : 0);
+      (hasConstellation("lyra_ley_star") ? 5.0 : 0) +
+      ((hero.grimoireBuffTimer ?? 0) > 0 ? 5.0 : 0);
     hero.maxMp = hero.maxMp || 100;
     hero.mp = Math.min(hero.maxMp, (hero.mp ?? 100) + dt * mpRegenRate);
     hero.maxBombs = hero.maxBombs ?? 0;
@@ -9579,6 +9966,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ? 1.25
         : 1.15
       : 1.0;
+    const grimoireSpeedMult = (hero.grimoireBuffTimer ?? 0) > 0 ? 1.3 : 1.0;
     const bootsMultiplier =
       (hero.equippedBoots === "swift_boots"
         ? 1.25
@@ -9595,6 +9983,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       gliderSpeedMult *
       mirrorSpeedMult *
       chronoSpeedMult *
+      grimoireSpeedMult *
       dashSpeedMult;
 
     const initialGatePassable =
@@ -18284,6 +18673,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Wayfarer's Guild Bounty Board & Cartographer's Table — Press [F] or [ 0 ] to Accept World Bounties & Decipher X-Marks-the-Spot Treasure Maps!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(GRIMOIRE_SANCTUM_POS.x - hero.x, GRIMOIRE_SANCTUM_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Archmage's Arcane Grimoire Sanctum & Ley-Pillar — Press [F] or [ 9 ] to Unseal & Cast the 4 Cataclysmic Ultimate Spells!";
+        } else if (
           hero.treasureBeaconPos &&
           hero.treasureBeaconPos.zone === zone &&
           Math.hypot(hero.treasureBeaconPos.x - hero.x, hero.treasureBeaconPos.z - hero.z) <= 3.2
@@ -18339,6 +18734,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let starsOpen = state.starsOpen;
     let bestiaryOpen = state.bestiaryOpen;
     let bountyOpen = state.bountyOpen;
+    let grimoireOpen = state.grimoireOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -18648,6 +19044,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       bountyOpen = true;
+      grimoireOpen = false;
+      bestiaryOpen = false;
+      starsOpen = false;
+      chronoOpen = false;
+      mirrorOpen = false;
+      gliderOpen = false;
+      artificerOpen = false;
+      maskOpen = false;
+      lyreOpen = false;
+      homesteadOpen = false;
+      weatherOpen = false;
+      alchemyOpen = false;
+      colosseumOpen = false;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(GRIMOIRE_SANCTUM_POS.x - hero.x, GRIMOIRE_SANCTUM_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      grimoireOpen = true;
+      bountyOpen = false;
       bestiaryOpen = false;
       starsOpen = false;
       chronoOpen = false;
@@ -18919,6 +19342,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       starsOpen,
       bestiaryOpen,
       bountyOpen,
+      grimoireOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

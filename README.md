@@ -8,9 +8,18 @@ An overhead 3D action-adventure browser game built with **Next.js 16 (App Router
 - **Sword Slash**: `Space`, `J`, `Z`, `Enter`, or `Left Click`
 - **Shield Block (Hold)**: `Right Click` or `Shift` (reduces incoming melee & arrow damage by 50% and cuts knockback)
 - **Throw Gale Boomerang**: `Q` or `1` (purchased from Bramble's Shop)
-- **Shoot Ranger's Bow**: `E`, `F`, or `2` (requires both the Ranger's Bow and Arrows from Bramble's Shop)
+- **Shoot Ranger's Bow**: `E` or `2` (requires both the Ranger's Bow and Arrows from Bramble's Shop)
+- **Flame Rod / Shovel / Bottle / Bombs / Hookshot / War-Hammer**: `R/3`, `G/4`, `V/5`, `B/6`, `H/7`, `T/8`
+- **Crossroads Village Hub Systems & Endgame Consoles**:
+  - `L` — Quest Chronicle & Golden Wayfinder (`N`)
+  - `M` — Interactive 12-Zone World Atlas & Fast-Travel Warp Network
+  - `U` — Runic Blacksmith Forge • `P` — Endless Procedural Rift Labyrinth • `K` — Spirit Companion Sanctuary & Relic Vault
+  - `Y` — Royal Stables & 3D Steeds • `O` — Grand Colosseum Boss-Rush • `[` — Apothecary Alchemy Cauldron • `]` — Celestial Weather & Blood-Moon Sundial
+  - `\` — Hero's Homestead Manor & 3D Fishing Pond • `;` — Bardsong Runic Lyre • `'` — Transformation Masks • `.` — Artificer's Magitech Foundry
+  - `/` — Celestial Sky-Sail Paraglider • `=` — Hall of Mirrors Shadow-Twin Duel & Master World Remix • `` ` `` — Chronomancer's Temporal Sundial & Hourglass
+  - `,` — Star-Weaver's Observatory & Zodiac Constellations • `-` — Hunter's Guild Bestiary & Monster Soul-Cards • `0` — Wayfarer's Guild Bounty Board & Treasure Maps • `9` — Archmage's Arcane Grimoire & 4 Cataclysmic Ultimate Spells
 - **Toggle 3D Map Editor / Live Play Mode**: `Tab` or `F2` (or click **▶ Play Live** / **⏸ Map Editor** in the top bar)
-- **Interact (Shop / Key / Locked Gate / Boss Chest / Portals)**: Walk up to the object or golden carpet
+- **Interact (Shop / Key / Locked Gate / Boss Chest / Portals / Hub Monuments)**: Press `F` or walk up to the object or golden carpet
 
 ## Unity-Style 3D Map Editor & Asset Importer
 

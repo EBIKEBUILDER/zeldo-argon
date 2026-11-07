@@ -25,6 +25,7 @@ import {
   RelicId,
   SongId,
   SoulCardId,
+  SpellId,
   TerrainBrushMode,
   TunicId,
   useGameStore,
@@ -282,6 +283,7 @@ export default function GameOverlay() {
   const starsOpen = useGameStore((s) => s.starsOpen);
   const bestiaryOpen = useGameStore((s) => s.bestiaryOpen);
   const bountyOpen = useGameStore((s) => s.bountyOpen);
+  const grimoireOpen = useGameStore((s) => s.grimoireOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -329,6 +331,9 @@ export default function GameOverlay() {
   const acceptOrClaimContract = useGameStore((s) => s.acceptOrClaimContract);
   const unearthTreasureHoard = useGameStore((s) => s.unearthTreasureHoard);
   const grantBountyPlaytestBundle = useGameStore((s) => s.grantBountyPlaytestBundle);
+  const setGrimoireOpen = useGameStore((s) => s.setGrimoireOpen);
+  const unlockOrCastUltimateSpell = useGameStore((s) => s.unlockOrCastUltimateSpell);
+  const grantGrimoirePlaytestBundle = useGameStore((s) => s.grantGrimoirePlaytestBundle);
   const unlockOrCastChronoArt = useGameStore((s) => s.unlockOrCastChronoArt);
   const triggerTemporalRewind = useGameStore((s) => s.triggerTemporalRewind);
   const grantChronoPlaytestBundle = useGameStore((s) => s.grantChronoPlaytestBundle);
@@ -442,6 +447,7 @@ export default function GameOverlay() {
         if (starsOpen) setStarsOpen(false);
         if (bestiaryOpen) setBestiaryOpen(false);
         if (bountyOpen) setBountyOpen(false);
+        if (grimoireOpen) setGrimoireOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -468,6 +474,7 @@ export default function GameOverlay() {
     starsOpen,
     bestiaryOpen,
     bountyOpen,
+    grimoireOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -489,6 +496,7 @@ export default function GameOverlay() {
     setStarsOpen,
     setBestiaryOpen,
     setBountyOpen,
+    setGrimoireOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -1777,6 +1785,29 @@ export default function GameOverlay() {
                   title="Open Wayfarer's Guild Bounty Board, World Contracts & Treasure Maps (Shortcut: 0)"
                 >
                   📜 Bounties ({(hero.completedContracts ?? []).length}/4 • 0)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGrimoireOpen(!grimoireOpen)}
+                  className={`char-toggle-btn ${
+                    grimoireOpen || (hero.grimoireBuffTimer ?? 0) > 0 ? "active" : ""
+                  }`}
+                  style={
+                    (hero.grimoireBuffTimer ?? 0) > 0
+                      ? {
+                          borderColor: "rgba(182, 134, 255, 0.95)",
+                          background: "rgba(38, 16, 68, 0.92)",
+                          color: "#e6c8ff",
+                        }
+                      : undefined
+                  }
+                  title="Open Archmage's Arcane Grimoire & 4 Cataclysmic Ultimate Spells (Shortcut: 9)"
+                >
+                  📕 Grimoire (
+                  {(hero.grimoireBuffTimer ?? 0) > 0
+                    ? `${Math.ceil(hero.grimoireBuffTimer ?? 0)}s`
+                    : `${(hero.unlockedSpells ?? ["solar_judgment"]).length}/4 • 9`}
+                  )
                 </button>
                 <button
                   type="button"
@@ -9963,6 +9994,281 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Bounty Board (0)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          ARCHMAGE'S ARCANE GRIMOIRE & 4 CATACLYSMIC ULTIMATE SPELLS MODAL (`9` KEY)
+         ========================================================= */}
+      {phase === "playing" && !editorMode && grimoireOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card char-sheet-card" style={{ maxWidth: 960 }}>
+            <div className="shop-header">
+              <div>
+                <div className="shop-pill">
+                  CROSSROADS ARCANE GRIMOIRE SANCTUM • 4 CATACLYSMIC ULTIMATE SPELLS (SHORTCUT: 9)
+                </div>
+                <h2 className="shop-title">
+                  📕 ARCHMAGE&apos;S ARCANE GRIMOIRE &amp; ULTIMATE INCANTATIONS
+                </h2>
+              </div>
+              <div className="char-summary-badges">
+                <span className="char-stat-badge">
+                  Spells Unsealed:{" "}
+                  <strong>{(hero.unlockedSpells ?? ["solar_judgment"]).length}/4</strong>
+                </span>
+                <span className="char-stat-badge">
+                  Monster Cores: <strong>✦ {hero.monsterCores ?? 0}</strong>
+                </span>
+                <span className="char-stat-badge">
+                  Rupees: <strong>{hero.rupees}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => grantGrimoirePlaytestBundle()}
+                  className="char-equip-btn"
+                  style={{
+                    background: "rgba(182, 134, 255, 0.22)",
+                    borderColor: "rgba(182, 134, 255, 0.75)",
+                    color: "#e6c8ff",
+                    padding: "4px 10px",
+                    fontSize: "0.75rem",
+                  }}
+                >
+                  + Unseal All 4 Ultimate Spells (+1 Heart, +25 MP &amp; +600 Rupees)
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: "10px 14px",
+                marginBottom: "14px",
+                borderRadius: "10px",
+                background: "rgba(22, 14, 46, 0.86)",
+                border: "1px solid rgba(182, 134, 255, 0.35)",
+                fontSize: "0.84rem",
+                color: "#dfd4ff",
+                lineHeight: 1.5,
+              }}
+            >
+              Visit the <strong>3D Archmage&apos;s Arcane Grimoire Sanctum</strong> at{" "}
+              <strong>(0, -31.8)</strong> in Crossroads Village or press <strong>9</strong> anywhere
+              to unseal and cast the <strong>4 Cataclysmic Ultimate Spells</strong>. Each Ultimate
+              Spell unleashes an instant battlefield-wide elemental cataclysm and solves world/boss
+              mechanics in one incantation!
+            </div>
+
+            {(() => {
+              const unlockedSpells = hero.unlockedSpells ?? ["solar_judgment"];
+              const equippedSpell = hero.equippedSpell ?? "solar_judgment";
+              const SPELL_CARDS: Array<{
+                id: SpellId;
+                name: string;
+                icon: string;
+                subtitle: string;
+                cores: number;
+                rupees: number;
+                accent: string;
+                bg: string;
+                effectSummary: string;
+                desc: string;
+              }> = [
+                {
+                  id: "solar_judgment",
+                  name: "1. Solar Flare Judgment",
+                  icon: "☀️",
+                  subtitle: "Starter Ultimate Spell • 9.5m Sun-Pillar & Radial Fireballs",
+                  cores: 0,
+                  rupees: 0,
+                  accent: "#ffae52",
+                  bg: "rgba(62, 24, 14, 0.72)",
+                  effectSummary:
+                    "5 DMG + 2.2s Stun (9.5m) • Melts Ice/Wood Shields • Lights Torches & Burns Webs • 4 Radial Fireballs",
+                  desc: "Calls down a pillar of golden sun-fire that deals 5 Damage in a 9.5m radius, melts Ice/Wood shields, ignites all nearby Braziers, burns Briar/Spiderweb barriers, and launches 4 charged radial fireballs!",
+                },
+                {
+                  id: "glacial_nova",
+                  name: "2. Absolute Zero Glacier",
+                  icon: "❄️",
+                  subtitle: "Cryo-Nova Cataclysm • 10.5m Flash-Freeze & Vitality Surge",
+                  cores: 4,
+                  rupees: 200,
+                  accent: "#6ee8ff",
+                  bg: "rgba(12, 36, 62, 0.72)",
+                  effectSummary:
+                    "4 DMG + 4.0s Freeze Stun (10.5m) • Restores +2 Full Hearts (+4 HP) • Purges Frostbite",
+                  desc: "Detonates an Absolute Zero blizzard ring across 10.5m, dealing 4 Damage, freezing all monsters in solid ice for 4.0 seconds, clearing Frostbite chill, and restoring +2 Full Hearts!",
+                },
+                {
+                  id: "tempest_maelstrom",
+                  name: "3. Chain-Tempest Maelstrom",
+                  icon: "⚡",
+                  subtitle: "10-Bolt Fulmination Storm • 25s Tempest Overcharge",
+                  cores: 6,
+                  rupees: 300,
+                  accent: "#ffe066",
+                  bg: "rgba(48, 38, 12, 0.72)",
+                  effectSummary:
+                    "10-Bolt Chain Lightning (4 DMG + 2.5s Stun, 13.5m) • Flips Shock-Beetles • 25s +30% Speed & +5 MP/s",
+                  desc: "Calls down 10 high-voltage chain-lightning arcs across 13.5m (4 Damage + 2.5s Stun, stripping Electrified Shock-Armor) and grants 25 seconds of Tempest Overcharge (+30% Move Speed & +5.0 MP/s Regen)!",
+                },
+                {
+                  id: "eclipse_meteor",
+                  name: "4. Abyssal Eclipse Meteor",
+                  icon: "☄️",
+                  subtitle: "Dark-Star Cataclysm • Shatters Boulders & Cracks Boss Shells",
+                  cores: 8,
+                  rupees: 450,
+                  accent: "#d58eff",
+                  bg: "rgba(42, 14, 62, 0.72)",
+                  effectSummary:
+                    "6 DMG + 3.0s Stun (9.5m) • Shatters Boulders & Stakes • Cracks Boss Armor • +1 Heart & +25 Max MP on Unlock",
+                  desc: "Summons a cataclysmic Dark-Star Meteor (6 Damage in 9.5m) that shatters Cracked Boulders, pounds Rusted Iron Stakes flat, cracks Boss Elemental Shells (EXPOSED_EYE), and permanently grants +1 Full Heart Container & +25 Max MP on unlock!",
+                },
+              ];
+
+              return (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(390px, 1fr))",
+                    gap: "12px",
+                    marginBottom: "14px",
+                  }}
+                >
+                  {SPELL_CARDS.map((sp) => {
+                    const isUnlocked = unlockedSpells.includes(sp.id);
+                    const isEquipped = equippedSpell === sp.id;
+                    const canAfford =
+                      (hero.monsterCores ?? 0) >= sp.cores && hero.rupees >= sp.rupees;
+
+                    return (
+                      <div
+                        key={sp.id}
+                        style={{
+                          padding: "13px 15px",
+                          borderRadius: "12px",
+                          background: sp.bg,
+                          border: isEquipped
+                            ? `2px solid ${sp.accent}`
+                            : "1px solid rgba(180, 150, 255, 0.28)",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                          gap: "10px",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "8px",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ fontSize: "1.45rem" }}>{sp.icon}</span>
+                              <div>
+                                <div
+                                  style={{
+                                    fontWeight: 800,
+                                    color: sp.accent,
+                                    fontSize: "0.95rem",
+                                  }}
+                                >
+                                  {sp.name}
+                                </div>
+                                <div style={{ fontSize: "0.73rem", color: "#b8c8e8" }}>
+                                  {sp.subtitle}
+                                </div>
+                              </div>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: "0.7rem",
+                                fontWeight: 800,
+                                padding: "3px 8px",
+                                borderRadius: "999px",
+                                background: isUnlocked
+                                  ? "rgba(88, 242, 168, 0.2)"
+                                  : "rgba(255, 255, 255, 0.08)",
+                                color: isUnlocked ? "#88ffce" : "#ffd88a",
+                              }}
+                            >
+                              {isUnlocked
+                                ? "✓ UNSEALED"
+                                : `✦ ${sp.cores} CORES + ${sp.rupees} R`}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.75rem",
+                              fontWeight: 800,
+                              color: "#ffe49e",
+                              marginBottom: 5,
+                            }}
+                          >
+                            ⚡ Cataclysm Effect: {sp.effectSummary}
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.78rem",
+                              color: "#d4dcf2",
+                              lineHeight: 1.45,
+                              margin: 0,
+                            }}
+                          >
+                            {sp.desc}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => unlockOrCastUltimateSpell(sp.id)}
+                          className="char-equip-btn"
+                          style={{
+                            width: "100%",
+                            padding: "8px 12px",
+                            background: isUnlocked
+                              ? "linear-gradient(180deg, #b87cff 0%, #6828b8 100%)"
+                              : canAfford
+                              ? "linear-gradient(180deg, #ffd86b 0%, #b87c0e 100%)"
+                              : "rgba(255,255,255,0.08)",
+                            color: isUnlocked ? "#ffffff" : canAfford ? "#1a1102" : "#9aa8c0",
+                            borderColor: isUnlocked
+                              ? "rgba(206, 162, 255, 0.9)"
+                              : "rgba(255, 214, 92, 0.65)",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {isUnlocked
+                            ? `📕 Cast ${sp.name.split(".")[1]?.trim() ?? sp.name} Now!`
+                            : `🔓 Unseal & Cast (${sp.cores} Cores + ${sp.rupees} Rupees)`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>9</strong> or <strong>Esc</strong> anytime to close the Archmage&apos;s
+                Arcane Grimoire.
+              </span>
+              <button
+                type="button"
+                onClick={() => setGrimoireOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Arcane Grimoire (9)
               </button>
             </div>
           </div>

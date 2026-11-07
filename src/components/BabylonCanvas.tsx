@@ -68,6 +68,7 @@ import {
   FRONTIER_CITADEL_GATE_POS,
   FRONTIER_HOOKSHOT_CHEST_POS,
   FRONTIER_SAPPER_NPC_POS,
+  GRIMOIRE_SANCTUM_POS,
   GUIDE_NPC_POS,
   HEIRLOOM_NPC_POS,
   HOLLOW_SPORE_CHEST_POS,
@@ -7404,6 +7405,99 @@ export default function BabylonCanvas() {
     treasureCrownGem.isPickable = false;
     treasureCrownGem.parent = treasureBeaconNode;
 
+    // 1d-xiii. 3D Archmage's Arcane Grimoire Sanctum (`GRIMOIRE_SANCTUM_POS = { x: 0, z: -31.8 }`)
+    const grimoireSanctumNode = new TransformNode("grimoireSanctumNode", scene);
+    grimoireSanctumNode.parent = overworldRoot;
+    grimoireSanctumNode.position.set(GRIMOIRE_SANCTUM_POS.x, 0, GRIMOIRE_SANCTUM_POS.z);
+
+    const grimoireDais = MeshBuilder.CreateCylinder(
+      "grimoireDais",
+      { diameterTop: 2.9, diameterBottom: 3.3, height: 0.34, tessellation: 24 },
+      scene
+    );
+    grimoireDais.position.set(0, 0.17, 0);
+    grimoireDais.material = dgPillarMat;
+    grimoireDais.isPickable = false;
+    grimoireDais.parent = grimoireSanctumNode;
+
+    const grimoireAltarPedestal = MeshBuilder.CreateCylinder(
+      "grimoireAltarPedestal",
+      { diameterTop: 0.72, diameterBottom: 0.92, height: 1.35, tessellation: 14 },
+      scene
+    );
+    grimoireAltarPedestal.position.set(0, 0.95, 0);
+    grimoireAltarPedestal.material = darkObsidianMat;
+    grimoireAltarPedestal.isPickable = false;
+    grimoireAltarPedestal.parent = grimoireSanctumNode;
+
+    const grimoireTomeLeft = MeshBuilder.CreateBox(
+      "grimoireTomeLeft",
+      { width: 0.56, height: 0.1, depth: 0.72 },
+      scene
+    );
+    grimoireTomeLeft.position.set(-0.26, 1.85, 0);
+    grimoireTomeLeft.rotation.z = -0.26;
+    grimoireTomeLeft.material = parchmentMat;
+    grimoireTomeLeft.isPickable = false;
+    grimoireTomeLeft.parent = grimoireSanctumNode;
+
+    const grimoireTomeRight = MeshBuilder.CreateBox(
+      "grimoireTomeRight",
+      { width: 0.56, height: 0.1, depth: 0.72 },
+      scene
+    );
+    grimoireTomeRight.position.set(0.26, 1.85, 0);
+    grimoireTomeRight.rotation.z = 0.26;
+    grimoireTomeRight.material = parchmentMat;
+    grimoireTomeRight.isPickable = false;
+    grimoireTomeRight.parent = grimoireSanctumNode;
+
+    const grimoireApexStar = MeshBuilder.CreatePolyhedron(
+      "grimoireApexStar",
+      { type: 1, size: 0.44 },
+      scene
+    );
+    grimoireApexStar.position.set(0, 2.55, 0);
+    grimoireApexStar.material = goldKeyMat;
+    grimoireApexStar.isPickable = false;
+    grimoireApexStar.parent = grimoireSanctumNode;
+
+    const grimoireLeyRing = MeshBuilder.CreateTorus(
+      "grimoireLeyRing",
+      { diameter: 1.85, thickness: 0.08, tessellation: 28 },
+      scene
+    );
+    grimoireLeyRing.position.set(0, 2.45, 0);
+    grimoireLeyRing.rotation.x = Math.PI / 4;
+    grimoireLeyRing.material = warpAwakenedMat;
+    grimoireLeyRing.isPickable = false;
+    grimoireLeyRing.parent = grimoireSanctumNode;
+
+    const grimoireGroundHalo = MeshBuilder.CreateTorus(
+      "grimoireGroundHalo",
+      { diameter: 3.5, thickness: 0.085, tessellation: 28 },
+      scene
+    );
+    grimoireGroundHalo.position.set(0, 0.16, 0);
+    grimoireGroundHalo.material = goldKeyMat;
+    grimoireGroundHalo.isPickable = false;
+    grimoireGroundHalo.parent = grimoireSanctumNode;
+
+    // 3D Hero Arcane Grimoire Ley-Circle (`heroGrimoireNode`)
+    const heroGrimoireNode = new TransformNode("heroGrimoireNode", scene);
+    heroGrimoireNode.parent = heroRoot;
+    heroGrimoireNode.setEnabled(false);
+
+    const heroGrimoireCircle = MeshBuilder.CreateTorus(
+      "heroGrimoireCircle",
+      { diameter: 2.25, thickness: 0.06, tessellation: 28 },
+      scene
+    );
+    heroGrimoireCircle.position.set(0, 0.12, 0);
+    heroGrimoireCircle.material = warpAwakenedMat;
+    heroGrimoireCircle.isPickable = false;
+    heroGrimoireCircle.parent = heroGrimoireNode;
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -11062,6 +11156,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // 9 (Digit9) toggles Archmage's Arcane Grimoire & 4 Cataclysmic Ultimate Spells Modal
+      if (code === "Digit9" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setGrimoireOpen(!store.grimoireOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -12412,6 +12513,32 @@ export default function BabylonCanvas() {
         bountyCompassGem.rotation.y = -t * 2.9;
         bountyCompassGem.position.y = 2.75 + Math.sin(t * 4.1) * 0.12;
         bountyGroundHalo.rotation.y = -t * 1.7;
+
+        const grimoireGroundY = sampleTerrainHeight(
+          activeCells,
+          GRIMOIRE_SANCTUM_POS.x,
+          GRIMOIRE_SANCTUM_POS.z
+        );
+        grimoireSanctumNode.position.set(
+          GRIMOIRE_SANCTUM_POS.x,
+          grimoireGroundY,
+          GRIMOIRE_SANCTUM_POS.z
+        );
+        grimoireApexStar.rotation.y = t * 3.2;
+        grimoireApexStar.position.y = 2.55 + Math.sin(t * 4.4) * 0.15;
+        grimoireLeyRing.rotation.y = -t * 2.6;
+        grimoireLeyRing.rotation.z = Math.sin(t * 2.1) * 0.35;
+        grimoireGroundHalo.rotation.y = t * 1.8;
+      }
+
+      // Sync 3D Hero Arcane Grimoire Ley-Circle (`heroGrimoireNode`)
+      const showGrimoireCircle =
+        ((snap.hero.grimoireBuffTimer ?? 0) > 0 ||
+          (snap.hero.unlockedSpells?.length ?? 1) > 1) &&
+        !snap.editorMode;
+      heroGrimoireNode.setEnabled(showGrimoireCircle);
+      if (showGrimoireCircle) {
+        heroGrimoireCircle.rotation.y = t * 3.4;
       }
 
       // Sync 3D Active Golden X Treasure Beacon (`treasureBeaconNode`)
