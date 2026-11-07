@@ -7,6 +7,7 @@ import {
   ChronoArtId,
   ColosseumTierId,
   CompanionId,
+  ConstellationId,
   ConstructId,
   EditorPlaceCategory,
   ElixirId,
@@ -276,6 +277,7 @@ export default function GameOverlay() {
   const gliderOpen = useGameStore((s) => s.gliderOpen);
   const mirrorOpen = useGameStore((s) => s.mirrorOpen);
   const chronoOpen = useGameStore((s) => s.chronoOpen);
+  const starsOpen = useGameStore((s) => s.starsOpen);
   const wayfinderActive = useGameStore((s) => s.wayfinderActive);
   const pinnedQuestId = useGameStore((s) => s.pinnedQuestId);
   const boomerang = useGameStore((s) => s.boomerang);
@@ -313,6 +315,9 @@ export default function GameOverlay() {
   const setGliderOpen = useGameStore((s) => s.setGliderOpen);
   const setMirrorOpen = useGameStore((s) => s.setMirrorOpen);
   const setChronoOpen = useGameStore((s) => s.setChronoOpen);
+  const setStarsOpen = useGameStore((s) => s.setStarsOpen);
+  const unlockOrAlignConstellation = useGameStore((s) => s.unlockOrAlignConstellation);
+  const grantStarsPlaytestBundle = useGameStore((s) => s.grantStarsPlaytestBundle);
   const unlockOrCastChronoArt = useGameStore((s) => s.unlockOrCastChronoArt);
   const triggerTemporalRewind = useGameStore((s) => s.triggerTemporalRewind);
   const grantChronoPlaytestBundle = useGameStore((s) => s.grantChronoPlaytestBundle);
@@ -423,6 +428,7 @@ export default function GameOverlay() {
         if (gliderOpen) setGliderOpen(false);
         if (mirrorOpen) setMirrorOpen(false);
         if (chronoOpen) setChronoOpen(false);
+        if (starsOpen) setStarsOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -446,6 +452,7 @@ export default function GameOverlay() {
     gliderOpen,
     mirrorOpen,
     chronoOpen,
+    starsOpen,
     setShopOpen,
     setCharacterOpen,
     setQuestLogOpen,
@@ -464,6 +471,7 @@ export default function GameOverlay() {
     setGliderOpen,
     setMirrorOpen,
     setChronoOpen,
+    setStarsOpen,
   ]);
 
   const showEditorToast = (msg: string) => {
@@ -1695,6 +1703,25 @@ export default function GameOverlay() {
                     ? `${Math.ceil(hero.chronoActiveTimer ?? 0)}s`
                     : "`"}
                   )
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStarsOpen(!starsOpen)}
+                  className={`char-toggle-btn ${
+                    starsOpen || (hero.activeConstellation ?? "none") !== "none" ? "active" : ""
+                  }`}
+                  style={
+                    (hero.activeConstellation ?? "none") !== "none"
+                      ? {
+                          borderColor: "rgba(128, 224, 255, 0.95)",
+                          background: "rgba(14, 34, 66, 0.92)",
+                          color: "#b8efff",
+                        }
+                      : undefined
+                  }
+                  title="Open Star-Weaver's Observatory & Constellation Skill Tree (Shortcut: ,)"
+                >
+                  ✨ Stars ({(hero.unlockedConstellations ?? []).length}/4 • ,)
                 </button>
                 <button
                   type="button"
@@ -8799,6 +8826,371 @@ export default function GameOverlay() {
                 className="shop-close-btn"
               >
                 Close Hourglass (`)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          STAR-WEAVER'S OBSERVATORY & CONSTELLATION SKILL TREE MODAL (,)
+         ========================================================= */}
+      {phase === "playing" && !editorMode && starsOpen && (
+        <div className="shop-panel-wrapper">
+          <div className="shop-card char-sheet-card" style={{ maxWidth: "880px" }}>
+            <div className="shop-header">
+              <div>
+                <div className="shop-pill">
+                  ASTRAL SKILL TREE • ZODIAC SYNERGIES • ORBITING STAR-CROWN
+                </div>
+                <h2 className="shop-title">
+                  ✨ STAR-WEAVER&apos;S OBSERVATORY &amp; CONSTELLATION CHART
+                </h2>
+              </div>
+              <div className="char-summary-badges">
+                <span className="char-stat-badge">
+                  Monster Cores: <strong>{hero.monsterCores ?? 0} ✦</strong>
+                </span>
+                <span className="char-stat-badge">
+                  Rupees: <strong>{hero.rupees}</strong>
+                </span>
+                <span className="char-stat-badge">
+                  Aligned Star:{" "}
+                  <strong>
+                    {(hero.activeConstellation ?? "none") !== "none"
+                      ? (hero.activeConstellation ?? "").replace(/_/g, " ").toUpperCase()
+                      : "NONE"}
+                  </strong>
+                </span>
+              </div>
+            </div>
+
+            <p className="shop-subtitle" style={{ marginBottom: "14px" }}>
+              Visit the <strong>Star-Weaver&apos;s Observatory</strong> in Southeast Crossroads
+              Village (<code>24.5, -22.5</code>) or press <strong>,</strong> (Comma) anytime to
+              unlock permanent <strong>Zodiac Constellations</strong>! Every unlocked constellation
+              grants a permanent passive synergy, and your <strong>Aligned Constellation</strong>{" "}
+              places a rotating 3D Star-Crown above Zeldo that fires automatic celestial pulses
+              every 2.0 seconds!
+            </p>
+
+            {/* Interactive SVG Celestial Star-Chart Banner */}
+            <div
+              style={{
+                padding: "14px 16px",
+                borderRadius: "12px",
+                background:
+                  "linear-gradient(135deg, rgba(10, 22, 48, 0.94) 0%, rgba(28, 16, 56, 0.92) 100%)",
+                border: "1px solid rgba(128, 224, 255, 0.45)",
+                marginBottom: "16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "12px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                <svg width="110" height="58" viewBox="0 0 110 58">
+                  <line
+                    x1="16"
+                    y1="42"
+                    x2="42"
+                    y2="16"
+                    stroke="rgba(130, 224, 255, 0.55)"
+                    strokeWidth="1.8"
+                    strokeDasharray="3 2"
+                  />
+                  <line
+                    x1="42"
+                    y1="16"
+                    x2="70"
+                    y2="38"
+                    stroke="rgba(255, 214, 102, 0.55)"
+                    strokeWidth="1.8"
+                    strokeDasharray="3 2"
+                  />
+                  <line
+                    x1="70"
+                    y1="38"
+                    x2="96"
+                    y2="14"
+                    stroke="rgba(212, 146, 255, 0.55)"
+                    strokeWidth="1.8"
+                    strokeDasharray="3 2"
+                  />
+                  <circle cx="16" cy="42" r="5" fill="#ff7664" stroke="#fff" strokeWidth="1.4" />
+                  <circle cx="42" cy="16" r="5" fill="#6effb8" stroke="#fff" strokeWidth="1.4" />
+                  <circle cx="70" cy="38" r="5" fill="#c78dff" stroke="#fff" strokeWidth="1.4" />
+                  <circle cx="96" cy="14" r="5.5" fill="#ffd866" stroke="#fff" strokeWidth="1.4" />
+                </svg>
+                <div>
+                  <div
+                    style={{
+                      fontSize: "0.74rem",
+                      fontWeight: 800,
+                      letterSpacing: "0.08em",
+                      color: "#9ee8ff",
+                      textTransform: "uppercase",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    ACTIVE ZODIAC STAR-CROWN CONVERGENCE
+                  </div>
+                  <div style={{ fontSize: "0.84rem", color: "#e6f5ff" }}>
+                    Unlocked Constellations:{" "}
+                    <strong>{(hero.unlockedConstellations ?? []).length} / 4</strong> • Active
+                    Alignment:{" "}
+                    <strong style={{ color: "#ffd866" }}>
+                      {(hero.activeConstellation ?? "none") !== "none"
+                        ? (hero.activeConstellation ?? "").replace(/_/g, " ").toUpperCase()
+                        : "Unaligned (Select a Star below)"}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={grantStarsPlaytestBundle}
+                className="char-equip-btn"
+                style={{
+                  background: "rgba(128, 224, 255, 0.18)",
+                  borderColor: "rgba(128, 224, 255, 0.72)",
+                  color: "#c8f4ff",
+                  padding: "8px 14px",
+                  fontSize: "0.78rem",
+                }}
+              >
+                ✨ Playtest Blessing (+All 4 Constellations, +5 Cores &amp; +300R)
+              </button>
+            </div>
+
+            {(() => {
+              const unlockedList = hero.unlockedConstellations ?? [];
+              const CONSTELLATIONS: Array<{
+                id: ConstellationId;
+                name: string;
+                icon: string;
+                subtitle: string;
+                cores: number;
+                rupees: number;
+                passiveBonus: string;
+                alignedPulse: string;
+                desc: string;
+                accent: string;
+              }> = [
+                {
+                  id: "aries_war_star",
+                  name: "Aries the Crimson War-Star",
+                  icon: "♈",
+                  subtitle: "First House of the Zodiac • Permanent +1 Sword Damage",
+                  cores: 1,
+                  rupees: 75,
+                  passiveBonus: "Permanent +1 Sword Base Damage (+2 Spin-Slash Damage)",
+                  alignedPulse: "Every 2.0s: Strikes nearest foe within 7.5m for 3 DMG + 1.1s Stun",
+                  desc: "Channels the burning wrath of the Crimson Ram into your blade and rains down automatic Crimson Star-Bolts onto nearby monsters.",
+                  accent: "#ff7e6b",
+                },
+                {
+                  id: "sagitta_hunt_star",
+                  name: "Sagitta the Silver Hunt-Star",
+                  icon: "♐",
+                  subtitle: "Second House of the Zodiac • +1 Bow DMG & 40% Arrow Conservation",
+                  cores: 2,
+                  rupees: 110,
+                  passiveBonus: "+1 Bow Arrow Damage & 40% Chance Not to Consume Arrows",
+                  alignedPulse: "Every 2.0s: Looses a 3 DMG Silver Starlight Arrow within 12.0m",
+                  desc: "Blesses your quiver with endless starlight fletching and automatically fires piercing Silver Starlight Arrows at distant foes.",
+                  accent: "#6effb8",
+                },
+                {
+                  id: "lyra_ley_star",
+                  name: "Lyra the Astral Ley-Star",
+                  icon: "♒",
+                  subtitle: "Third House of the Zodiac • +5.0 MP/s Arcane Leyline Regen",
+                  cores: 2,
+                  rupees: 150,
+                  passiveBonus: "+5.0 MP/sec Continuous Magic Power Regeneration",
+                  alignedPulse:
+                    "Every 2.0s: Restores +1 HP & +8 MP and fires a 2 DMG Starlight Bolt",
+                  desc: "Links your spirit to the celestial leylines, flooding your Magic Meter and launching seeking Starlight Fireballs.",
+                  accent: "#c98eff",
+                },
+                {
+                  id: "aegis_world_star",
+                  name: "Aegis the Sovereign World-Star",
+                  icon: "♌",
+                  subtitle: "Apex House of the Zodiac • +1 Max Heart & -20% Incoming DMG",
+                  cores: 3,
+                  rupees: 200,
+                  passiveBonus: "+1 Full Heart Container (+2 Max HP) & -20% All Incoming Damage",
+                  alignedPulse:
+                    "Every 2.0s: Heals +1 HP and Stuns all monsters within 5.0m for 1.4s",
+                  desc: "Wreathes Zeldo in the unbreakable Golden World-Star Aegis, fortifying life hearts and radiating a golden sanctum shockwave.",
+                  accent: "#ffd866",
+                },
+              ];
+
+              return (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))",
+                    gap: "12px",
+                    marginBottom: "16px",
+                  }}
+                >
+                  {CONSTELLATIONS.map((star) => {
+                    const isUnlocked = unlockedList.includes(star.id);
+                    const isAligned = hero.activeConstellation === star.id;
+                    return (
+                      <div
+                        key={star.id}
+                        style={{
+                          padding: "14px",
+                          borderRadius: "12px",
+                          border: isAligned
+                            ? `2px solid ${star.accent}`
+                            : isUnlocked
+                            ? "1px solid rgba(128, 224, 255, 0.48)"
+                            : "1px solid rgba(255,255,255,0.12)",
+                          background: isAligned
+                            ? "rgba(18, 36, 68, 0.94)"
+                            : isUnlocked
+                            ? "rgba(18, 24, 42, 0.88)"
+                            : "rgba(12, 16, 28, 0.82)",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                          gap: "10px",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: "8px",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ fontSize: "1.45rem" }}>{star.icon}</span>
+                              <div>
+                                <div
+                                  style={{
+                                    fontWeight: 800,
+                                    color: star.accent,
+                                    fontSize: "0.95rem",
+                                  }}
+                                >
+                                  {star.name}
+                                </div>
+                                <div style={{ fontSize: "0.73rem", color: "#9cb8d8" }}>
+                                  {star.subtitle}
+                                </div>
+                              </div>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: "0.7rem",
+                                fontWeight: 800,
+                                padding: "3px 8px",
+                                borderRadius: "999px",
+                                background: isAligned
+                                  ? "rgba(128, 224, 255, 0.25)"
+                                  : isUnlocked
+                                  ? "rgba(68, 238, 148, 0.2)"
+                                  : "rgba(255, 255, 255, 0.08)",
+                                color: isAligned
+                                  ? "#b8f2ff"
+                                  : isUnlocked
+                                  ? "#88ffbe"
+                                  : "#b8cce8",
+                              }}
+                            >
+                              {isAligned
+                                ? "★ ALIGNED CROWN"
+                                : isUnlocked
+                                ? "✓ UNLOCKED"
+                                : `${star.cores}✦ + ${star.rupees}R`}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.75rem",
+                              fontWeight: 800,
+                              color: "#ffe49e",
+                              marginBottom: 3,
+                            }}
+                          >
+                            ✦ Passive: {star.passiveBonus}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.74rem",
+                              fontWeight: 700,
+                              color: "#9ee8ff",
+                              marginBottom: 5,
+                            }}
+                          >
+                            ★ Aligned Crown: {star.alignedPulse}
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "0.78rem",
+                              color: "#c8daf0",
+                              lineHeight: 1.45,
+                              margin: 0,
+                            }}
+                          >
+                            {star.desc}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => unlockOrAlignConstellation(star.id)}
+                          className="char-equip-btn"
+                          style={{
+                            width: "100%",
+                            padding: "8px 12px",
+                            background: isAligned
+                              ? "linear-gradient(180deg, #7be4ff 0%, #2478b8 100%)"
+                              : isUnlocked
+                              ? "linear-gradient(180deg, #ffd86b 0%, #b87c0e 100%)"
+                              : "rgba(128, 224, 255, 0.18)",
+                            color: isAligned || isUnlocked ? "#0d1829" : "#c8f4ff",
+                            borderColor: "rgba(128, 224, 255, 0.85)",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {isAligned
+                            ? `★ Re-Pulse ${star.name} (+Full Heal & MP)`
+                            : isUnlocked
+                            ? `✨ Align ${star.name} Crown`
+                            : `Unlock & Align (${star.cores}✦ Cores + ${star.rupees} Rupees)`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="shop-footer">
+              <span className="shop-hint">
+                Press <strong>,</strong> (Comma) or <strong>Esc</strong> anytime to close the
+                Star-Weaver&apos;s Observatory.
+              </span>
+              <button
+                type="button"
+                onClick={() => setStarsOpen(false)}
+                className="shop-close-btn"
+              >
+                Close Observatory (,)
               </button>
             </div>
           </div>

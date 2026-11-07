@@ -75,6 +75,7 @@ import {
   SKY_CELESTIAL_CHEST_POS,
   SKY_SAIL_ROOST_POS,
   SKY_VICTORY_CHEST_POS,
+  STAR_OBSERVATORY_POS,
   WARP_STONE_META,
   WEATHER_OBELISK_POS,
   ZoneId,
@@ -222,6 +223,12 @@ export type ChronoArtId =
   | "bullet_time"
   | "paradox_clone"
   | "chrono_singularity";
+
+export type ConstellationId =
+  | "aries_war_star"
+  | "sagitta_hunt_star"
+  | "lyra_ley_star"
+  | "aegis_world_star";
 
 export interface HeldObjectState {
   kind: "clay_pot" | "light_rock" | "bomb";
@@ -382,6 +389,9 @@ export interface HeroState {
   chronoAnchorZone?: ZoneId;
   chronoAnchorHp?: number;
   chronoAnchorMp?: number;
+  unlockedConstellations?: ConstellationId[];
+  activeConstellation?: ConstellationId | "none";
+  starPulseTimer?: number;
   dashTimer?: number;
   dashCooldown?: number;
   comboCount?: number;
@@ -831,6 +841,7 @@ export interface SerializableGameState {
   gliderOpen: boolean;
   mirrorOpen: boolean;
   chronoOpen: boolean;
+  starsOpen: boolean;
   warpBeamTimer: number;
   wayfinderActive: boolean;
   pinnedQuestId: string | null;
@@ -878,6 +889,9 @@ export interface GameActions {
   unlockOrCastChronoArt: (art: ChronoArtId) => void;
   triggerTemporalRewind: () => void;
   grantChronoPlaytestBundle: () => void;
+  setStarsOpen: (open: boolean) => void;
+  unlockOrAlignConstellation: (star: ConstellationId) => void;
+  grantStarsPlaytestBundle: () => void;
   summonShadowTwinDuel: (trial: MirrorTrialId) => void;
   toggleMasterWorldRemix: () => void;
   grantMirrorPlaytestBundle: () => void;
@@ -1289,6 +1303,9 @@ function createInitialState(
       chronoAnchorZone: "overworld",
       chronoAnchorHp: 10,
       chronoAnchorMp: 100,
+      unlockedConstellations: [],
+      activeConstellation: "none",
+      starPulseTimer: 0,
       dashTimer: 0,
       dashCooldown: 0,
       comboCount: 0,
@@ -1513,6 +1530,7 @@ function createInitialState(
     gliderOpen: false,
     mirrorOpen: false,
     chronoOpen: false,
+    starsOpen: false,
     warpBeamTimer: 0,
     wayfinderActive: false,
     pinnedQuestId: null,
@@ -2223,7 +2241,187 @@ export const useGameStore = create<GameStore>((set, get) => ({
       artificerOpen: open ? false : state.artificerOpen,
       gliderOpen: open ? false : state.gliderOpen,
       mirrorOpen: open ? false : state.mirrorOpen,
+      starsOpen: open ? false : state.starsOpen,
     }));
+  },
+
+  setStarsOpen: (open: boolean) => {
+    set((state) => ({
+      starsOpen: open,
+      shopOpen: open ? false : state.shopOpen,
+      characterOpen: open ? false : state.characterOpen,
+      questLogOpen: open ? false : state.questLogOpen,
+      atlasOpen: open ? false : state.atlasOpen,
+      forgeOpen: open ? false : state.forgeOpen,
+      riftOpen: open ? false : state.riftOpen,
+      sanctuaryOpen: open ? false : state.sanctuaryOpen,
+      stablesOpen: open ? false : state.stablesOpen,
+      colosseumOpen: open ? false : state.colosseumOpen,
+      alchemyOpen: open ? false : state.alchemyOpen,
+      weatherOpen: open ? false : state.weatherOpen,
+      homesteadOpen: open ? false : state.homesteadOpen,
+      lyreOpen: open ? false : state.lyreOpen,
+      maskOpen: open ? false : state.maskOpen,
+      artificerOpen: open ? false : state.artificerOpen,
+      gliderOpen: open ? false : state.gliderOpen,
+      mirrorOpen: open ? false : state.mirrorOpen,
+      chronoOpen: open ? false : state.chronoOpen,
+    }));
+  },
+
+  unlockOrAlignConstellation: (star: ConstellationId) => {
+    const state = get();
+    const unlocked = [...(state.hero.unlockedConstellations ?? [])];
+    const STAR_META: Record<
+      ConstellationId,
+      {
+        name: string;
+        cores: number;
+        rupees: number;
+        subtitle: string;
+      }
+    > = {
+      aries_war_star: {
+        name: "Aries War-Star (Crimson Blade)",
+        cores: 4,
+        rupees: 200,
+        subtitle:
+          "Permanent +1 Sword & Hammer DMG, +35% Spin Radius & Aligned Solar Star-Burst (3 DMG every 2.0s)!",
+      },
+      sagitta_hunt_star: {
+        name: "Sagitta Hunt-Star (Silver Bow)",
+        cores: 5,
+        rupees: 250,
+        subtitle:
+          "Permanent +1 Bow & Hookshot DMG, +25 Arrows, 40% Arrow Conservation & Aligned Piercing Starlight Arrows!",
+      },
+      lyra_ley_star: {
+        name: "Lyra Ley-Star (Arcane Phoenix)",
+        cores: 6,
+        rupees: 300,
+        subtitle:
+          "Permanent +30 Max MP, +5.0 MP/s Mana Regen & Aligned Starlight Fireballs + Healing Motes every 2.0s!",
+      },
+      aegis_world_star: {
+        name: "Aegis World-Star (Golden Tortoise)",
+        cores: 7,
+        rupees: 350,
+        subtitle:
+          "Permanent +1 Full Heart Container, +1 Shield Block, -20% Damage Taken & Aligned Aegis Regen Pulse!",
+      },
+    };
+    const meta = STAR_META[star];
+    const isUnlocked = unlocked.includes(star);
+    if (!isUnlocked) {
+      if (
+        (state.hero.monsterCores ?? 0) < meta.cores ||
+        state.hero.rupees < meta.rupees
+      ) {
+        soundEngine.playGateLocked();
+        set({
+          banner: {
+            id: Date.now(),
+            text: `Insufficient Starlight Tribute for ${meta.name}!`,
+            subtext: `Requires ${meta.cores} Monster Cores (✦) and ${meta.rupees} Rupees — or click 'Star-Weaver's Playtest Blessing' below!`,
+            timer: 3.8,
+          },
+        });
+        return;
+      }
+      unlocked.push(star);
+    }
+
+    soundEngine.playSecretSolve();
+    if (!isUnlocked) {
+      soundEngine.playVictoryFanfare();
+    }
+    set((s) => {
+      const nextMaxHp =
+        !isUnlocked && star === "aegis_world_star"
+          ? Math.min(40, s.hero.maxHp + 2)
+          : s.hero.maxHp;
+      const nextMaxMp =
+        !isUnlocked && star === "lyra_ley_star"
+          ? (s.hero.maxMp || 100) + 30
+          : s.hero.maxMp || 100;
+      return {
+        hero: {
+          ...s.hero,
+          monsterCores: isUnlocked
+            ? s.hero.monsterCores ?? 0
+            : (s.hero.monsterCores ?? 0) - meta.cores,
+          rupees: isUnlocked ? s.hero.rupees : s.hero.rupees - meta.rupees,
+          maxHp: nextMaxHp,
+          hp: !isUnlocked && star === "aegis_world_star" ? nextMaxHp : s.hero.hp,
+          maxMp: nextMaxMp,
+          mp: !isUnlocked && star === "lyra_ley_star" ? nextMaxMp : s.hero.mp,
+          swordDamage:
+            !isUnlocked && star === "aries_war_star"
+              ? (s.hero.swordDamage ?? 1) + 1
+              : s.hero.swordDamage,
+          shieldBlock:
+            !isUnlocked && star === "aegis_world_star"
+              ? (s.hero.shieldBlock ?? 1) + 1
+              : s.hero.shieldBlock,
+          arrows:
+            !isUnlocked && star === "sagitta_hunt_star"
+              ? Math.min(99, (s.hero.arrows ?? 0) + 25)
+              : s.hero.arrows,
+          unlockedConstellations: unlocked,
+          activeConstellation: star,
+          starPulseTimer: 0.35,
+        },
+        banner: {
+          id: Date.now(),
+          text: isUnlocked
+            ? `✨ ALIGNED ZODIAC CONSTELLATION: ${meta.name.toUpperCase()}!`
+            : `✨ AWAKENED & ALIGNED CONSTELLATION: ${meta.name.toUpperCase()}!`,
+          subtext: meta.subtitle,
+          timer: 4.8,
+        },
+      };
+    });
+  },
+
+  grantStarsPlaytestBundle: () => {
+    soundEngine.playVictoryFanfare();
+    set((state) => {
+      const prev = state.hero.unlockedConstellations ?? [];
+      const addAries = !prev.includes("aries_war_star");
+      const addLyra = !prev.includes("lyra_ley_star");
+      const addAegis = !prev.includes("aegis_world_star");
+      const nextMaxHp = Math.min(40, state.hero.maxHp + (addAegis ? 2 : 0));
+      const nextMaxMp = (state.hero.maxMp || 100) + (addLyra ? 30 : 0);
+      return {
+        hero: {
+          ...state.hero,
+          maxHp: nextMaxHp,
+          hp: nextMaxHp,
+          maxMp: nextMaxMp,
+          mp: nextMaxMp,
+          swordDamage: (state.hero.swordDamage ?? 1) + (addAries ? 1 : 0),
+          shieldBlock: (state.hero.shieldBlock ?? 1) + (addAegis ? 1 : 0),
+          arrows: Math.min(99, (state.hero.arrows ?? 0) + 30),
+          monsterCores: (state.hero.monsterCores ?? 0) + 12,
+          rupees: state.hero.rupees + 600,
+          unlockedConstellations: [
+            "aries_war_star",
+            "sagitta_hunt_star",
+            "lyra_ley_star",
+            "aegis_world_star",
+          ],
+          activeConstellation: "aries_war_star",
+          starPulseTimer: 0.35,
+        },
+        banner: {
+          id: Date.now(),
+          text: "✨ All 4 Zodiac Constellations Awakened at the Observatory!",
+          subtext:
+            "Earned +1 Heart Container, +30 Max MP, +1 Sword/Bow DMG, +1 Shield Block, +5 MP/s Regen, +12 Cores & +600 Rupees!",
+          timer: 5.0,
+        },
+      };
+    });
   },
 
   unlockOrCastChronoArt: (art: ChronoArtId) => {
@@ -6909,6 +7107,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     const equippedChronoArt: ChronoArtId = hero.equippedChronoArt ?? "chrono_rewind";
     const isChronoActive = (hero.chronoActiveTimer ?? 0) > 0;
+    const hasConstellation = (c: ConstellationId): boolean =>
+      Boolean(hero.unlockedConstellations && hero.unlockedConstellations.includes(c));
+    const activeConstellation: ConstellationId | "none" =
+      hero.activeConstellation ?? "none";
 
     // Passive Greenhouse Herb Cultivation (`herb_greenhouse` wing grows +1 random Biome Herb every 25s!)
     if (hasHomesteadWing("herb_greenhouse")) {
@@ -6939,7 +7141,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       (activeElixir === "archmage_elixir" ? 15.0 : 0) +
       (activeWeather === "starfall" ? 8.0 : 0) +
       (equippedMask === "tidefin_mask" ? 4.0 : 0) +
-      (isGliding && equippedGlider === "astral_canopy" ? 10.0 : 0);
+      (isGliding && equippedGlider === "astral_canopy" ? 10.0 : 0) +
+      (hasConstellation("lyra_ley_star") ? 5.0 : 0);
     hero.maxMp = hero.maxMp || 100;
     hero.mp = Math.min(hero.maxMp, (hero.mp ?? 100) + dt * mpRegenRate);
     hero.maxBombs = hero.maxBombs ?? 0;
@@ -6969,7 +7172,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         (equippedChronoArt === "bullet_time" || equippedChronoArt === "chrono_rewind")
           ? mirrorMult * 0.65
           : mirrorMult;
-      return activeWeather === "blizzard" ? chronoMult * 0.75 : chronoMult;
+      const starMult = hasConstellation("aegis_world_star") ? chronoMult * 0.8 : chronoMult;
+      return activeWeather === "blizzard" ? starMult * 0.75 : starMult;
     };
 
     // Helper: check if hero died and auto-revive with Bottled Fairy OR Immortal Phoenix Ankh (`aegis_ankh`)!
@@ -8583,7 +8787,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
           );
         }
         hero.isBlocking = false;
-        hero.arrows = Math.max(0, hero.arrows - 1);
+        const conserveArrow =
+          hasConstellation("sagitta_hunt_star") && Math.random() < 0.4;
+        if (!conserveArrow) {
+          hero.arrows = Math.max(0, hero.arrows - 1);
+        }
         hero.bowAnimTimer = 0.32;
         hero.weaponLockTimer = 0.38;
         hero.bowCooldown = 0.42;
@@ -8595,7 +8803,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           (activeWeather === "blizzard" ? 1 : 0) +
           (hasHomesteadWing("trophy_vault") ? 1 : 0) +
           (equippedMask === "tidefin_mask" ? 1 : 0) +
-          (activeConstruct === "aether_beacon" ? 1 : 0);
+          (activeConstruct === "aether_beacon" ? 1 : 0) +
+          (hasConstellation("sagitta_hunt_star") ? 1 : 0);
         spreadAngles.forEach((offsetAngle, idx) => {
           const shotAngle = hero.facing + offsetAngle;
           arrows.push({
@@ -14252,6 +14461,155 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // 9b-5. Star-Weaver's Observatory Active Constellation Pulses (`activeConstellation !== "none"`)
+    if (activeConstellation !== "none" && phase === "playing") {
+      hero.starPulseTimer = (hero.starPulseTimer ?? 2.0) - dt;
+      if (hero.starPulseTimer <= 0) {
+        hero.starPulseTimer = 2.0;
+        if (activeConstellation === "aries_war_star") {
+          let warTarget: EnemyState | null = null;
+          let bestDist = 7.5;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - hero.x, e.z - hero.z);
+            if (d <= bestDist) {
+              bestDist = d;
+              warTarget = e;
+            }
+          }
+          if (warTarget) {
+            warTarget.provoked = true;
+            if (warTarget.kind !== "boss") {
+              warTarget.hp -= 3;
+              warTarget.hitFlashTimer = 0.28;
+              warTarget.stunTimer = Math.max(warTarget.stunTimer, 1.1);
+              if (warTarget.kind !== "turret") {
+                warTarget.state = "stunned";
+                warTarget.stateTimer = Math.max(warTarget.stateTimer, 1.1);
+              }
+              if (warTarget.hp <= 0) {
+                handleEnemyDeath(warTarget);
+              }
+            } else if (flags.bossState === "STUNNED") {
+              warTarget.hp -= 3;
+              warTarget.hitFlashTimer = 0.28;
+              if (warTarget.hp <= 0) {
+                handleEnemyDeath(warTarget);
+              }
+            }
+            hammerShockwaves.push({
+              id: `aries-star-sw-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: warTarget.x,
+              z: warTarget.z,
+              timer: 0.34,
+              maxTimer: 0.34,
+              maxRadius: 2.8,
+            });
+          }
+        } else if (activeConstellation === "sagitta_hunt_star") {
+          let huntTarget: EnemyState | null = null;
+          let bestDist = 12.0;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - hero.x, e.z - hero.z);
+            if (d <= bestDist) {
+              bestDist = d;
+              huntTarget = e;
+            }
+          }
+          if (huntTarget) {
+            const shotAngle = Math.atan2(huntTarget.x - hero.x, huntTarget.z - hero.z);
+            arrows.push({
+              id: `sagitta-star-arrow-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              fromHero: true,
+              x: hero.x + Math.sin(shotAngle) * 0.85,
+              z: hero.z + Math.cos(shotAngle) * 0.85,
+              angle: shotAngle,
+              speed: 24.0,
+              damage: 3,
+              lifeTimer: 1.25,
+              isPiercing: true,
+              hitEnemyIds: [],
+            });
+          }
+        } else if (activeConstellation === "lyra_ley_star") {
+          if (hero.hp < hero.maxHp) {
+            hero.hp = Math.min(hero.maxHp, hero.hp + 1);
+          }
+          hero.mp = Math.min(hero.maxMp, (hero.mp ?? 0) + 8);
+          let leyTarget: EnemyState | null = null;
+          let bestDist = 9.5;
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            const d = Math.hypot(e.x - hero.x, e.z - hero.z);
+            if (d <= bestDist) {
+              bestDist = d;
+              leyTarget = e;
+            }
+          }
+          if (leyTarget) {
+            const shotAngle = Math.atan2(leyTarget.x - hero.x, leyTarget.z - hero.z);
+            fireballs.push({
+              id: `lyra-star-fb-${stats.elapsedSeconds.toFixed(3)}`,
+              zone,
+              x: hero.x + Math.sin(shotAngle) * 0.8,
+              z: hero.z + Math.cos(shotAngle) * 0.8,
+              angle: shotAngle,
+              speed: 14.5,
+              damage: 2,
+              radius: 0.48,
+              isCharged: false,
+              lifeTimer: 1.25,
+            });
+          }
+        } else if (activeConstellation === "aegis_world_star") {
+          if (hero.hp < hero.maxHp) {
+            hero.hp = Math.min(hero.maxHp, hero.hp + 1);
+          }
+          for (const e of enemies) {
+            if (
+              e.zone !== zone ||
+              e.state === "dead" ||
+              (e.kind === "burrower" && e.burrowed) ||
+              isBossRoomSealed(e)
+            ) {
+              continue;
+            }
+            if (Math.hypot(e.x - hero.x, e.z - hero.z) <= 5.0 && e.kind !== "boss") {
+              e.stunTimer = Math.max(e.stunTimer, 1.4);
+              if (e.kind !== "turret") {
+                e.state = "stunned";
+                e.stateTimer = Math.max(e.stateTimer, 1.4);
+              }
+            }
+          }
+        }
+      }
+    }
+
     // 9c. Update Thrown Clay Pots & Light Rocks in Flight (`thrownObjects`)
     const remainingThrown: ThrownObjectState[] = [];
     for (const obj of thrownObjects) {
@@ -17148,6 +17506,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           hero.interactPrompt =
             "Chronomancer's Temporal Sundial & Hourglass Shrine — Press [F] or [ ` ] to Command Bullet-Time, Echo Clones & Temporal Rewind!";
         } else if (
+          zone === "overworld" &&
+          Math.hypot(STAR_OBSERVATORY_POS.x - hero.x, STAR_OBSERVATORY_POS.z - hero.z) <= 3.8
+        ) {
+          hero.interactPrompt =
+            "Star-Weaver's Celestial Armillary Observatory — Press [F] or [ , ] to Awaken & Align the 4 Zodiac Constellations!";
+        } else if (
           zone === "rift" &&
           flags.riftNextFloorPos &&
           Math.hypot(flags.riftNextFloorPos.x - hero.x, flags.riftNextFloorPos.z - hero.z) <= 3.4
@@ -17177,6 +17541,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let gliderOpen = state.gliderOpen;
     let mirrorOpen = state.mirrorOpen;
     let chronoOpen = state.chronoOpen;
+    let starsOpen = state.starsOpen;
     if (
       zone === "overworld" &&
       Math.hypot(FORGE_ANVIL_POS.x - hero.x, FORGE_ANVIL_POS.z - hero.z) <= 3.5 &&
@@ -17414,6 +17779,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
       !hero.heldObject
     ) {
       chronoOpen = true;
+      starsOpen = false;
+      mirrorOpen = false;
+      gliderOpen = false;
+      artificerOpen = false;
+      maskOpen = false;
+      lyreOpen = false;
+      homesteadOpen = false;
+      weatherOpen = false;
+      alchemyOpen = false;
+      colosseumOpen = false;
+      stablesOpen = false;
+      sanctuaryOpen = false;
+      riftOpen = false;
+      forgeOpen = false;
+      atlasOpen = false;
+      shopOpen = false;
+    } else if (
+      zone === "overworld" &&
+      Math.hypot(STAR_OBSERVATORY_POS.x - hero.x, STAR_OBSERVATORY_POS.z - hero.z) <= 3.8 &&
+      input.interactPressed &&
+      !hero.heldObject
+    ) {
+      starsOpen = true;
+      chronoOpen = false;
       mirrorOpen = false;
       gliderOpen = false;
       artificerOpen = false;
@@ -17679,6 +18068,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       gliderOpen,
       mirrorOpen,
       chronoOpen,
+      starsOpen,
       warpBeamTimer,
       shopDismissedOnRug,
       gateNoticeCooldown,

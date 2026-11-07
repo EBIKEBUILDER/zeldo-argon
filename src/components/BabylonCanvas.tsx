@@ -86,6 +86,7 @@ import {
   SKY_CELESTIAL_CHEST_POS,
   SKY_SAIL_ROOST_POS,
   SKY_VICTORY_CHEST_POS,
+  STAR_OBSERVATORY_POS,
   WARP_STONE_META,
   WEATHER_OBELISK_POS,
   ZoneId,
@@ -7081,6 +7082,106 @@ export default function BabylonCanvas() {
     heroChronoHand.isPickable = false;
     heroChronoHand.parent = heroChronoHaloNode;
 
+    // 1d-13. 3D Star-Weaver's Celestial Armillary Observatory (`STAR_OBSERVATORY_POS` in Map 1 Overworld)
+    const starObservatoryNode = new TransformNode("starObservatoryNode", scene);
+    starObservatoryNode.position.set(STAR_OBSERVATORY_POS.x, 0, STAR_OBSERVATORY_POS.z);
+
+    const starCyanMat = makeMat(
+      "starCyanMat",
+      new Color3(0.45, 0.88, 1.0),
+      new Color3(0.22, 0.56, 0.92),
+      new Color3(0.95, 1.0, 1.0),
+      0.92
+    );
+
+    const starDais = MeshBuilder.CreateCylinder(
+      "starDais",
+      { diameterTop: 3.2, diameterBottom: 3.65, height: 0.34, tessellation: 18 },
+      scene
+    );
+    starDais.position.set(0, 0.17, 0);
+    starDais.material = dgPillarMat;
+    starDais.isPickable = false;
+    starDais.parent = starObservatoryNode;
+
+    const starPedestal = MeshBuilder.CreateCylinder(
+      "starPedestal",
+      { diameterTop: 0.8, diameterBottom: 1.15, height: 1.45, tessellation: 14 },
+      scene
+    );
+    starPedestal.position.set(0, 1.0, 0);
+    starPedestal.material = darkObsidianMat;
+    starPedestal.isPickable = false;
+    starPedestal.parent = starObservatoryNode;
+
+    const starArmillaryOuter = MeshBuilder.CreateTorus(
+      "starArmillaryOuter",
+      { diameter: 2.35, thickness: 0.08, tessellation: 28 },
+      scene
+    );
+    starArmillaryOuter.position.set(0, 2.35, 0);
+    starArmillaryOuter.material = goldKeyMat;
+    starArmillaryOuter.isPickable = false;
+    starArmillaryOuter.parent = starObservatoryNode;
+
+    const starArmillaryInner = MeshBuilder.CreateTorus(
+      "starArmillaryInner",
+      { diameter: 1.75, thickness: 0.07, tessellation: 26 },
+      scene
+    );
+    starArmillaryInner.position.set(0, 2.35, 0);
+    starArmillaryInner.material = starCyanMat;
+    starArmillaryInner.isPickable = false;
+    starArmillaryInner.parent = starObservatoryNode;
+
+    const starCoreGem = MeshBuilder.CreatePolyhedron(
+      "starCoreGem",
+      { type: 1, size: 0.42 },
+      scene
+    );
+    starCoreGem.position.set(0, 2.35, 0);
+    starCoreGem.material = goldKeyMat;
+    starCoreGem.isPickable = false;
+    starCoreGem.parent = starObservatoryNode;
+
+    const starGroundHalo = MeshBuilder.CreateTorus(
+      "starGroundHalo",
+      { diameter: 3.6, thickness: 0.085, tessellation: 28 },
+      scene
+    );
+    starGroundHalo.position.set(0, 0.14, 0);
+    starGroundHalo.material = starCyanMat;
+    starGroundHalo.isPickable = false;
+    starGroundHalo.parent = starObservatoryNode;
+
+    // 3D Hero Orbiting Zodiac Star-Crown (`heroConstellationNode`)
+    const heroConstellationNode = new TransformNode("heroConstellationNode", scene);
+    heroConstellationNode.parent = heroRoot;
+    heroConstellationNode.setEnabled(false);
+
+    const heroZodiacRing = MeshBuilder.CreateTorus(
+      "heroZodiacRing",
+      { diameter: 1.65, thickness: 0.045, tessellation: 26 },
+      scene
+    );
+    heroZodiacRing.position.set(0, 2.15, 0);
+    heroZodiacRing.material = starCyanMat;
+    heroZodiacRing.isPickable = false;
+    heroZodiacRing.parent = heroConstellationNode;
+
+    for (let sIdx = 0; sIdx < 4; sIdx++) {
+      const ang = (sIdx / 4) * Math.PI * 2;
+      const starGem = MeshBuilder.CreatePolyhedron(
+        `heroZodiacGem-${sIdx}`,
+        { type: 1, size: 0.14 },
+        scene
+      );
+      starGem.position.set(Math.cos(ang) * 0.82, 2.15, Math.sin(ang) * 0.82);
+      starGem.material = sIdx % 2 === 0 ? goldKeyMat : starCyanMat;
+      starGem.isPickable = false;
+      starGem.parent = heroConstellationNode;
+    }
+
     // 1e. 3D Summonable Steed Rig (`heroMountNode` — Sun-Mane Courser, Glacial Dire-Stag, Obsidian War-Drake)
     const heroMountNode = new TransformNode("heroMountNode", scene);
     heroMountNode.setEnabled(false);
@@ -10718,6 +10819,13 @@ export default function BabylonCanvas() {
         return;
       }
 
+      // , (Comma) toggles Star-Weaver's Celestial Armillary Observatory & Constellation Skill Tree Modal
+      if (code === "Comma" && !pressedKeys.has(code)) {
+        e.preventDefault();
+        store.setStarsOpen(!store.starsOpen);
+        return;
+      }
+
       if (
         code === "Space" ||
         code === "ArrowUp" ||
@@ -11801,6 +11909,7 @@ export default function BabylonCanvas() {
       skySailRoostNode.setEnabled(inOverworld);
       mirrorPortalNode.setEnabled(inOverworld);
       chronoShrineNode.setEnabled(inOverworld);
+      starObservatoryNode.setEnabled(inOverworld);
       if (inOverworld) {
         const riftEntGroundY = sampleTerrainHeight(
           activeCells,
@@ -12017,6 +12126,34 @@ export default function BabylonCanvas() {
         chronoAstrolabeOuter.rotation.y = -t * 2.6;
         chronoAstrolabeOuter.rotation.x = Math.sin(t * 2.1) * 0.35;
         chronoGroundHalo.rotation.y = t * 1.7;
+
+        const starGroundY = sampleTerrainHeight(
+          activeCells,
+          STAR_OBSERVATORY_POS.x,
+          STAR_OBSERVATORY_POS.z
+        );
+        starObservatoryNode.position.set(
+          STAR_OBSERVATORY_POS.x,
+          starGroundY,
+          STAR_OBSERVATORY_POS.z
+        );
+        starArmillaryOuter.rotation.y = t * 2.1;
+        starArmillaryOuter.rotation.z = Math.sin(t * 1.8) * 0.35;
+        starArmillaryInner.rotation.y = -t * 2.8;
+        starArmillaryInner.rotation.x = Math.cos(t * 2.2) * 0.42;
+        starCoreGem.rotation.y = t * 3.2;
+        starCoreGem.position.y = 2.35 + Math.sin(t * 4.0) * 0.14;
+        starGroundHalo.rotation.y = -t * 1.6;
+      }
+
+      // Sync 3D Hero Orbiting Zodiac Star-Crown (`heroConstellationNode`)
+      const showStarCrown =
+        ((snap.hero.unlockedConstellations?.length ?? 0) > 0 ||
+          (snap.hero.activeConstellation ?? "none") !== "none") &&
+        !snap.editorMode;
+      heroConstellationNode.setEnabled(showStarCrown);
+      if (showStarCrown) {
+        heroConstellationNode.rotation.y = -t * 3.1;
       }
 
       // Sync 3D Chronomancer Temporal Anchor & Hero Overhead Clock-Face Halo (`chronoAnchorNode`, `heroChronoHaloNode`)
